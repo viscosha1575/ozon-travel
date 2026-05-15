@@ -219,6 +219,11 @@ body {
   letter-spacing: 0.64px;
 }
 
+.content-line {
+  display: block;
+  white-space: nowrap;
+}
+
 .content-accent {
   display: inline-flex;
   align-items: center;
@@ -274,17 +279,25 @@ body {
   }
 
   .content-panel-inner {
-    padding: 37.5px 28px;
-    gap: 16px;
+    padding: clamp(24px, 4.443svh, 48px) 28px;
+    gap: clamp(12px, 1.896svh, 20px);
+  }
+
+  .content-copy {
+    gap: clamp(16px, 2.962svh, 30px);
   }
 
   .content-kicker,
   .content-description {
-    font-size: 14px;
+    font-size: clamp(12px, 1.659svh, 18px);
+  }
+
+  .content-title {
+    font-size: clamp(18px, 2.962svh, 32px);
   }
 
   .content-action {
-    min-height: 56px;
-    font-size: 18px;
+    min-height: clamp(44px, 6.635svh, 64px);
+    font-size: clamp(16px, 2.133svh, 22px);
   }
 }

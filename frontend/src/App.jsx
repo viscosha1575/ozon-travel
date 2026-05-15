@@ -34,18 +34,19 @@ function App() {
       <section className="content-panel" aria-label="Content area">
         <div className="content-panel-inner">
           <div className="content-copy">
-            <p className="content-kicker">Ловите ваш багаж!</p>
+            <p className="content-kicker">
+              <span className="content-line">Ловите ваш багаж!</span>
+            </p>
             <h1 className="content-title">
-              Промокоды
-              <br />
-              на путешествия и шоппинг
-              <br />
-              до <span className="content-accent">100 000 ₽</span> на Ozon
+              <span className="content-line">Промокоды</span>
+              <span className="content-line">на путешествия и шоппинг</span>
+              <span className="content-line">
+                до <span className="content-accent">100 000 ₽</span> на Ozon
+              </span>
             </h1>
             <p className="content-description">
-              Крутите каждый день, приглашайте друзей
-              <br />
-              и получайте больше попыток
+              <span className="content-line">Крутите каждый день, приглашайте друзей</span>
+              <span className="content-line">и получайте больше попыток</span>
             </p>
           </div>
 
