@@ -1,7 +1,156 @@
+import { memo, startTransition, useEffect, useState } from "react"
+
+import GameScreen from "./game/GameScreen.jsx"
+
+const INTRO_DISABLED = false
+const GAME_SCENE_ASSETS = [
+  "/game/center.webp",
+  "/game/left-triangle.svg",
+  "/game/rigth-triangle.svg",
+  "/game/icons/logo.webp",
+  "/game/icons/question.svg",
+  "/game/icons/exclamation.svg",
+  "/game/icons/gift.svg",
+  "/game/icons/copy.svg",
+  "/game/icons/check.svg",
+  "/game/bags/case.webp",
+  "/game/bags/case2.webp",
+  "/game/bags/case3.webp",
+  "/game/bags/case4.webp",
+  "/game/bags/case5.webp",
+]
+
+const screens = [
+  {
+    id: "intro",
+    kicker: ["Ловите ваш багаж!"],
+    titleLines: ["Промокоды", "на путешествия и шоппинг"],
+    accentLine: {
+      before: "до ",
+      accent: "100 000 ₽",
+      after: " на Ozon",
+    },
+    description: [
+      "Крутите каждый день, приглашайте друзей",
+      "и получайте больше попыток",
+    ],
+    actionLabel: "Начать",
+  },
+  {
+    id: "subscription",
+    variant: "subscription",
+    compact: true,
+    titleLines: ["Перед стартом подпишитесь", "на канал Ozon Travel"],
+    actionLabel: "Подписаться",
+    secondaryActionLabel: "Проверить подписку",
+  },
+  {
+    id: "result",
+    variant: "result",
+    compact: true,
+    titleLines: ["Ура!"],
+    description: [
+      "Лента призов уже ждёт вас! Заходите в мини-",
+      "приложение и ловите ваш багаж с призами",
+    ],
+    actionLabel: "Играть",
+  },
+]
+
+function preloadImage(src) {
+  return new Promise((resolve) => {
+    const image = new Image()
+
+    const finalize = () => {
+      image.onload = null
+      image.onerror = null
+      resolve()
+    }
+
+    image.onload = finalize
+    image.onerror = finalize
+    image.decoding = "async"
+    image.src = src
+
+    if (image.complete) {
+      finalize()
+    }
+  })
+}
+
+const PersistentGameScreen = memo(GameScreen)
+
 function App() {
+  const [activeScreen, setActiveScreen] = useState(0)
+  const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
+  const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
+  const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
+  const currentScreen = screens[activeScreen]
+
+  useEffect(() => {
+    if (INTRO_DISABLED) {
+      return
+    }
+
+    let isCancelled = false
+    const startPreload = window.setTimeout(() => {
+      Promise.all(GAME_SCENE_ASSETS.map(preloadImage)).then(() => {
+        if (!isCancelled) {
+          setIsGameSceneReady(true)
+        }
+      })
+    }, 0)
+
+    return () => {
+      isCancelled = true
+      window.clearTimeout(startPreload)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isGameLaunchPending || !isGameSceneReady) {
+      return
+    }
+
+    startTransition(() => {
+      setIsGameActive(true)
+    })
+  }, [isGameLaunchPending, isGameSceneReady])
+
+  const handlePrimaryAction = () => {
+    startTransition(() => {
+      setActiveScreen((current) => Math.min(current + 1, screens.length - 1))
+    })
+  }
+
+  const handleSubscriptionAction = () => {}
+
+  const handleSubscriptionCheck = () => {
+    startTransition(() => {
+      setActiveScreen(2)
+    })
+  }
+
+  const handleStartGame = () => {
+    setIsGameLaunchPending(true)
+
+    if (!isGameSceneReady) {
+      return
+    }
+
+    startTransition(() => {
+      setIsGameActive(true)
+    })
+  }
+
   return (
-    <main className="split-screen" aria-label="Three-row fullscreen layout">
-      <div className="background-vectors" aria-hidden="true">
+    <main className="app-shell" aria-label="Application shell">
+      <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
+        <PersistentGameScreen />
+      </div>
+      <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
+        <div className="split-screen" aria-label="Three-row expanded layout">
+          <div className="background-vectors" aria-hidden="true">
         <svg
           className="background-vector background-vector-left"
           width="847"
@@ -44,16 +193,19 @@ function App() {
             d="M554.41 241.515L542.268 247.986V247.986L554.41 241.515ZM689.435 16.2185L690.48 2.49988L689.435 16.2185ZM1101.64 13.8225C1102.96 6.34007 1110.1 1.34712 1117.58 2.67037C1125.07 3.99364 1130.06 11.132 1128.74 18.6144L1115.19 16.2185L1101.64 13.8225ZM554.41 241.515L542.268 247.986C539.405 242.614 537.321 239.497 535.804 237.761C534.329 236.074 534.373 236.823 535.902 237.126C537.493 237.441 538.043 236.755 536.474 237.56C534.779 238.43 532.268 240.177 528.321 243.428C512.758 256.249 485.271 283.766 432.469 313.451L425.727 301.458L418.985 289.465C469.019 261.335 493.796 236.219 510.826 222.19C515.027 218.729 519.435 215.376 523.912 213.078C528.515 210.716 534.491 208.796 541.245 210.133C547.936 211.457 552.879 215.484 556.521 219.651C560.122 223.771 563.376 229.085 566.551 235.044L554.41 241.515ZM-32.3509 388.024L-19.1836 384.035C-14.5442 399.349 -3.36166 411.003 14.7448 419.316C33.155 427.768 58.0257 432.367 87.838 433.224C147.381 434.935 222.784 421.639 295.767 399.97C368.707 378.315 437.94 348.68 485.2 318.547C508.962 303.396 526.184 288.734 535.79 275.664C545.365 262.634 545.536 254.118 542.268 247.986L554.41 241.515L566.551 235.044C576.948 254.552 570.545 274.838 557.963 291.958C545.412 309.037 524.895 325.872 499.993 341.749C449.925 373.673 378.13 404.221 303.599 426.349C229.111 448.465 150.602 462.555 87.0477 460.729C55.3114 459.817 26.3373 454.916 3.26389 444.323C-20.1133 433.591 -38.0533 416.653 -45.5182 392.013L-32.3509 388.024ZM689.435 16.2185L688.391 29.9371C497.987 15.4412 308.098 67.6892 172.038 143.181C103.985 180.939 50.1356 224.105 16.4247 266.883C-17.4873 309.917 -29.4083 350.286 -19.1836 384.035L-32.3509 388.024L-45.5182 392.013C-59.502 345.856 -41.645 296.115 -5.18763 249.852C31.471 203.333 88.5824 158.016 158.687 119.12C298.942 41.301 494.155 -12.4468 690.48 2.49988L689.435 16.2185ZM689.435 16.2185L690.48 2.49988C721.312 4.84724 762.228 16.1602 805.082 28.616C848.602 41.2654 894.932 55.3597 938.48 64.3851C982.351 73.4773 1021.2 76.9075 1050.13 69.7156C1064.3 66.1911 1075.53 60.2464 1083.92 51.6325C1092.25 43.0683 1098.6 31.0123 1101.64 13.8225L1115.19 16.2185L1128.74 18.6144C1124.9 40.2995 1116.43 57.677 1103.64 70.823C1090.89 83.9193 1074.69 91.9615 1056.77 96.419C1021.49 105.191 977.463 100.566 932.896 91.3291C888.006 82.0257 840.336 67.5182 797.402 55.0392C753.802 42.3665 715.81 32.0246 688.391 29.9371L689.435 16.2185Z"
           />
         </svg>
-      </div>
-      <section className="logo-panel" aria-label="Logo area">
+          </div>
+          <section className="logo-panel" aria-label="Logo area">
         <img
           src="/intro/logo.webp"
           alt="Logo"
           className="logo-image"
         />
-      </section>
-      <section className="spacer-panel" aria-hidden="true" />
-      <div className="content-bag-layer" aria-hidden="true">
+          </section>
+          <section className="spacer-panel" aria-hidden="true" />
+          <div
+            className={`content-bag-layer ${activeScreen === 0 || activeScreen === 2 ? "is-visible" : "is-hidden"} ${activeScreen === 2 ? "is-static" : ""}`}
+            aria-hidden="true"
+          >
         <img
           src="/intro/bags/pink-bag.webp"
           alt=""
@@ -69,31 +221,130 @@ function App() {
           alt=""
           className="content-bag"
         />
-      </div>
-      <section className="content-panel" aria-label="Content area">
-        <div className="content-panel-inner">
-          <div className="content-copy">
-            <p className="content-kicker">
-              <span className="content-line">Ловите ваш багаж!</span>
-            </p>
-            <h1 className="content-title">
-              <span className="content-line">Промокоды</span>
-              <span className="content-line">на путешествия и шоппинг</span>
-              <span className="content-line">
-                до <span className="content-accent">100 000 ₽</span> на Ozon
-              </span>
-            </h1>
-            <p className="content-description">
-              <span className="content-line">Крутите каждый день, приглашайте друзей</span>
-              <span className="content-line">и получайте больше попыток</span>
-            </p>
           </div>
+          <div
+            className={`content-subscribe-layer ${activeScreen === 1 ? "is-visible" : "is-hidden"}`}
+            aria-hidden="true"
+          >
+        <img
+          src="/intro/subscribe.webp"
+          alt=""
+          className="content-subscribe-image"
+        />
+          </div>
+          <section
+            className={`content-panel ${currentScreen.compact ? "is-compact" : ""}`}
+            data-screen={currentScreen.id}
+            aria-label="Content area"
+          >
+            <div className={`content-panel-inner ${currentScreen.compact ? "is-compact" : ""}`}>
+              <div className={`content-screen-stack ${currentScreen.compact ? "is-compact" : ""}`}>
+            {screens.map((screen, index) => {
+              const isActive = index === activeScreen
+              const positionClass = isActive
+                ? "is-active"
+                : index < activeScreen
+                  ? "is-before"
+                  : "is-after"
 
-          <button type="button" className="content-action">
-            Начать
-          </button>
+              return (
+                <section
+                  key={screen.id}
+                  className={`content-screen ${screen.variant ? `content-screen--${screen.variant}` : ""} ${positionClass}`}
+                  aria-hidden={!isActive}
+                >
+                  {screen.variant === "subscription" ? (
+                    <>
+                      <h1 className="content-title content-title--subscription">
+                        {screen.titleLines.map((line) => (
+                          <span key={line} className="content-line">{line}</span>
+                        ))}
+                      </h1>
+
+                      <div className="content-actions-stack">
+                        <button
+                          type="button"
+                          className="content-action"
+                          onClick={handleSubscriptionAction}
+                        >
+                          {screen.actionLabel}
+                        </button>
+                        <button
+                          type="button"
+                          className="content-action content-action--secondary"
+                          onClick={handleSubscriptionCheck}
+                        >
+                          {screen.secondaryActionLabel}
+                        </button>
+                      </div>
+                    </>
+                  ) : screen.variant === "result" ? (
+                    <>
+                      <h1 className="content-title content-title--result">
+                        {screen.titleLines.map((line) => (
+                          <span key={line} className="content-line">{line}</span>
+                        ))}
+                      </h1>
+
+                      <p className="content-description content-description--result">
+                        {screen.description.map((line) => (
+                          <span key={line} className="content-line">{line}</span>
+                        ))}
+                      </p>
+
+                      <button
+                        type="button"
+                        className="content-action"
+                        onClick={handleStartGame}
+                        disabled={isGameLaunchPending && !isGameSceneReady}
+                      >
+                        {isGameLaunchPending && !isGameSceneReady ? "Открываем..." : screen.actionLabel}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="content-copy">
+                        <p className="content-kicker">
+                          {screen.kicker.map((line) => (
+                            <span key={line} className="content-line">{line}</span>
+                          ))}
+                        </p>
+                        <h1 className="content-title">
+                          {screen.titleLines.map((line) => (
+                            <span key={line} className="content-line">{line}</span>
+                          ))}
+                          {screen.accentLine ? (
+                            <span className="content-line">
+                              {screen.accentLine.before}
+                              <span className="content-accent">{screen.accentLine.accent}</span>
+                              {screen.accentLine.after}
+                            </span>
+                          ) : null}
+                        </h1>
+                        <p className="content-description">
+                          {screen.description.map((line) => (
+                            <span key={line} className="content-line">{line}</span>
+                          ))}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="content-action"
+                        onClick={handlePrimaryAction}
+                      >
+                        {screen.actionLabel}
+                      </button>
+                    </>
+                  )}
+                </section>
+              )
+            })}
+              </div>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </main>
   )
 }
