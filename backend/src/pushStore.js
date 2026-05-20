@@ -55,6 +55,109 @@ function messageToHtml(value) {
   return escapeHtml(value).replace(/\r?\n/g, "<br />");
 }
 
+function normalizeWhitespace(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ");
+}
+
+function sanitizeInlineHtml(value) {
+  return String(value || "")
+    .replace(/<\s*strong\b[^>]*>/gi, "<b>")
+    .replace(/<\s*\/\s*strong\s*>/gi, "</b>")
+    .replace(/<\s*em\b[^>]*>/gi, "<i>")
+    .replace(/<\s*\/\s*em\s*>/gi, "</i>")
+    .replace(/<\s*ins\b[^>]*>/gi, "<u>")
+    .replace(/<\s*\/\s*ins\s*>/gi, "</u>")
+    .replace(/<\s*del\b[^>]*>/gi, "<s>")
+    .replace(/<\s*\/\s*del\s*>/gi, "</s>")
+    .replace(/<\s*a\b[^>]*href=(['"])(.*?)\1[^>]*>/gi, (_match, _quote, href) => `<a href="${href}">`)
+    .replace(/<\s*\/\s*a\s*>/gi, "</a>")
+    .replace(/<(?!\/?(a|b|i|u|s|code|pre|blockquote)\b)[^>]+>/gi, "");
+}
+
+function formatInlineForMax(value) {
+  return sanitizeInlineHtml(
+    normalizeWhitespace(value)
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/?(p|div)\b[^>]*>/gi, "\n")
+      .replace(/\n{3,}/g, "\n\n"),
+  )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .trim();
+}
+
+function replaceListBlocks(html, tagName, markerBuilder) {
+  const listRegex = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+
+  return html.replace(listRegex, (_match, listContent) => {
+    const items = [];
+    const itemRegex = /<li\b[^>]*>([\s\S]*?)<\/li>/gi;
+    let itemMatch;
+    let index = 0;
+
+    while ((itemMatch = itemRegex.exec(listContent)) !== null) {
+      const itemText = formatInlineForMax(itemMatch[1]);
+
+      if (!itemText) {
+        continue;
+      }
+
+      items.push(`${markerBuilder(index)} ${itemText}`.trim());
+      index += 1;
+    }
+
+    if (items.length === 0) {
+      return "";
+    }
+
+    return `\n\n${items.join("\n")}\n\n`;
+  });
+}
+
+function formatHtmlForMax(rawHtml) {
+  const normalizedHtml = normalizeWhitespace(rawHtml)
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "");
+
+  const withLists = replaceListBlocks(
+    replaceListBlocks(normalizedHtml, "ul", () => "•"),
+    "ol",
+    (index) => `${index + 1}.`,
+  );
+
+  return sanitizeInlineHtml(
+    withLists
+      .replace(/<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/gi, (_match, quoteText) => {
+        const normalizedQuote = formatInlineForMax(quoteText);
+
+        if (!normalizedQuote) {
+          return "";
+        }
+
+        return `\n\n<blockquote>${normalizedQuote}</blockquote>\n\n`;
+      })
+      .replace(/<(h[1-6])\b[^>]*>([\s\S]*?)<\/\1>/gi, (_match, _tag, headingText) => {
+        const normalizedHeading = formatInlineForMax(headingText);
+
+        if (!normalizedHeading) {
+          return "";
+        }
+
+        return `\n\n<b>${normalizedHeading}</b>\n\n`;
+      })
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div)>/gi, "\n\n")
+      .replace(/<(p|div)\b[^>]*>/gi, "")
+      .replace(/\n{3,}/g, "\n\n"),
+  )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function computeRate(numerator, denominator) {
   const safeDenominator = Number(denominator) || 0;
 
@@ -350,10 +453,10 @@ function buildBroadcastHtml(push) {
   const html = String(push.html || "").trim();
 
   if (html) {
-    return html;
+    return formatHtmlForMax(html);
   }
 
-  return messageToHtml(push.message || "");
+  return formatHtmlForMax(messageToHtml(push.message || ""));
 }
 
 function decorateTestSendError(error) {
