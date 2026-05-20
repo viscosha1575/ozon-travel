@@ -1033,17 +1033,17 @@ export default function PushesPage() {
         <Card p={{ base: "18px", md: "24px" }}>
           <Skeleton isLoaded={!loading}>
             <Box overflowX="auto">
-              <Table variant="simple">
+              <Table variant="simple" sx={{ tableLayout: "fixed", minWidth: "1280px" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary}>Шаблон</Th>
-                    <Th color={textColorSecondary}>Сегмент</Th>
-                    <Th color={textColorSecondary}>Статус</Th>
-                    <Th color={textColorSecondary}>Охват</Th>
-                    <Th color={textColorSecondary}>Open rate</Th>
-                    <Th color={textColorSecondary}>CTR</Th>
-                    <Th color={textColorSecondary}>Отправки</Th>
-                    <Th color={textColorSecondary}>Действие</Th>
+                    <Th color={textColorSecondary} w="24%">Шаблон</Th>
+                    <Th color={textColorSecondary} w="15%">Сегмент</Th>
+                    <Th color={textColorSecondary} w="11%">Статус</Th>
+                    <Th color={textColorSecondary} w="8%">Охват</Th>
+                    <Th color={textColorSecondary} w="9%">Open rate</Th>
+                    <Th color={textColorSecondary} w="7%">CTR</Th>
+                    <Th color={textColorSecondary} w="16%">Отправки</Th>
+                    <Th color={textColorSecondary} w="20%">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1052,7 +1052,7 @@ export default function PushesPage() {
 
                     return (
                       <Tr key={item.id}>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Stack spacing="8px">
                             {item.imageUrl ? (
                               <Image
@@ -1066,37 +1066,37 @@ export default function PushesPage() {
                             <Text color={textColor} fontSize="sm" fontWeight="700">
                               {item.title}
                             </Text>
-                            <Text color={textColorSecondary} fontSize="xs">
+                            <Text color={textColorSecondary} fontSize="xs" noOfLines={3}>
                               {item.message}
                             </Text>
                           </Stack>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Badge borderRadius="999px" colorScheme="purple" px="10px" py="6px">
                             {item.audienceLabel}
                           </Badge>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Badge borderRadius="999px" colorScheme={badge.colorScheme} px="10px" py="6px">
                             {badge.label}
                           </Badge>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Text color={textColorSecondary} fontSize="sm">
                             {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
                           </Text>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Text color={textColorSecondary} fontSize="sm">
                             {formatPercent(item.openRate)}
                           </Text>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Text color={textColorSecondary} fontSize="sm">
                             {formatPercent(item.ctr)}
                           </Text>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Stack spacing="4px">
                             <Text color={textColorSecondary} fontSize="sm">
                               Тестовая: {formatDateTime(item.testSentAt)}
@@ -1106,14 +1106,15 @@ export default function PushesPage() {
                             </Text>
                           </Stack>
                         </Td>
-                        <Td borderColor={borderColor}>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           {item.status === "template" ? (
-                            <Stack spacing="8px">
+                            <Stack spacing="8px" align="flex-start" maxW="260px">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 borderRadius="14px"
                                 fontWeight="700"
+                                minW="220px"
                                 isLoading={sendingPushAction === `${item.id}:test`}
                                 leftIcon={<Icon as={MdSend} boxSize="16px" />}
                                 loadingText="Шлём"
@@ -1127,6 +1128,7 @@ export default function PushesPage() {
                                 color="white"
                                 borderRadius="14px"
                                 fontWeight="700"
+                                minW="220px"
                                 isLoading={sendingPushAction === `${item.id}:live`}
                                 leftIcon={<Icon as={MdSend} boxSize="16px" />}
                                 loadingText="Шлём"
@@ -1141,6 +1143,7 @@ export default function PushesPage() {
                                 variant="outline"
                                 borderRadius="14px"
                                 fontWeight="700"
+                                minW="220px"
                                 isLoading={sendingPushAction === `${item.id}:delete`}
                                 leftIcon={<Icon as={MdDeleteOutline} boxSize="16px" />}
                                 loadingText="Удаляем"
@@ -1150,7 +1153,7 @@ export default function PushesPage() {
                               </Button>
                             </Stack>
                           ) : item.status === "sent" || item.status === "revoked" ? (
-                            <Stack spacing="8px">
+                            <Stack spacing="8px" align="flex-start" maxW="280px">
                               <Text color={textColorSecondary} fontSize="sm">
                                 {item.status === "revoked" ? "Отзыв выполнен" : "Завершено"}
                               </Text>
@@ -1159,6 +1162,7 @@ export default function PushesPage() {
                                 variant="outline"
                                 borderRadius="14px"
                                 fontWeight="700"
+                                minW="220px"
                                 leftIcon={<Icon as={MdUndo} boxSize="16px" />}
                                 isLoading={sendingPushAction === `${item.id}:revoke`}
                                 loadingText="Отзываем"
@@ -1168,7 +1172,7 @@ export default function PushesPage() {
                                 Отозвать у получателей
                               </Button>
                               {!item.canRevoke ? (
-                                <Text color={textColorSecondary} fontSize="xs">
+                                <Text color={textColorSecondary} fontSize="xs" lineHeight="1.5">
                                   {item.deliveriesWithMessageIds > 0
                                     ? "Для этой рассылки больше нет доступных сообщений для отзыва."
                                     : "messageId для этой отправки не были сохранены, поэтому отзыв недоступен."}
