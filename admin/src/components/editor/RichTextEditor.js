@@ -157,6 +157,7 @@ export default function RichTextEditor({
 }) {
   const editorRef = useRef(null);
   const savedSelectionRef = useRef(null);
+  const isLinkModalFlowRef = useRef(false);
   const [toolbarState, setToolbarState] = useState(EMPTY_TOOLBAR_STATE);
   const [linkUrl, setLinkUrl] = useState("https://");
   const [linkText, setLinkText] = useState("");
@@ -234,6 +235,10 @@ export default function RichTextEditor({
       return;
     }
 
+    if (isLinkModalFlowRef.current) {
+      return;
+    }
+
     const normalizedHtml = editorRef.current.innerHTML
       .replace(/<div><br><\/div>/g, "<p><br></p>")
       .replace(/<div>/g, "<p>")
@@ -267,6 +272,7 @@ export default function RichTextEditor({
       savedSelectionRef.current = null;
     }
 
+    isLinkModalFlowRef.current = true;
     setLinkSelectionCollapsed(!selection || selection.isCollapsed);
     setLinkUrl("https://");
     setLinkText(selectedText);
@@ -280,6 +286,7 @@ export default function RichTextEditor({
     setLinkError("");
     setLinkSelectionCollapsed(true);
     savedSelectionRef.current = null;
+    isLinkModalFlowRef.current = false;
     closeLinkModal();
   }
 
@@ -330,6 +337,7 @@ export default function RichTextEditor({
     }
 
     emitValue();
+    editorRef.current?.focus();
     handleCloseLinkModal();
   }
 
