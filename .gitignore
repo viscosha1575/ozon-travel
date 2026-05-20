@@ -5,6 +5,7 @@ frontend/.vite/
 frontend/.cache/
 admin/dist/
 backend/node_modules/
+max-bot/node_modules/
 backend/uploads/
 admin-panel/
 test-data/

@@ -114,6 +114,43 @@ services:
     networks:
       - proxy
 
+  max-bot:
+    build:
+      context: ./max-bot
+    container_name: ozon-travel-max-bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
+      MAX_BOT_MODE: ${MAX_BOT_MODE:-webhook}
+      MAX_BOT_PORT: 3011
+      MAX_WEBHOOK_BASE_URL: ${MAX_WEBHOOK_BASE_URL:-https://bot.${DOMAIN}}
+      MAX_WEBHOOK_PATH: ${MAX_WEBHOOK_PATH:-/max/webhook}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET}
+      MAX_AUTO_REGISTER_WEBHOOK: ${MAX_AUTO_REGISTER_WEBHOOK:-true}
+      MAX_WEBHOOK_RETRY_MS: ${MAX_WEBHOOK_RETRY_MS:-60000}
+      MAX_WEBHOOK_UPDATE_TYPES: ${MAX_WEBHOOK_UPDATE_TYPES:-}
+      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL}
+      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-https://${DOMAIN}}
+      SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
+      GAME_API_URL: http://backend:3001
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+      REQUIRE_ENCRYPTED_REQUESTS: ${REQUIRE_ENCRYPTED_REQUESTS:-false}
+      BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.ozon-travel-max-bot.rule=Host(`bot.${DOMAIN}`)
+      - traefik.http.routers.ozon-travel-max-bot.entrypoints=websecure
+      - traefik.http.routers.ozon-travel-max-bot.tls.certresolver=le
+      - traefik.http.services.ozon-travel-max-bot.loadbalancer.server.port=3011
+    networks:
+      - default
+      - proxy
+
 networks:
   proxy:
     name: proxy

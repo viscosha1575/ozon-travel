@@ -61,6 +61,34 @@ services:
     ports:
       - "4174:80"
 
+  max-bot:
+    build:
+      context: ./max-bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_BOT_MODE: ${MAX_BOT_MODE:-polling}
+      MAX_BOT_PORT: 3011
+      MAX_WEBHOOK_BASE_URL: ${MAX_WEBHOOK_BASE_URL:-}
+      MAX_WEBHOOK_PATH: ${MAX_WEBHOOK_PATH:-/max/webhook}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-local-max-webhook-secret}
+      MAX_AUTO_REGISTER_WEBHOOK: ${MAX_AUTO_REGISTER_WEBHOOK:-false}
+      MAX_WEBHOOK_RETRY_MS: ${MAX_WEBHOOK_RETRY_MS:-60000}
+      MAX_WEBHOOK_UPDATE_TYPES: ${MAX_WEBHOOK_UPDATE_TYPES:-}
+      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel}
+      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-http://localhost:4173}
+      SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
+      GAME_API_URL: http://backend:3001
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET:-local-dev-secret}
+      REQUIRE_ENCRYPTED_REQUESTS: ${REQUIRE_ENCRYPTED_REQUESTS:-false}
+      BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "3011:3011"
+
 volumes:
   postgres_data:
   backend_uploads:
