@@ -75,6 +75,9 @@ const supportMessage = [
 ].join('\n');
 
 let cachedChannelChatId = Number(MAX_CHANNEL_CHAT_ID) || null;
+const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MODE || 'api')
+  .trim()
+  .toLowerCase();
 
 async function safeReply(ctx, message, options, context) {
   try {
@@ -165,6 +168,13 @@ async function resolveChannelChatId() {
 }
 
 async function checkChannelSubscription(userId) {
+  if (MAX_SUBSCRIPTION_CHECK_MODE === 'mock') {
+    logger.info('MAX subscription check is mocked', {
+      userId,
+    });
+    return true;
+  }
+
   const channelChatId = await resolveChannelChatId();
   const response = await bot.api.getChatMembers(channelChatId, {
     user_ids: [Number(userId)],

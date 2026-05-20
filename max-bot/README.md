@@ -42,6 +42,7 @@
 - `MAX_AUTO_REGISTER_WEBHOOK` - если `true`, бот регистрирует webhook в MAX API при старте;
 - `MAX_WEBHOOK_RETRY_MS` - интервал повторной регистрации webhook;
 - `MAX_WEBHOOK_UPDATE_TYPES` - optional, список типов событий через запятую;
+- `MAX_SUBSCRIPTION_CHECK_MODE` - `mock` для мокап-сценария или `api` для реальной проверки подписки;
 - `MAX_CHANNEL_URL` - ссылка на канал проекта в MAX;
 - `MAX_CHANNEL_CHAT_ID` - optional, id канала MAX для ускорения проверки подписки;
 - `GAME_WEBAPP_URL` - ссылка на веб-игру, например `https://ozon-travel-max.ru`;
