@@ -596,7 +596,7 @@ export default function PushesPage() {
                   Новая рассылка
                 </Text>
                 <Text color={textColorSecondary} fontSize="sm" mt="6px">
-                  Тестовая рассылка всегда отправляется только на MAX ID 185076365.
+                  Тестовая рассылка всегда отправляется только на MAX ID 169639251.
                 </Text>
               </Box>
               <Flex wrap="wrap" gap="10px" justify={{ base: "stretch", lg: "flex-end" }}>

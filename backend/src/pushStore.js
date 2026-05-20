@@ -11,7 +11,7 @@ const INTERNAL_BROADCAST_DELETE_URL = String(
 const INTERNAL_BROADCAST_TOKEN = String(
   process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || ""
 ).trim();
-const MAX_PUSH_TEST_USER_ID = String(process.env.MAX_PUSH_TEST_USER_ID || "185076365").trim();
+const MAX_PUSH_TEST_USER_ID = String(process.env.MAX_PUSH_TEST_USER_ID || "169639251").trim();
 const MAX_TEXT_LIMIT = 4000;
 const MAX_BROADCAST_CONCURRENCY = Math.min(10, Math.max(1, Number(process.env.MAX_BROADCAST_CONCURRENCY || 2) || 2));
 
