@@ -25,6 +25,54 @@ services:
     networks:
       - proxy
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: ozon-travel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ozon_travel}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ozon_travel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ozon-travel-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ozon_travel}
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://${DOMAIN}}
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://${DOMAIN}}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+      UPLOADS_DIR: /app/uploads
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+    volumes:
+      - backend_uploads:/app/uploads
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.ozon-travel-api.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`admin.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/uploads`))
+      - traefik.http.routers.ozon-travel-api.entrypoints=websecure
+      - traefik.http.routers.ozon-travel-api.tls.certresolver=le
+      - traefik.http.routers.ozon-travel-api.priority=100
+      - traefik.http.services.ozon-travel-api.loadbalancer.server.port=3001
+    networks:
+      - default
+      - proxy
+
   frontend:
     build:
       context: ./frontend
@@ -32,6 +80,8 @@ services:
         VITE_API_URL: ${VITE_API_URL:-/api}
     container_name: ozon-travel-frontend
     restart: unless-stopped
+    depends_on:
+      - backend
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -42,9 +92,33 @@ services:
     networks:
       - proxy
 
+  admin:
+    build:
+      context: ./admin
+      args:
+        REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+        VITE_REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+        VITE_API_BASE_URL: ${ADMIN_API_BASE_URL:-https://admin.${DOMAIN}}
+        VITE_ALLOW_BROWSER_ADMIN: ${VITE_ALLOW_BROWSER_ADMIN:-true}
+    container_name: ozon-travel-admin
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.ozon-travel-admin.rule=Host(`admin.${DOMAIN}`)
+      - traefik.http.routers.ozon-travel-admin.entrypoints=websecure
+      - traefik.http.routers.ozon-travel-admin.tls.certresolver=le
+      - traefik.http.services.ozon-travel-admin.loadbalancer.server.port=80
+    networks:
+      - proxy
+
 networks:
   proxy:
     name: proxy
 
 volumes:
   traefik_letsencrypt:
+  postgres_data:
+  backend_uploads:

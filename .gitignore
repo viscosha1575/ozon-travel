@@ -3,6 +3,11 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/.cache/
+admin/dist/
+backend/node_modules/
+backend/uploads/
+admin-panel/
+test-data/
 
 ## Environment files
 .env

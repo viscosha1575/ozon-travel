@@ -1,35 +1,72 @@
 import { useEffect, useRef, useState } from "react"
 
-const BAG_TEXTURES = [
+import { getJson, postJson, trackGameEvent } from "../api.js"
+
+const DEFAULT_ROULETTE_ITEMS = [
   {
+    id: 3501,
     key: "game-bag-1",
     slotPath: "/game/bags/case.webp",
     path: "/game/bags/case.webp",
     label: "case-1",
+    title: "Скидка 800 ₽ на первый заказ отеля от 15 000 ₽",
+    description: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽",
+    myPrizeText: "Скидка 800 ₽",
+    expiresAt: "до 31.08.26",
+    chanceValue: "1x",
+    type: "Приз",
   },
   {
+    id: 3502,
     key: "game-bag-2",
     slotPath: "/game/bags/case2.webp",
     path: "/game/bags/case2.webp",
     label: "case-2",
+    title: "Скидка 300 ₽ на заказ отеля от 5 000 ₽",
+    description: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽",
+    myPrizeText: "Скидка 300 ₽",
+    expiresAt: "до 31.08.26",
+    chanceValue: "1x",
+    type: "Приз",
   },
   {
+    id: 3503,
     key: "game-bag-3",
     slotPath: "/game/bags/case3.webp",
     path: "/game/bags/case3.webp",
     label: "case-3",
+    title: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
+    description: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
+    myPrizeText: "Скидка 800 ₽",
+    expiresAt: "до 31.08.26",
+    chanceValue: "1x",
+    type: "Приз",
   },
   {
+    id: 3504,
     key: "game-bag-4",
     slotPath: "/game/bags/case4.webp",
     path: "/game/bags/case4.webp",
     label: "case-4",
+    title: "Скидка 300 ₽ на заказ авиа от 15 000 ₽",
+    description: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов",
+    myPrizeText: "Скидка 300 ₽",
+    expiresAt: "до 31.08.26",
+    chanceValue: "1x",
+    type: "Приз",
   },
   {
+    id: 3505,
     key: "game-bag-5",
     slotPath: "/game/bags/case5.webp",
     path: "/game/bags/case5.webp",
     label: "case-5",
+    title: "1 000 баллов Ozon",
+    description: "Начисление 1 000 баллов Ozon",
+    myPrizeText: "1 000 баллов Ozon",
+    expiresAt: "до 30.06.26",
+    chanceValue: "1x",
+    type: "Не приз",
   },
 ]
 
@@ -50,42 +87,34 @@ const TOP_BANNER_ACTIONS = [
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
   { id: "gift", icon: "/game/icons/gift.svg", label: "Подарки" },
 ]
-const RESULT_PROMO_CODE = "AAAAAAAA"
-const PRIZE_ITEMS = [
-  {
-    id: "prize-flight",
-    image: "/intro/bags/colorful-bag.webp",
-    title: "Скидка 300 ₽ на заказ авиа от 15 000 ₽",
-    expiresAt: "до 31.08.26",
-  },
-  {
-    id: "prize-hotel",
-    image: "/intro/bags/pink-bag.webp",
-    title: "Скидка 300 ₽ на заказ отеля от 5 000 ₽",
-    expiresAt: "до 31.08.26",
-  },
-  {
-    id: "prize-miles",
-    image: "/game/bags/case4.webp",
-    title: "300 миль",
-    expiresAt: "до 30.06.26",
-  },
-  {
-    id: "prize-green-flight",
-    image: "/intro/bags/green-bag.webp",
-    title: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
-    expiresAt: "до 31.08.26",
-  },
-]
-
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
 
-function createTrackItems(centerBagIndex, totalSteps) {
+function formatAttemptsLabel(value) {
+  const count = Math.max(0, Number(value) || 0)
+  const remainder10 = count % 10
+  const remainder100 = count % 100
+
+  if (remainder10 === 1 && remainder100 !== 11) {
+    return `${count} попытка`
+  }
+
+  if (remainder10 >= 2 && remainder10 <= 4 && (remainder100 < 12 || remainder100 > 14)) {
+    return `${count} попытки`
+  }
+
+  return `${count} попыток`
+}
+
+function createTrackItems(rouletteItems, centerBagIndex, totalSteps) {
+  if (!rouletteItems.length) {
+    return []
+  }
+
   const length = TRACK_CENTER_OFFSET + totalSteps + TRACK_TAIL_BUFFER
 
   return Array.from({ length }, (_, index) => {
-    const bagIndex = getLoopedIndex(centerBagIndex + index - TRACK_CENTER_OFFSET, BAG_TEXTURES.length)
-    return BAG_TEXTURES[bagIndex]
+    const bagIndex = getLoopedIndex(centerBagIndex + index - TRACK_CENTER_OFFSET, rouletteItems.length)
+    return rouletteItems[bagIndex]
   })
 }
 
@@ -97,19 +126,27 @@ export default function GameScreen() {
   const pendingSpinRef = useRef(null)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
+  const isMountedRef = useRef(true)
+  const [rouletteItems, setRouletteItems] = useState(DEFAULT_ROULETTE_ITEMS)
+  const [myPrizes, setMyPrizes] = useState([])
+  const [availableAttempts, setAvailableAttempts] = useState(0)
   const [isSpinActive, setIsSpinActive] = useState(false)
   const [activeOverlay, setActiveOverlay] = useState(null)
   const [renderedOverlay, setRenderedOverlay] = useState(null)
   const [isOverlayClosing, setIsOverlayClosing] = useState(false)
   const [resultBag, setResultBag] = useState(null)
+  const [resultPrize, setResultPrize] = useState(null)
   const [isResultCopied, setIsResultCopied] = useState(false)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
-  const [trackItems, setTrackItems] = useState(() => createTrackItems(0, 0))
+  const [trackItems, setTrackItems] = useState(() => createTrackItems(DEFAULT_ROULETTE_ITEMS, 0, 0))
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [isTrackAnimated, setIsTrackAnimated] = useState(false)
   const [trackAnimationDuration, setTrackAnimationDuration] = useState(SPIN_TOTAL_DURATION)
   const [trackAnimationEasing, setTrackAnimationEasing] = useState(SPIN_TOTAL_EASING)
   const [lockedSlotHeight, setLockedSlotHeight] = useState(null)
+  const [spinError, setSpinError] = useState("")
+  const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
+  const isDevWidgetVisible = true
 
   const measureStep = () => {
     const nextStep = (slotRef.current?.getBoundingClientRect().height ?? 0) + SLOT_GAP
@@ -121,6 +158,8 @@ export default function GameScreen() {
     return stepRef.current
   }
 
+  const activeRouletteItems = rouletteItems.length ? rouletteItems : DEFAULT_ROULETTE_ITEMS
+
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
     const step = measureStep()
 
@@ -128,15 +167,15 @@ export default function GameScreen() {
     setTrackAnimationDuration(SPIN_TOTAL_DURATION)
     setTrackAnimationEasing(SPIN_TOTAL_EASING)
     setLockedSlotHeight(null)
-    setTrackItems(createTrackItems(nextCenterBagIndex, 0))
+    setTrackItems(createTrackItems(activeRouletteItems, nextCenterBagIndex, 0))
 
     if (step > 0) {
       setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
     }
   }
 
-  const handleSpin = () => {
-    if (isSpinActive || resultBag) {
+  const handleSpin = async () => {
+    if (isSpinActive || resultBag || !activeRouletteItems.length || availableAttempts <= 0) {
       return
     }
 
@@ -147,30 +186,54 @@ export default function GameScreen() {
       return
     }
 
-    const targetBagIndex = Math.floor(Math.random() * BAG_TEXTURES.length)
+    let spinResponse
+    void trackGameEvent("spin_clicked", {
+      activeItemsCount: activeRouletteItems.length,
+    })
+
+    try {
+      spinResponse = await postJson("/game/spin", {})
+    } catch (error) {
+      console.warn("Spin request failed", error)
+      setSpinError(error.message || "Не удалось выполнить попытку")
+      return
+    }
+
+    const targetPositionId = spinResponse?.result?.positionId
+    const targetBagIndex = Math.max(
+      0,
+      activeRouletteItems.findIndex((item) => item.id === targetPositionId)
+    )
     const alignmentSteps = getLoopedIndex(
       targetBagIndex - currentCenterBagIndex,
-      BAG_TEXTURES.length
+      activeRouletteItems.length
     )
     const fullLoops =
       SPIN_MIN_FULL_LOOPS
       + Math.floor(Math.random() * (SPIN_MAX_FULL_LOOPS - SPIN_MIN_FULL_LOOPS + 1))
-    const totalSteps = (fullLoops + 1) * BAG_TEXTURES.length + alignmentSteps
+    const totalSteps = (fullLoops + 1) * activeRouletteItems.length + alignmentSteps
 
-    pendingSpinRef.current = { targetBagIndex }
+    pendingSpinRef.current = {
+      targetBagIndex,
+      result: spinResponse?.result || null,
+      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
+      attempts: spinResponse?.attempts || null,
+    }
 
     clearTimeout(overlayTimeoutRef.current)
+    setSpinError("")
     setActiveOverlay(null)
     setRenderedOverlay(null)
     setIsOverlayClosing(false)
     setResultBag(null)
+    setResultPrize(null)
     setIsResultCopied(false)
     setIsSpinActive(true)
     setIsTrackAnimated(false)
     setTrackAnimationDuration(SPIN_TOTAL_DURATION)
     setTrackAnimationEasing(SPIN_TOTAL_EASING)
     setLockedSlotHeight(step - SLOT_GAP)
-    setTrackItems(createTrackItems(currentCenterBagIndex, totalSteps))
+    setTrackItems(createTrackItems(activeRouletteItems, currentCenterBagIndex, totalSteps))
     setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
 
     cancelAnimationFrame(animationFrameRef.current)
@@ -183,6 +246,10 @@ export default function GameScreen() {
   }
 
   const handleBannerAction = (actionId) => {
+    void trackGameEvent("overlay_opened", {
+      overlayId: actionId,
+      myPrizesCount: actionId === "gift" ? myPrizes.length : undefined,
+    })
     clearTimeout(overlayTimeoutRef.current)
     setIsOverlayClosing(false)
     setActiveOverlay(actionId)
@@ -202,6 +269,13 @@ export default function GameScreen() {
   }
 
   const handleCloseOverlay = () => {
+    const closedOverlayId = renderedOverlay || activeOverlay
+    if (closedOverlayId) {
+      void trackGameEvent("overlay_closed", {
+        overlayId: closedOverlayId,
+      })
+    }
+
     if (!renderedOverlay) {
       setActiveOverlay(null)
       return
@@ -217,15 +291,66 @@ export default function GameScreen() {
   }
 
   const handleBackToGame = () => {
+    void trackGameEvent("result_closed", {
+      prizeId: resultBag?.id ?? resultPrize?.positionId ?? null,
+      prizeType: resultPrize?.type || resultBag?.type || "",
+    })
     setResultBag(null)
+    setResultPrize(null)
     setIsResultCopied(false)
     resetCarousel(centerBagIndexRef.current)
   }
 
+  const openPrizeResult = (prize) => {
+    if (!prize) {
+      return
+    }
+
+    void trackGameEvent("my_prize_opened", {
+      prizeId: prize.id,
+      title: prize.title || "",
+      hasPromoCode: Boolean(prize.promoCode),
+    })
+    clearTimeout(overlayTimeoutRef.current)
+    setActiveOverlay(null)
+    setRenderedOverlay(null)
+    setIsOverlayClosing(false)
+    setIsResultCopied(false)
+    setResultBag({
+      id: prize.id,
+      key: `my-prize-${prize.id}`,
+      path: prize.image || "/game/bags/case.webp",
+      slotPath: prize.image || "/game/bags/case.webp",
+      label: prize.title || `prize-${prize.id}`,
+      title: prize.title || "",
+      description: prize.description || "",
+      myPrizeText: prize.title || "",
+      expiresAt: prize.expiresAt || "",
+      chanceValue: prize.chanceValue || "1x",
+      type: prize.type || "Приз",
+    })
+    setResultPrize({
+      type: prize.type || "Приз",
+      title: prize.title || "",
+      description: prize.description || "",
+      image: prize.image || "",
+      promoCode: prize.promoCode || "",
+      expiresAt: prize.expiresAt || "",
+    })
+  }
+
   const handleCopyResultCode = async () => {
+    if (!resultPrize?.promoCode) {
+      return
+    }
+
     try {
-      await navigator.clipboard.writeText(RESULT_PROMO_CODE)
+      await navigator.clipboard.writeText(resultPrize.promoCode)
       setIsResultCopied(true)
+      void trackGameEvent("promo_code_copied", {
+        prizeId: resultBag?.id ?? null,
+        codeLength: String(resultPrize.promoCode).length,
+      })
     } catch {
       setIsResultCopied(true)
     }
@@ -236,7 +361,7 @@ export default function GameScreen() {
       return
     }
 
-    const { targetBagIndex } = pendingSpinRef.current
+    const { targetBagIndex, result, myPrizes: nextMyPrizes, attempts: nextAttempts } = pendingSpinRef.current
     pendingSpinRef.current = null
     centerBagIndexRef.current = targetBagIndex
 
@@ -244,9 +369,80 @@ export default function GameScreen() {
     cancelAnimationFrame(animationFrameRef.current)
     animationFrameRef.current = requestAnimationFrame(() => {
       setCenterBagIndex(targetBagIndex)
-      setResultBag(BAG_TEXTURES[targetBagIndex])
+      setResultBag(activeRouletteItems[targetBagIndex] || null)
+      setResultPrize(result)
+      setMyPrizes(nextMyPrizes)
+      setAvailableAttempts(Number(nextAttempts?.availableAttempts || 0))
       setIsSpinActive(false)
+      void trackGameEvent("spin_result_shown", {
+        positionId: result?.positionId ?? activeRouletteItems[targetBagIndex]?.id ?? null,
+        type: result?.type || activeRouletteItems[targetBagIndex]?.type || "",
+        hasPromoCode: Boolean(result?.promoCode),
+      })
     })
+  }
+
+  const loadGameBootstrap = async () => {
+    try {
+      const response = await getJson("/game/bootstrap")
+
+      if (!isMountedRef.current) {
+        return
+      }
+
+      const nextRouletteItems = Array.isArray(response?.rouletteItems) && response.rouletteItems.length
+        ? response.rouletteItems.map((item, index) => ({
+          id: item.id ?? index,
+          key: `roulette-item-${item.id ?? index}`,
+          slotPath: item.image || DEFAULT_ROULETTE_ITEMS[index % DEFAULT_ROULETTE_ITEMS.length].slotPath,
+          path: item.image || DEFAULT_ROULETTE_ITEMS[index % DEFAULT_ROULETTE_ITEMS.length].path,
+          label: item.title || `item-${index}`,
+          title: item.title || "",
+          description: item.description || "",
+          myPrizeText: item.myPrizeText || item.title || "",
+          expiresAt: item.expiresAt || "",
+          chanceValue: item.chanceValue || "1x",
+          type: item.type || "Приз",
+        }))
+        : DEFAULT_ROULETTE_ITEMS
+
+      setRouletteItems(nextRouletteItems)
+      setMyPrizes(Array.isArray(response?.myPrizes) ? response.myPrizes : [])
+      setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
+      setSpinError("")
+      void trackGameEvent("bootstrap_loaded", {
+        rouletteItemsCount: nextRouletteItems.length,
+        myPrizesCount: Array.isArray(response?.myPrizes) ? response.myPrizes.length : 0,
+        availableAttempts: Number(response?.attempts?.availableAttempts || 0),
+      })
+    } catch (error) {
+      console.warn("Game bootstrap failed", error)
+      setSpinError(error.message || "Не удалось загрузить игру")
+    }
+  }
+
+  const handleDevGrantAttempts = async () => {
+    try {
+      const response = await postJson("/game/dev/grant-attempts", {
+        count: 10,
+      })
+      setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
+      setSpinError("")
+      setIsDevWidgetOpen(false)
+    } catch (error) {
+      setSpinError(error.message || "Не удалось начислить попытки")
+    }
+  }
+
+  const handleDevDeleteUser = async () => {
+    try {
+      await postJson("/game/dev/delete-user", {})
+      if (typeof window !== "undefined") {
+        window.location.reload()
+      }
+    } catch (error) {
+      setSpinError(error.message || "Не удалось удалить игрока")
+    }
   }
 
   useEffect(() => {
@@ -258,6 +454,22 @@ export default function GameScreen() {
   }, [activeOverlay])
 
   useEffect(() => {
+    void loadGameBootstrap()
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    centerBagIndexRef.current = 0
+    setCenterBagIndex(0)
+    setTrackItems(createTrackItems(activeRouletteItems, 0, 0))
+    setTrackTranslate(0)
+    setLockedSlotHeight(null)
+  }, [rouletteItems])
+
+  useEffect(() => {
     const syncCarousel = () => {
       const measuredHeight = slotRef.current?.getBoundingClientRect().height ?? 0
       const step = measuredHeight > 0 ? measuredHeight + SLOT_GAP : stepRef.current
@@ -265,7 +477,7 @@ export default function GameScreen() {
       if (step > SLOT_GAP) {
         stepRef.current = step
         setIsTrackAnimated(false)
-        setTrackItems(createTrackItems(centerBagIndexRef.current, 0))
+        setTrackItems(createTrackItems(activeRouletteItems, centerBagIndexRef.current, 0))
         setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
       }
     }
@@ -288,7 +500,7 @@ export default function GameScreen() {
       cancelAnimationFrame(animationFrameRef.current)
       clearTimeout(overlayTimeoutRef.current)
     }
-  }, [])
+  }, [activeRouletteItems])
 
   useEffect(() => {
     centerBagIndexRef.current = centerBagIndex
@@ -300,6 +512,36 @@ export default function GameScreen() {
 
   return (
     <main className="game-screen" aria-label="Игровой экран">
+      {isDevWidgetVisible ? (
+        <div className={`game-dev-widget ${isDevWidgetOpen ? "is-open" : ""}`}>
+          <button
+            type="button"
+            className="game-dev-widget-toggle"
+            onClick={() => setIsDevWidgetOpen((currentValue) => !currentValue)}
+            aria-label="Открыть dev-инструменты"
+          >
+            {isDevWidgetOpen ? "←" : "→"}
+          </button>
+          {isDevWidgetOpen ? (
+            <div className="game-dev-widget-panel">
+              <button
+                type="button"
+                className="game-dev-widget-action game-dev-widget-action--danger"
+                onClick={handleDevDeleteUser}
+              >
+                Удалить
+              </button>
+              <button
+                type="button"
+                className="game-dev-widget-action"
+                onClick={handleDevGrantAttempts}
+              >
+                +10 попыток
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <img
         src={CENTER_PATTERN_PATH}
         alt=""
@@ -405,11 +647,16 @@ export default function GameScreen() {
             type="button"
             className="game-spin-button"
             onClick={handleSpin}
-            disabled={isSpinActive}
+            disabled={isSpinActive || availableAttempts <= 0}
           >
             <span className="game-spin-button-label">Крутить</span>
-            <span className="game-spin-button-attempt">1 попытка</span>
+            <span className="game-spin-button-attempt">{formatAttemptsLabel(availableAttempts)}</span>
           </button>
+          {spinError ? (
+            <p className="game-result-description" style={{ marginTop: "12px", textAlign: "center" }}>
+              {spinError}
+            </p>
+          ) : null}
         </div>
         {renderedOverlay === "question" ? (
           <div
@@ -492,27 +739,27 @@ export default function GameScreen() {
             />
             <div className="game-result-sheet">
               <div className="game-result-sheet-inner">
-                <p className="game-result-kicker">Ваш приз</p>
-                <h2 className="game-result-title">1 000 баллов Ozon</h2>
+                <p className="game-result-kicker">
+                  {resultPrize?.type === "Не приз" ? "Результат" : "Ваш приз"}
+                </p>
+                <h2 className="game-result-title">{resultPrize?.title || resultBag?.title || "Позиция"}</h2>
                 <p className="game-result-description">
-                  Оплатите ими до 90% любых товаров
-                  <br />
-                  в приложении Ozon. Активируйте промокод
-                  <br />
-                  до 30.06.26 в разделе «Коды и сертификаты».
+                  {resultPrize?.description || resultBag?.description || "Описание позиции появится после настройки в админке."}
                 </p>
                 <div className="game-result-actions">
-                  <button type="button" className="game-result-code" onClick={handleCopyResultCode}>
-                    <span className="game-result-code-text">
-                      {isResultCopied ? "Скопировано" : RESULT_PROMO_CODE}
-                    </span>
-                    <img
-                      src={isResultCopied ? "/game/icons/check.svg" : "/game/icons/copy.svg"}
-                      alt=""
-                      className="game-result-code-icon"
-                      aria-hidden="true"
-                    />
-                  </button>
+                  {resultPrize?.promoCode ? (
+                    <button type="button" className="game-result-code" onClick={handleCopyResultCode}>
+                      <span className="game-result-code-text">
+                        {isResultCopied ? "Скопировано" : resultPrize.promoCode}
+                      </span>
+                      <img
+                        src={isResultCopied ? "/game/icons/check.svg" : "/game/icons/copy.svg"}
+                        alt=""
+                        className="game-result-code-icon"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="game-result-primary-action"
@@ -538,10 +785,15 @@ export default function GameScreen() {
               Мои призы
             </h2>
             <div className="game-prizes-list" aria-label="Список призов">
-              {PRIZE_ITEMS.map((prize) => (
-                <article key={prize.id} className="game-prize-card">
+              {myPrizes.length ? myPrizes.map((prize) => (
+                <button
+                  key={prize.id}
+                  type="button"
+                  className="game-prize-card"
+                  onClick={() => openPrizeResult(prize)}
+                >
                   <img
-                    src={prize.image}
+                    src={prize.image || "/game/bags/case.webp"}
                     alt=""
                     className="game-prize-card-image"
                     aria-hidden="true"
@@ -550,8 +802,10 @@ export default function GameScreen() {
                     <h3 className="game-prize-card-title">{prize.title}</h3>
                     <p className="game-prize-card-date">{prize.expiresAt}</p>
                   </div>
-                </article>
-              ))}
+                </button>
+              )) : (
+                <p className="game-overlay-description">Пока призов нет. Крутите ленту, чтобы получить первый.</p>
+              )}
             </div>
             <div className="game-prizes-footer">
               <button

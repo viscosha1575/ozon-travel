@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ozon_travel}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ozon_travel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ozon_travel}
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET:-local-dev-secret}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:3001}
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:4173}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Belgrade}
+      UPLOADS_DIR: /app/uploads
+    ports:
+      - "3001:3001"
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${FRONTEND_API_URL:-http://localhost:3001/api}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "4173:80"
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET:-local-dev-secret}
+        VITE_REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET:-local-dev-secret}
+        VITE_API_BASE_URL: ${ADMIN_API_BASE_URL:-http://localhost:3001}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "4174:80"
+
+volumes:
+  postgres_data:
+  backend_uploads:

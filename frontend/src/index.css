@@ -380,6 +380,57 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.92) 100%);
 }
 
+.game-dev-widget {
+  position: absolute;
+  top: calc(18px + var(--app-safe-top));
+  left: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.game-dev-widget-toggle {
+  width: 40px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: rgba(7, 7, 7, 0.92);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.game-dev-widget-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(20, 34, 50, 0.18);
+}
+
+.game-dev-widget-action {
+  min-width: 132px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.game-dev-widget-action--danger {
+  background: rgba(255, 88, 88, 0.14);
+  color: #d63f3f;
+}
+
 .game-controls {
   position: absolute;
   left: 12px;
@@ -554,6 +605,7 @@ body {
   grid-template-rows: auto 1fr auto;
   width: 100%;
   height: 100%;
+  min-height: 0;
   box-sizing: border-box;
   padding:
     calc(clamp(56px, 11svh, 88px) + var(--app-safe-top))
@@ -581,7 +633,12 @@ body {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-top: clamp(24px, 4.2svh, 34px);
+  padding-right: 6px;
 }
 
 .game-prize-card {
@@ -589,10 +646,17 @@ body {
   grid-template-columns: 118px minmax(0, 1fr);
   align-items: center;
   justify-items: center;
+  width: 100%;
   min-height: 92px;
+  padding: 0;
+  border: 0;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(245, 247, 250, 1) 0%, rgba(240, 243, 248, 1) 100%);
   overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .game-prize-card-image {

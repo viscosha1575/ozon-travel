@@ -1,8 +1,10 @@
 import { memo, startTransition, useEffect, useState } from "react"
 
+import { postJson, trackGameEvent } from "./api.js"
 import GameScreen from "./game/GameScreen.jsx"
 
 const INTRO_DISABLED = false
+const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
 const GAME_SCENE_ASSETS = [
   "/game/center.webp",
   "/game/left-triangle.svg",
@@ -36,25 +38,6 @@ const screens = [
     ],
     actionLabel: "Начать",
   },
-  {
-    id: "subscription",
-    variant: "subscription",
-    compact: true,
-    titleLines: ["Перед стартом подпишитесь", "на канал Ozon Travel"],
-    actionLabel: "Подписаться",
-    secondaryActionLabel: "Проверить подписку",
-  },
-  {
-    id: "result",
-    variant: "result",
-    compact: true,
-    titleLines: ["Ура!"],
-    description: [
-      "Лента призов уже ждёт вас! Заходите в мини-",
-      "приложение и ловите ваш багаж с призами",
-    ],
-    actionLabel: "Играть",
-  },
 ]
 
 function preloadImage(src) {
@@ -81,11 +64,26 @@ function preloadImage(src) {
 const PersistentGameScreen = memo(GameScreen)
 
 function App() {
-  const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
-  const currentScreen = screens[activeScreen]
+  const currentScreen = screens[0]
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(APP_OPEN_STORAGE_KEY) === "1") {
+      return
+    }
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(APP_OPEN_STORAGE_KEY, "1")
+    }
+
+    void postJson("/game/open", {
+      entryScreen: INTRO_DISABLED ? "game" : "intro",
+    }).catch((error) => {
+      console.warn("Game open tracking failed", error)
+    })
+  }, [])
 
   useEffect(() => {
     if (INTRO_DISABLED) {
@@ -117,21 +115,20 @@ function App() {
     })
   }, [isGameLaunchPending, isGameSceneReady])
 
-  const handlePrimaryAction = () => {
-    startTransition(() => {
-      setActiveScreen((current) => Math.min(current + 1, screens.length - 1))
-    })
-  }
+  useEffect(() => {
+    if (INTRO_DISABLED) {
+      return
+    }
 
-  const handleSubscriptionAction = () => {}
-
-  const handleSubscriptionCheck = () => {
-    startTransition(() => {
-      setActiveScreen(2)
+    void trackGameEvent("intro_viewed", {
+      screenId: currentScreen.id,
     })
-  }
+  }, [currentScreen.id])
 
   const handleStartGame = () => {
+    void trackGameEvent("intro_start_clicked", {
+      screenId: currentScreen.id,
+    })
     setIsGameLaunchPending(true)
 
     if (!isGameSceneReady) {
@@ -141,6 +138,10 @@ function App() {
     startTransition(() => {
       setIsGameActive(true)
     })
+  }
+
+  const handlePrimaryAction = () => {
+    handleStartGame()
   }
 
   return (
@@ -203,7 +204,7 @@ function App() {
           </section>
           <section className="spacer-panel" aria-hidden="true" />
           <div
-            className={`content-bag-layer ${activeScreen === 0 || activeScreen === 2 ? "is-visible" : "is-hidden"} ${activeScreen === 2 ? "is-static" : ""}`}
+            className="content-bag-layer is-visible"
             aria-hidden="true"
           >
         <img
@@ -222,16 +223,6 @@ function App() {
           className="content-bag"
         />
           </div>
-          <div
-            className={`content-subscribe-layer ${activeScreen === 1 ? "is-visible" : "is-hidden"}`}
-            aria-hidden="true"
-          >
-        <img
-          src="/intro/subscribe.webp"
-          alt=""
-          className="content-subscribe-image"
-        />
-          </div>
           <section
             className={`content-panel ${currentScreen.compact ? "is-compact" : ""}`}
             data-screen={currentScreen.id}
@@ -240,12 +231,8 @@ function App() {
             <div className={`content-panel-inner ${currentScreen.compact ? "is-compact" : ""}`}>
               <div className={`content-screen-stack ${currentScreen.compact ? "is-compact" : ""}`}>
             {screens.map((screen, index) => {
-              const isActive = index === activeScreen
-              const positionClass = isActive
-                ? "is-active"
-                : index < activeScreen
-                  ? "is-before"
-                  : "is-after"
+              const isActive = index === 0
+              const positionClass = "is-active"
 
               return (
                 <section
@@ -253,90 +240,39 @@ function App() {
                   className={`content-screen ${screen.variant ? `content-screen--${screen.variant}` : ""} ${positionClass}`}
                   aria-hidden={!isActive}
                 >
-                  {screen.variant === "subscription" ? (
-                    <>
-                      <h1 className="content-title content-title--subscription">
-                        {screen.titleLines.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
-                      </h1>
+                  <div className="content-copy">
+                    <p className="content-kicker">
+                      {screen.kicker.map((line) => (
+                        <span key={line} className="content-line">{line}</span>
+                      ))}
+                    </p>
+                    <h1 className="content-title">
+                      {screen.titleLines.map((line) => (
+                        <span key={line} className="content-line">{line}</span>
+                      ))}
+                      {screen.accentLine ? (
+                        <span className="content-line">
+                          {screen.accentLine.before}
+                          <span className="content-accent">{screen.accentLine.accent}</span>
+                          {screen.accentLine.after}
+                        </span>
+                      ) : null}
+                    </h1>
+                    <p className="content-description">
+                      {screen.description.map((line) => (
+                        <span key={line} className="content-line">{line}</span>
+                      ))}
+                    </p>
+                  </div>
 
-                      <div className="content-actions-stack">
-                        <button
-                          type="button"
-                          className="content-action"
-                          onClick={handleSubscriptionAction}
-                        >
-                          {screen.actionLabel}
-                        </button>
-                        <button
-                          type="button"
-                          className="content-action content-action--secondary"
-                          onClick={handleSubscriptionCheck}
-                        >
-                          {screen.secondaryActionLabel}
-                        </button>
-                      </div>
-                    </>
-                  ) : screen.variant === "result" ? (
-                    <>
-                      <h1 className="content-title content-title--result">
-                        {screen.titleLines.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
-                      </h1>
-
-                      <p className="content-description content-description--result">
-                        {screen.description.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
-                      </p>
-
-                      <button
-                        type="button"
-                        className="content-action"
-                        onClick={handleStartGame}
-                        disabled={isGameLaunchPending && !isGameSceneReady}
-                      >
-                        {isGameLaunchPending && !isGameSceneReady ? "Открываем..." : screen.actionLabel}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="content-copy">
-                        <p className="content-kicker">
-                          {screen.kicker.map((line) => (
-                            <span key={line} className="content-line">{line}</span>
-                          ))}
-                        </p>
-                        <h1 className="content-title">
-                          {screen.titleLines.map((line) => (
-                            <span key={line} className="content-line">{line}</span>
-                          ))}
-                          {screen.accentLine ? (
-                            <span className="content-line">
-                              {screen.accentLine.before}
-                              <span className="content-accent">{screen.accentLine.accent}</span>
-                              {screen.accentLine.after}
-                            </span>
-                          ) : null}
-                        </h1>
-                        <p className="content-description">
-                          {screen.description.map((line) => (
-                            <span key={line} className="content-line">{line}</span>
-                          ))}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="content-action"
-                        onClick={handlePrimaryAction}
-                      >
-                        {screen.actionLabel}
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    className="content-action"
+                    onClick={handlePrimaryAction}
+                    disabled={isGameLaunchPending && !isGameSceneReady}
+                  >
+                    {isGameLaunchPending && !isGameSceneReady ? "Открываем..." : screen.actionLabel}
+                  </button>
                 </section>
               )
             })}
