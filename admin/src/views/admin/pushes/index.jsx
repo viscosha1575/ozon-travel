@@ -122,11 +122,21 @@ function htmlToPlainText(value) {
     return "";
   }
 
+  const normalizedHtml = String(value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<\/(p|div|blockquote|h[1-6])>/gi, "\n\n")
+    .replace(/<\/(ul|ol)>/gi, "\n");
+
   const tempContainer = document.createElement("div");
-  tempContainer.innerHTML = value;
+  tempContainer.innerHTML = normalizedHtml;
 
   return (tempContainer.textContent || tempContainer.innerText || "")
-    .replace(/\s+/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -1108,7 +1118,7 @@ export default function PushesPage() {
                             <Text color={textColor} fontSize="sm" fontWeight="700">
                               {item.title}
                             </Text>
-                            <Text color={textColorSecondary} fontSize="xs" noOfLines={3}>
+                            <Text color={textColorSecondary} fontSize="xs" whiteSpace="pre-line">
                               {item.message}
                             </Text>
                           </Stack>
