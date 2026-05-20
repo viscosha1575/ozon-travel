@@ -86,6 +86,28 @@ function linkifyHtmlTextNodes(html) {
   return template.innerHTML;
 }
 
+function insertHtmlAtRange(range, html) {
+  if (!range) {
+    return;
+  }
+
+  const fragment = range.createContextualFragment(html);
+  const lastNode = fragment.lastChild;
+
+  range.deleteContents();
+  range.insertNode(fragment);
+
+  if (lastNode) {
+    const nextRange = document.createRange();
+    nextRange.setStartAfter(lastNode);
+    nextRange.collapse(true);
+
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(nextRange);
+  }
+}
+
 const EMPTY_TOOLBAR_STATE = {
   bold: false,
   italic: false,
@@ -277,20 +299,20 @@ export default function RichTextEditor({
     editorRef.current.focus();
 
     const selection = window.getSelection();
+    const restoredRange = savedSelectionRef.current ? savedSelectionRef.current.cloneRange() : null;
 
     if (selection) {
       selection.removeAllRanges();
 
-      if (savedSelectionRef.current) {
-        selection.addRange(savedSelectionRef.current);
+      if (restoredRange) {
+        selection.addRange(restoredRange);
       }
     }
 
-    if (linkSelectionCollapsed || !savedSelectionRef.current || savedSelectionRef.current.collapsed) {
+    if (linkSelectionCollapsed || !restoredRange || restoredRange.collapsed) {
       const nextLinkText = String(linkText || "").trim() || href;
-      document.execCommand(
-        "insertHTML",
-        false,
+      insertHtmlAtRange(
+        restoredRange || selection?.getRangeAt?.(0) || null,
         `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
       );
     } else {
