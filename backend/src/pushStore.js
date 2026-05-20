@@ -459,6 +459,10 @@ function buildBroadcastHtml(push) {
   return formatHtmlForMax(messageToHtml(push.message || ""));
 }
 
+function resolveMaxLinkPreviewFlag(push) {
+  return push.disableLinkPreview ? false : true;
+}
+
 function decorateTestSendError(error) {
   const message = String(error?.message || "").trim();
 
@@ -649,7 +653,7 @@ export async function sendPush(payload = {}) {
         userId: MAX_PUSH_TEST_USER_ID,
         html: buildBroadcastHtml(push),
         mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
-        disablePreview: Boolean(push.disableLinkPreview),
+        disablePreview: resolveMaxLinkPreviewFlag(push),
       });
     } catch (error) {
       throw decorateTestSendError(error);
@@ -687,7 +691,7 @@ export async function sendPush(payload = {}) {
         userId: recipientId,
         html: buildBroadcastHtml(push),
         mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
-        disablePreview: Boolean(push.disableLinkPreview),
+        disablePreview: resolveMaxLinkPreviewFlag(push),
       });
 
       return {
