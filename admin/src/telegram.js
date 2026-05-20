@@ -18,10 +18,6 @@ function isLocalAdminBypassEnabled() {
   return import.meta.env.DEV && isLocalAdminHost();
 }
 
-function isBrowserAdminBypassEnabled() {
-  return String(import.meta.env.VITE_ALLOW_BROWSER_ADMIN || "").trim() === "true";
-}
-
 function extractTelegramInitDataFromLocation() {
   const candidates = [];
 
@@ -221,7 +217,7 @@ export async function bootstrapTelegram() {
 
       return webApp;
     } catch (error) {
-      if (!isLocalAdminBypassEnabled() && !isBrowserAdminBypassEnabled()) {
+      if (!isLocalAdminBypassEnabled()) {
         throw error;
       }
 
@@ -238,7 +234,7 @@ export async function getTelegramWebApp() {
   try {
     telegramWebApp = await bootstrapTelegram();
   } catch (error) {
-    if (!isLocalAdminBypassEnabled() && !isBrowserAdminBypassEnabled()) {
+    if (!isLocalAdminBypassEnabled()) {
       throw error;
     }
   }
@@ -246,7 +242,7 @@ export async function getTelegramWebApp() {
   const webApp = telegramWebApp || {};
   const initData = webApp.initData || extractTelegramInitDataFromLocation();
 
-  if (!initData && (isLocalAdminBypassEnabled() || isBrowserAdminBypassEnabled())) {
+  if (!initData && isLocalAdminBypassEnabled()) {
     return {
       webApp: null,
       initData: "",

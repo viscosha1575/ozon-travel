@@ -99,7 +99,7 @@ services:
         REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
         VITE_REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
         VITE_API_BASE_URL: ${ADMIN_API_BASE_URL:-https://admin.${DOMAIN}}
-        VITE_ALLOW_BROWSER_ADMIN: ${VITE_ALLOW_BROWSER_ADMIN:-true}
+        VITE_ALLOW_BROWSER_ADMIN: ${VITE_ALLOW_BROWSER_ADMIN:-false}
     container_name: ozon-travel-admin
     restart: unless-stopped
     depends_on:
