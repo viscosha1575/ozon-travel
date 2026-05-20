@@ -73,7 +73,14 @@ function sanitizeInlineHtml(value) {
     .replace(/<\s*\/\s*del\s*>/gi, "</s>")
     .replace(/<\s*a\b[^>]*href=(['"])(.*?)\1[^>]*>/gi, (_match, _quote, href) => `<a href="${href}">`)
     .replace(/<\s*\/\s*a\s*>/gi, "</a>")
-    .replace(/<(?!\/?(a|b|i|u|s|code|pre|blockquote)\b)[^>]+>/gi, "");
+    .replace(/<(?!\/?(a|b|i|u|s|code|pre|blockquote|br)\b)[^>]+>/gi, "");
+}
+
+function convertNewlinesToMaxBreaks(value) {
+  return String(value || "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n\n/g, "<br /><br />")
+    .replace(/\n/g, "<br />");
 }
 
 function formatInlineForMax(value) {
@@ -127,7 +134,7 @@ function formatHtmlForMax(rawHtml) {
     (index) => `${index + 1}.`,
   );
 
-  return sanitizeInlineHtml(
+  const normalizedText = sanitizeInlineHtml(
     withLists
       .replace(/<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/gi, (_match, quoteText) => {
         const normalizedQuote = formatInlineForMax(quoteText);
@@ -156,6 +163,8 @@ function formatHtmlForMax(rawHtml) {
     .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  return convertNewlinesToMaxBreaks(normalizedText);
 }
 
 function computeRate(numerator, denominator) {
