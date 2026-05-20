@@ -174,6 +174,39 @@ async function ensureSchema() {
     ON user_attempt_transactions (user_id, reason, related_user_id)
     WHERE related_user_id IS NOT NULL
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_campaigns (
+      id BIGSERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL DEFAULT '',
+      html TEXT NOT NULL DEFAULT '',
+      audience_key TEXT NOT NULL DEFAULT 'all_users',
+      audience_label TEXT NOT NULL DEFAULT 'Все пользователи',
+      selected_users JSONB NOT NULL DEFAULT '[]'::jsonb,
+      image JSONB NULL,
+      status TEXT NOT NULL DEFAULT 'template',
+      recipients_count INTEGER NOT NULL DEFAULT 0,
+      delivered_count INTEGER NOT NULL DEFAULT 0,
+      opened_count INTEGER NOT NULL DEFAULT 0,
+      clicked_count INTEGER NOT NULL DEFAULT 0,
+      test_sent_at TIMESTAMPTZ NULL,
+      scheduled_at TIMESTAMPTZ NULL,
+      sent_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS push_campaigns_status_idx
+    ON push_campaigns (status, created_at DESC)
+  `);
+
+  await query(`
+    ALTER TABLE push_campaigns
+    ADD COLUMN IF NOT EXISTS disable_link_preview BOOLEAN NOT NULL DEFAULT FALSE
+  `);
 }
 
 async function seedPrizesIfEmpty() {

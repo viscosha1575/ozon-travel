@@ -27,6 +27,11 @@ import {
   updateChance,
   updatePrize,
 } from "./prizeStore.js";
+import {
+  createPush,
+  listPushes,
+  sendPush,
+} from "./pushStore.js";
 import { resolveTelegramUser } from "./telegramUser.js";
 import {
   createUserFromPlatform,
@@ -287,6 +292,21 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/analytics/player") {
       res.json(await getPlayerAnalyticsDetails(body));
+      return;
+    }
+
+    if (path === "/api/pushes/list") {
+      res.json(await listPushes(body));
+      return;
+    }
+
+    if (path === "/api/pushes/create") {
+      res.json(await createPush(body));
+      return;
+    }
+
+    if (path === "/api/pushes/send") {
+      res.json(await sendPush(body));
       return;
     }
 

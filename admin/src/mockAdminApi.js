@@ -166,10 +166,12 @@ function createMockPush({
   title,
   message,
   html = "",
-  audienceKey = "all",
+  audienceKey = "all_users",
   audienceLabel,
+  selectedUsers = [],
   imageUrl = null,
-  status = "draft",
+  disableLinkPreview = false,
+  status = "template",
   recipientsCount = 0,
   deliveredCount = 0,
   openedCount = 0,
@@ -177,6 +179,7 @@ function createMockPush({
   hoursCreatedAgo = 24,
   hoursScheduledAgo = null,
   hoursSentAgo = null,
+  hoursTestSentAgo = null,
 }) {
   return {
     id,
@@ -185,7 +188,9 @@ function createMockPush({
     html,
     audienceKey,
     audienceLabel,
+    selectedUsers,
     imageUrl,
+    disableLinkPreview: Boolean(disableLinkPreview),
     status,
     recipientsCount,
     deliveredCount,
@@ -194,6 +199,7 @@ function createMockPush({
     createdAt: hoursAgo(hoursCreatedAgo),
     scheduledAt: hoursScheduledAgo == null ? null : hoursAgo(hoursScheduledAgo),
     sentAt: hoursSentAgo == null ? null : hoursAgo(hoursSentAgo),
+    testSentAt: hoursTestSentAgo == null ? null : hoursAgo(hoursTestSentAgo),
     updatedAt: hoursAgo(hoursSentAgo ?? hoursScheduledAgo ?? hoursCreatedAgo),
   };
 }
@@ -382,8 +388,8 @@ const mockState = {
       title: "Финальный день розыгрыша",
       message: "Напоминаем: сегодня последний шанс получить тревел-приз.",
       html: "<p>Напоминаем: сегодня последний шанс получить тревел-приз.</p>",
-      audienceKey: "all",
-      audienceLabel: "Все игроки",
+      audienceKey: "all_users",
+      audienceLabel: "Все пользователи",
       status: "sent",
       recipientsCount: 14820,
       deliveredCount: 14230,
@@ -398,26 +404,30 @@ const mockState = {
       title: "Вернись в игру",
       message: "Ты почти у цели: до приза осталось совсем немного.",
       html: "<p>Ты почти у цели: до приза осталось совсем немного.</p>",
-      audienceKey: "unfinished",
-      audienceLabel: "Не завершили сессию",
+      audienceKey: "selected_users",
+      audienceLabel: "2 пользователя",
+      selectedUsers: [
+        { id: 2, displayName: "Роман Петров", username: "roma.runner", telegramUserId: 900002 },
+        { id: 4, displayName: "Никита Орлов", username: "nikita.arc", telegramUserId: 900004 },
+      ],
       status: "sent",
-      recipientsCount: 6240,
-      deliveredCount: 5988,
-      openedCount: 2264,
-      clickedCount: 524,
+      recipientsCount: 2,
+      deliveredCount: 2,
+      openedCount: 1,
+      clickedCount: 1,
       hoursCreatedAgo: 54,
       hoursScheduledAgo: 30,
       hoursSentAgo: 28,
     }),
     createMockPush({
       id: 4003,
-      title: "Подпишись и получи шанс",
-      message: "Подписка на канал открывает доступ к следующему этапу игры.",
-      html: "<p>Подписка на канал открывает доступ к следующему этапу игры.</p>",
-      audienceKey: "unsubscribed",
-      audienceLabel: "Не подписаны",
+      title: "Тест новой коммуникации",
+      message: "Проверяем формат сообщения перед основной волной.",
+      html: "<p>Проверяем формат сообщения перед основной волной.</p>",
+      audienceKey: "all_users",
+      audienceLabel: "Все пользователи",
       status: "scheduled",
-      recipientsCount: 3180,
+      recipientsCount: 14820,
       deliveredCount: 0,
       openedCount: 0,
       clickedCount: 0,
@@ -426,17 +436,23 @@ const mockState = {
     }),
     createMockPush({
       id: 4004,
-      title: "Тест пуша для новой волны",
-      message: "Черновик для вечерней коммуникации по призам.",
-      html: "<p>Черновик для вечерней коммуникации по призам.</p>",
-      audienceKey: "winners",
-      audienceLabel: "Победители и финалисты",
-      status: "draft",
-      recipientsCount: 920,
+      title: "Вечерняя волна по призам",
+      message: "Собрали для тебя напоминание о призах и доступе в игру.",
+      html: "<p>Собрали для тебя напоминание о призах и доступе в игру.</p>",
+      audienceKey: "selected_users",
+      audienceLabel: "3 пользователя",
+      selectedUsers: [
+        { id: 1, displayName: "Мила Иванова", username: "mila.design", telegramUserId: 900001 },
+        { id: 3, displayName: "Катя Соколова", username: "katya.style", telegramUserId: 900003 },
+        { id: 9, displayName: "Соня Лебедева", username: "sonya.sun", telegramUserId: 900009 },
+      ],
+      status: "template",
+      recipientsCount: 3,
       deliveredCount: 0,
       openedCount: 0,
       clickedCount: 0,
       hoursCreatedAgo: 3,
+      hoursTestSentAgo: 1,
     }),
   ],
 };
@@ -1095,6 +1111,7 @@ function decoratePush(push) {
 
   return {
     ...push,
+    canSendLive: push.status === "template" && Boolean(push.testSentAt),
     openRate: deliveredCount > 0 ? (openedCount / deliveredCount) * 100 : 0,
     ctr: openedCount > 0 ? (clickedCount / openedCount) * 100 : 0,
   };
@@ -1231,7 +1248,7 @@ function buildLogsListResponse(payload = {}) {
 
 function buildPushesResponse(payload = {}) {
   const search = normalizeSearch(payload?.search);
-  const status = ["all", "draft", "scheduled", "sent"].includes(payload?.status) ? payload.status : "all";
+  const status = ["all", "template", "scheduled", "sent"].includes(payload?.status) ? payload.status : "all";
   let items = mockState.pushes.map(decoratePush);
 
   if (status !== "all") {
@@ -1244,6 +1261,7 @@ function buildPushesResponse(payload = {}) {
         item.title,
         item.message,
         item.audienceLabel,
+        ...(Array.isArray(item.selectedUsers) ? item.selectedUsers.map((user) => [user.displayName, user.username, user.telegramUserId].join(" ")) : []),
       ].join(" ").toLowerCase();
 
       return haystack.includes(search);
@@ -1261,24 +1279,16 @@ function buildPushesResponse(payload = {}) {
     items,
     summary: {
       totalCampaignsCount: items.length,
-      sentCampaignsCount: items.filter((item) => item.status === "sent").length,
+      sentCampaignsCount: items.filter((item) => item.status === "sent" || item.sentAt).length,
       totalRecipientsCount: items.reduce((sum, item) => sum + Number(item.recipientsCount || 0), 0),
       deliveredRecipientsCount: items.reduce((sum, item) => sum + Number(item.deliveredCount || 0), 0),
     },
   };
 }
 
-function resolvePushRecipientsCount(audienceKey) {
-  if (audienceKey === "unfinished") {
-    return 6240;
-  }
-
-  if (audienceKey === "unsubscribed") {
-    return 3180;
-  }
-
-  if (audienceKey === "winners") {
-    return 920;
+function resolvePushRecipientsCount(payload = {}) {
+  if (payload?.audienceKey === "selected_users") {
+    return Array.isArray(payload?.selectedUsers) ? payload.selectedUsers.length : 0;
   }
 
   return 14820;
@@ -1288,9 +1298,24 @@ function createPush(payload = {}) {
   const title = String(payload?.title || "").trim();
   const message = String(payload?.message || "").trim();
   const html = String(payload?.html || "").trim();
-  const audienceKey = String(payload?.audienceKey || "all").trim() || "all";
-  const audienceLabel = String(payload?.audienceLabel || "Все игроки").trim() || "Все игроки";
-  const imageUrl = payload?.imageUrl ? String(payload.imageUrl) : null;
+  const audienceKey = String(payload?.audienceKey || "all_users").trim() || "all_users";
+  const audienceLabel = String(payload?.audienceLabel || "Все пользователи").trim() || "Все пользователи";
+  const imageUrl = payload?.image?.previewUrl
+    ? String(payload.image.previewUrl)
+    : payload?.imageUrl
+      ? String(payload.imageUrl)
+      : null;
+  const disableLinkPreview = Boolean(payload?.disableLinkPreview);
+  const selectedUsers = Array.isArray(payload?.selectedUsers)
+    ? payload.selectedUsers
+      .map((user) => ({
+        id: Number(user?.id) || 0,
+        displayName: String(user?.displayName || "").trim(),
+        username: String(user?.username || "").trim(),
+        telegramUserId: Number(user?.telegramUserId) || 0,
+      }))
+      .filter((user) => user.id > 0)
+    : [];
 
   if (!title) {
     throw new Error("Push title is required");
@@ -1300,6 +1325,10 @@ function createPush(payload = {}) {
     throw new Error("Push message is required");
   }
 
+  if (audienceKey === "selected_users" && selectedUsers.length === 0) {
+    throw new Error("Select at least one user");
+  }
+
   const nextPush = createMockPush({
     id: Math.max(0, ...mockState.pushes.map((item) => item.id)) + 1,
     title,
@@ -1307,9 +1336,11 @@ function createPush(payload = {}) {
     html,
     audienceKey,
     audienceLabel,
+    selectedUsers,
     imageUrl,
-    status: "draft",
-    recipientsCount: resolvePushRecipientsCount(audienceKey),
+    disableLinkPreview,
+    status: "template",
+    recipientsCount: resolvePushRecipientsCount({ audienceKey, selectedUsers }),
     hoursCreatedAgo: 0,
   });
 
@@ -1322,6 +1353,7 @@ function createPush(payload = {}) {
 
 function sendPush(payload = {}) {
   const pushId = Number(payload?.pushId);
+  const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
   const push = mockState.pushes.find((item) => item.id === pushId);
 
   if (!push) {
@@ -1329,11 +1361,29 @@ function sendPush(payload = {}) {
   }
 
   const nowIso = new Date().toISOString();
+
+  if (mode === "test") {
+    push.testSentAt = nowIso;
+    push.updatedAt = nowIso;
+
+    return {
+      push: decoratePush(push),
+      mode,
+    };
+  }
+
+  if (push.status === "template" && !push.testSentAt) {
+    throw new Error("Test send is required before live send");
+  }
+
   const deliveredCount = Math.max(0, Math.round(Number(push.recipientsCount || 0) * 0.94));
   const openedCount = Math.round(deliveredCount * 0.37);
   const clickedCount = Math.round(openedCount * 0.18);
 
-  push.status = "sent";
+  if (push.status !== "template") {
+    push.status = "sent";
+  }
+
   push.scheduledAt = push.scheduledAt || nowIso;
   push.sentAt = nowIso;
   push.deliveredCount = deliveredCount;
@@ -1343,6 +1393,7 @@ function sendPush(payload = {}) {
 
   return {
     push: decoratePush(push),
+    mode,
   };
 }
 

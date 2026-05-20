@@ -180,7 +180,7 @@ export async function deleteManagedImage(image) {
   await removeFileIfExists(resolveManagedFilePath(fileName));
 }
 
-export async function storeRouletteImage(nextImage, currentImage = null) {
+export async function storeManagedImage(nextImage, currentImage = null) {
   const normalizedCurrentImage = normalizeStoredImage(currentImage);
 
   if (!nextImage?.previewUrl) {
@@ -213,4 +213,8 @@ export async function storeRouletteImage(nextImage, currentImage = null) {
     cleanupImage: normalizedCurrentImage,
     uploadedImage,
   };
+}
+
+export async function storeRouletteImage(nextImage, currentImage = null) {
+  return storeManagedImage(nextImage, currentImage);
 }
