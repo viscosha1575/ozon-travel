@@ -1087,12 +1087,15 @@ export default function PushesPage() {
                                 href={normalizedButtonUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                alignSelf="flex-start"
-                                size="sm"
+                                display="flex"
+                                w="100%"
+                                minH="48px"
+                                px="18px"
                                 bg="brand.500"
                                 color="white"
                                 borderRadius="14px"
                                 fontWeight="700"
+                                justifyContent="center"
                                 _hover={{ bg: "brand.600", textDecoration: "none" }}
                               >
                                 {draftForm.buttonText.trim()}
