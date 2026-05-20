@@ -96,6 +96,11 @@ async function ensureSchema() {
   `);
 
   await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS subscribed_to_channel BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS awarded_prizes (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,

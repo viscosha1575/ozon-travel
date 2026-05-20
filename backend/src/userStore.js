@@ -4,6 +4,26 @@ const FRONTEND_PUBLIC_URL = String(process.env.FRONTEND_PUBLIC_URL || "http://lo
 const TELEGRAM_BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@/, "");
 const MSK_TIMEZONE = "Europe/Moscow";
 
+function normalizePlatform(value) {
+  const platform = String(value || "").trim().toLowerCase();
+  return platform || "telegram";
+}
+
+function buildPlatformExternalId(platform, platformUserId) {
+  const normalizedPlatform = normalizePlatform(platform);
+  const normalizedPlatformUserId = String(platformUserId || "").trim();
+
+  if (!normalizedPlatformUserId) {
+    return "";
+  }
+
+  if (normalizedPlatform === "telegram") {
+    return normalizedPlatformUserId;
+  }
+
+  return `${normalizedPlatform}:${normalizedPlatformUserId}`;
+}
+
 function buildReferralCode(externalId) {
   return `OZONTRAVEL-${String(externalId || "")
     .replace(/\W+/g, "")
@@ -364,5 +384,83 @@ export async function deleteUserById(userId, client = null) {
   return {
     deleted: true,
     playerId: Number(result.rows[0].id),
+  };
+}
+
+export async function createUserFromPlatform(payload = {}, client = null) {
+  const platform = normalizePlatform(payload.platform);
+  const externalId = buildPlatformExternalId(platform, payload.platformUserId);
+
+  if (!externalId) {
+    const error = new Error("platformUserId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await getOrCreateUser({
+    externalId,
+    username: String(payload.platformNickname || payload.username || "").trim(),
+    firstName: String(payload.firstName || "").trim(),
+    lastName: String(payload.lastName || "").trim(),
+    languageCode: String(payload.languageCode || "").trim(),
+    startParam: String(payload.invitedByReferralCode || "").trim(),
+  }, client);
+
+  return {
+    ok: true,
+    user: {
+      id: Number(user.id),
+      platform,
+      platformUserId: String(payload.platformUserId).trim(),
+      externalId: user.external_id,
+      username: user.username || "",
+      firstName: user.first_name || "",
+      lastName: user.last_name || "",
+      referralCode: user.referral_code || "",
+      subscribedToChannel: Boolean(user.subscribed_to_channel),
+    },
+  };
+}
+
+export async function setUserSubscriptionStatus(payload = {}, client = null) {
+  const platform = normalizePlatform(payload.platform);
+  const externalId = buildPlatformExternalId(platform, payload.platformUserId);
+  const executor = client || { query };
+
+  if (!externalId) {
+    const error = new Error("platformUserId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await getOrCreateUser({
+    externalId,
+    username: String(payload.platformNickname || payload.username || "").trim(),
+    firstName: String(payload.firstName || "").trim(),
+    lastName: String(payload.lastName || "").trim(),
+    languageCode: String(payload.languageCode || "").trim(),
+    startParam: String(payload.invitedByReferralCode || "").trim(),
+  }, client);
+
+  const result = await executor.query(
+    `
+      UPDATE app_users
+      SET subscribed_to_channel = $2, updated_at = NOW(), last_seen_at = NOW()
+      WHERE id = $1
+      RETURNING id, external_id, subscribed_to_channel
+    `,
+    [Number(user.id), Boolean(payload.isSubscribed)],
+  );
+  const updatedUser = result.rows[0];
+
+  return {
+    ok: true,
+    user: {
+      id: Number(updatedUser.id),
+      platform,
+      platformUserId: String(payload.platformUserId).trim(),
+      externalId: updatedUser.external_id,
+      subscribedToChannel: Boolean(updatedUser.subscribed_to_channel),
+    },
   };
 }

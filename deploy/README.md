@@ -17,6 +17,7 @@ Required repository secrets:
 - `DEPLOY_PORT` - SSH port, usually `22`
 - `DEPLOY_SSH_KEY` - private SSH key that GitHub Actions uses to log in to the server
 
-The workflow syncs the repository to `/opt/ozon-travel` and then runs `bash deploy/deploy.sh` on the server.
+The workflow syncs the repository to `/opt/ozon-travel` with `rsync` and then runs `bash deploy/deploy.sh` on the server.
+The server must already have a production `.env` file at `/opt/ozon-travel/.env` because the workflow does not upload env files.
 
 Before requesting a Let's Encrypt certificate, point the `A` record for `ozon-travel-max.ru` and `www.ozon-travel-max.ru` to the target VPS.

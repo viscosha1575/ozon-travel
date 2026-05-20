@@ -8,7 +8,7 @@ function normalizeBaseUrl(value) {
 const API_BASE_URL = normalizeBaseUrl(process.env.GAME_API_URL || 'http://localhost:3000');
 const REQUEST_BODY_SECRET = process.env.REQUEST_BODY_SECRET || '';
 const REQUIRE_ENCRYPTED_REQUESTS = process.env.REQUIRE_ENCRYPTED_REQUESTS === 'true';
-const SHOULD_ENCRYPT_REQUESTS = REQUIRE_ENCRYPTED_REQUESTS || Boolean(REQUEST_BODY_SECRET);
+const SHOULD_ENCRYPT_REQUESTS = REQUIRE_ENCRYPTED_REQUESTS;
 
 function encryptBody(body) {
   if (!REQUEST_BODY_SECRET) {

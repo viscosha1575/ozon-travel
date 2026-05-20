@@ -29,11 +29,13 @@ import {
 } from "./prizeStore.js";
 import { resolveTelegramUser } from "./telegramUser.js";
 import {
+  createUserFromPlatform,
   deleteUserById,
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
   grantUserAttempts,
+  setUserSubscriptionStatus,
 } from "./userStore.js";
 
 const app = express();
@@ -155,6 +157,68 @@ app.post("/api/game/dev/delete-user", async (req, res, next) => {
     res.json({
       ok: true,
       ...deleted,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/users/create", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    const response = await createUserFromPlatform(body);
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/users/set-subscription-status", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    const response = await setUserSubscriptionStatus(body);
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/logs/create", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    const platform = String(body?.platform || "").trim().toLowerCase() || "telegram";
+    const platformUserId = String(body?.platformUserId || "").trim();
+
+    if (!platformUserId) {
+      const error = new Error("platformUserId is required");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const externalId = platform === "telegram"
+      ? platformUserId
+      : `${platform}:${platformUserId}`;
+    const response = await logGameEvent({
+      externalId,
+      username: String(body?.platformNickname || body?.username || "").trim(),
+      firstName: String(body?.firstName || "").trim(),
+      lastName: String(body?.lastName || "").trim(),
+      languageCode: String(body?.languageCode || "").trim(),
+    }, body?.eventName, {
+      source: String(body?.source || "max_bot").trim() || "max_bot",
+      details:
+        body?.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+          ? body.metadata
+          : {},
+    });
+
+    res.json({
+      ok: true,
+      logId: Number(response.id),
+      createdAt: response.createdAt,
     });
   } catch (error) {
     next(error);
