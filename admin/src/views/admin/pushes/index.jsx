@@ -1414,14 +1414,9 @@ export default function PushesPage() {
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Stack spacing="10px">
-                            <Flex align="center" justify="space-between" gap="10px">
-                              <Text color={textColor} fontSize="sm" fontWeight="700">
-                                {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
-                              </Text>
-                              <Text color={textColorSecondary} fontSize="xs" fontWeight="700">
-                                {formatPercent(progressValue)}
-                              </Text>
-                            </Flex>
+                            <Text color={textColor} fontSize="sm" fontWeight="700">
+                              {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
+                            </Text>
                             <Progress
                               value={progressValue}
                               size="sm"
