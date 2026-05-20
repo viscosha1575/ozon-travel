@@ -1386,11 +1386,11 @@ export default function PushesPage() {
               <Table variant="simple" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} w="34%">Заголовок</Th>
-                    <Th color={textColorSecondary} w="28%">Доставка</Th>
-                    <Th color={textColorSecondary} w="14%">Статус</Th>
+                    <Th color={textColorSecondary} w="24%">Заголовок</Th>
+                    <Th color={textColorSecondary} w="42%">Доставка</Th>
+                    <Th color={textColorSecondary} w="12%">Статус</Th>
                     <Th color={textColorSecondary} w="8%">CTR</Th>
-                    <Th color={textColorSecondary} w="16%">Отправлено</Th>
+                    <Th color={textColorSecondary} w="14%">Отправлено</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1425,6 +1425,7 @@ export default function PushesPage() {
                             <Progress
                               value={progressValue}
                               size="sm"
+                              w="100%"
                               borderRadius="999px"
                               bg={previewBg}
                               colorScheme={item.status === "revoked" ? "orange" : item.status === "sent" ? "green" : "purple"}
@@ -1470,14 +1471,9 @@ export default function PushesPage() {
           <ModalOverlay bg="rgba(15, 23, 61, 0.48)" backdropFilter="blur(6px)" />
           <ModalContent borderRadius="28px" overflow="hidden" mx="16px">
             <ModalHeader borderBottom="1px solid" borderColor={borderColor}>
-              <Stack spacing="4px" pr="36px">
-                <Text color={textColor} fontSize="xl" fontWeight="800">
-                  {selectedPush?.title || "Рассылка"}
-                </Text>
-                <Text color={textColorSecondary} fontSize="sm">
-                  Превью сообщения, подробности и все доступные действия собраны здесь.
-                </Text>
-              </Stack>
+              <Text color={textColor} fontSize="xl" fontWeight="800" pr="36px">
+                {selectedPush?.title || "Рассылка"}
+              </Text>
             </ModalHeader>
             <ModalCloseButton />
             <ModalBody p={{ base: "18px", md: "24px" }}>
@@ -1532,6 +1528,7 @@ export default function PushesPage() {
                         <Progress
                           value={selectedPush.recipientsCount > 0 ? (Number(selectedPush.deliveredCount || 0) / Number(selectedPush.recipientsCount || 1)) * 100 : 0}
                           size="sm"
+                          w="100%"
                           borderRadius="999px"
                           bg={previewBg}
                           colorScheme={selectedPush.status === "revoked" ? "orange" : selectedPush.status === "sent" ? "green" : "purple"}
@@ -1568,10 +1565,7 @@ export default function PushesPage() {
             </ModalBody>
             <ModalFooter borderTop="1px solid" borderColor={borderColor}>
               {selectedPush ? (
-                <Flex w="100%" justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap="12px">
-                  <Text color={textColorSecondary} fontSize="sm">
-                    Действия вынесены сюда, чтобы сама таблица оставалась компактной.
-                  </Text>
+                <Flex w="100%" justify="flex-end" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap="12px">
                   <Flex wrap="wrap" gap="10px" justify={{ base: "stretch", md: "flex-end" }}>
                     {selectedPush.status === "template" ? (
                       <>
