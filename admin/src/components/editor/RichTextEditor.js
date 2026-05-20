@@ -34,6 +34,49 @@ function normalizeUrl(rawValue) {
   }
 }
 
+const URL_PATTERN = /((https?:\/\/|www\.)[^\s<]+)/gi;
+
+function buildAnchorHtml(rawUrl) {
+  const href = normalizeUrl(rawUrl.startsWith("www.") ? `https://${rawUrl}` : rawUrl);
+
+  if (!href) {
+    return escapeHtml(rawUrl);
+  }
+
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(rawUrl)}</a>`;
+}
+
+function linkifyHtmlTextNodes(html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+
+  while (walker.nextNode()) {
+    const currentNode = walker.currentNode;
+
+    if (currentNode?.parentElement?.closest("a")) {
+      continue;
+    }
+
+    if (URL_PATTERN.test(currentNode.textContent || "")) {
+      textNodes.push(currentNode);
+    }
+
+    URL_PATTERN.lastIndex = 0;
+  }
+
+  for (const textNode of textNodes) {
+    const source = textNode.textContent || "";
+    const replacement = source.replace(URL_PATTERN, (match) => buildAnchorHtml(match));
+    const fragment = document.createRange().createContextualFragment(replacement);
+    textNode.parentNode?.replaceChild(fragment, textNode);
+    URL_PATTERN.lastIndex = 0;
+  }
+
+  return template.innerHTML;
+}
+
 const EMPTY_TOOLBAR_STATE = {
   bold: false,
   italic: false,
@@ -156,12 +199,13 @@ export default function RichTextEditor({
       .replace(/<div>/g, "<p>")
       .replace(/<\/div>/g, "</p>")
       .trim();
+    const linkifiedHtml = linkifyHtmlTextNodes(normalizedHtml);
 
-    if (normalizedHtml !== editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = normalizedHtml;
+    if (linkifiedHtml !== editorRef.current.innerHTML) {
+      editorRef.current.innerHTML = linkifiedHtml;
     }
 
-    onChange?.(normalizedHtml);
+    onChange?.(linkifiedHtml);
   }
 
   function applyParagraph() {

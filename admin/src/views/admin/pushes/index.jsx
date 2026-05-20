@@ -134,6 +134,47 @@ function hasLinkInText(value) {
   return /(https?:\/\/|www\.)[^\s<]+/i.test(String(value || ""));
 }
 
+function autolinkPreviewHtml(value) {
+  const rawHtml = String(value || "").trim();
+
+  if (!rawHtml) {
+    return "";
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = rawHtml;
+  const urlPattern = /((https?:\/\/|www\.)[^\s<]+)/gi;
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+
+  while (walker.nextNode()) {
+    const currentNode = walker.currentNode;
+
+    if (currentNode?.parentElement?.closest("a")) {
+      continue;
+    }
+
+    if (urlPattern.test(currentNode.textContent || "")) {
+      textNodes.push(currentNode);
+    }
+
+    urlPattern.lastIndex = 0;
+  }
+
+  for (const textNode of textNodes) {
+    const source = textNode.textContent || "";
+    const replacement = source.replace(urlPattern, (match) => {
+      const href = match.startsWith("www.") ? `https://${match}` : match;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    });
+    const fragment = document.createRange().createContextualFragment(replacement);
+    textNode.parentNode?.replaceChild(fragment, textNode);
+    urlPattern.lastIndex = 0;
+  }
+
+  return template.innerHTML;
+}
+
 export default function PushesPage() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -308,6 +349,7 @@ export default function PushesPage() {
     ? `${draftForm.selectedUsers.length || 0} ${draftForm.selectedUsers.length === 1 ? "пользователь" : draftForm.selectedUsers.length >= 2 && draftForm.selectedUsers.length <= 4 ? "пользователя" : "пользователей"}`
     : "Все пользователи";
   const draftPreviewText = htmlToPlainText(draftForm.html);
+  const previewHtml = autolinkPreviewHtml(draftForm.html);
   const draftHasLink = hasLinkInText(draftForm.html) || hasLinkInText(draftPreviewText);
   const draftFingerprint = JSON.stringify({
     title: draftForm.title.trim(),
@@ -912,7 +954,7 @@ export default function PushesPage() {
                                 },
                               }}
                               dangerouslySetInnerHTML={{
-                                __html: draftForm.html || "<p>Текст сообщения появится здесь.</p>",
+                                __html: previewHtml || "<p>Текст сообщения появится здесь.</p>",
                               }}
                             />
 
