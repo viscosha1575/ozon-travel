@@ -2,8 +2,17 @@ import {
   Box,
   Button,
   Flex,
+  Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Text,
   useColorModeValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -125,7 +134,13 @@ export default function RichTextEditor({
   placeholder = "Начните вводить текст…",
 }) {
   const editorRef = useRef(null);
+  const savedSelectionRef = useRef(null);
   const [toolbarState, setToolbarState] = useState(EMPTY_TOOLBAR_STATE);
+  const [linkUrl, setLinkUrl] = useState("https://");
+  const [linkText, setLinkText] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [linkSelectionCollapsed, setLinkSelectionCollapsed] = useState(true);
+  const { isOpen: isLinkModalOpen, onOpen: openLinkModal, onClose: closeLinkModal } = useDisclosure();
 
   const borderColor = useColorModeValue("gray.200", "whiteAlpha.100");
   const areaBg = useColorModeValue("white", "navy.800");
@@ -133,6 +148,9 @@ export default function RichTextEditor({
   const toolbarBorder = useColorModeValue("rgba(224, 229, 242, 0.9)", "rgba(255, 255, 255, 0.08)");
   const placeholderColor = useColorModeValue("secondaryGray.500", "secondaryGray.400");
   const textColor = useColorModeValue("navy.700", "white");
+  const modalBg = useColorModeValue("white", "navy.800");
+  const modalTextColor = useColorModeValue("navy.700", "white");
+  const modalMutedColor = useColorModeValue("secondaryGray.600", "secondaryGray.400");
 
   useEffect(() => {
     if (!editorRef.current) {
@@ -215,33 +233,82 @@ export default function RichTextEditor({
 
   function addLink() {
     const selection = window.getSelection();
-    const isCollapsed = !selection || selection.isCollapsed;
-    const rawUrl = window.prompt("Вставьте ссылку (https://…)", "https://");
-    const href = normalizeUrl(rawUrl);
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const selectedText = selection?.toString() || "";
+    const isInsideEditor = range
+      ? editorRef.current?.contains(range.commonAncestorContainer)
+      : false;
+
+    if (range && isInsideEditor) {
+      savedSelectionRef.current = range.cloneRange();
+    } else {
+      savedSelectionRef.current = null;
+    }
+
+    setLinkSelectionCollapsed(!selection || selection.isCollapsed);
+    setLinkUrl("https://");
+    setLinkText(selectedText);
+    setLinkError("");
+    openLinkModal();
+  }
+
+  function handleCloseLinkModal() {
+    setLinkUrl("https://");
+    setLinkText("");
+    setLinkError("");
+    setLinkSelectionCollapsed(true);
+    savedSelectionRef.current = null;
+    closeLinkModal();
+  }
+
+  function handleSubmitLink() {
+    const href = normalizeUrl(linkUrl);
 
     if (!href) {
+      setLinkError("Укажите корректную ссылку с http:// или https://");
       return;
     }
 
-    if (isCollapsed) {
-      const linkText = window.prompt("Текст ссылки", href) || href;
+    if (!editorRef.current) {
+      handleCloseLinkModal();
+      return;
+    }
+
+    editorRef.current.focus();
+
+    const selection = window.getSelection();
+
+    if (selection) {
+      selection.removeAllRanges();
+
+      if (savedSelectionRef.current) {
+        selection.addRange(savedSelectionRef.current);
+      }
+    }
+
+    if (linkSelectionCollapsed || !savedSelectionRef.current || savedSelectionRef.current.collapsed) {
+      const nextLinkText = String(linkText || "").trim() || href;
       document.execCommand(
         "insertHTML",
         false,
-        `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`,
+        `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
       );
     } else {
       document.execCommand("createLink", false, href);
 
-      setTimeout(() => {
-        editorRef.current?.querySelectorAll("a[href]").forEach((node) => {
-          node.setAttribute("target", "_blank");
-          node.setAttribute("rel", "noopener noreferrer");
-        });
-      }, 0);
+      const anchor = selection?.anchorNode?.parentElement?.closest?.("a");
+      if (anchor) {
+        anchor.setAttribute("target", "_blank");
+        anchor.setAttribute("rel", "noopener noreferrer");
+
+        if (String(linkText || "").trim()) {
+          anchor.textContent = linkText.trim();
+        }
+      }
     }
 
     emitValue();
+    handleCloseLinkModal();
   }
 
   function clearFormatting() {
@@ -344,8 +411,8 @@ export default function RichTextEditor({
           </Text>
         ) : null}
 
-        <Box
-          ref={editorRef}
+      <Box
+        ref={editorRef}
           contentEditable
           suppressContentEditableWarning
           minH="220px"
@@ -374,6 +441,66 @@ export default function RichTextEditor({
           }}
         />
       </Box>
+      <Modal isOpen={isLinkModalOpen} onClose={handleCloseLinkModal} isCentered>
+        <ModalOverlay bg="rgba(15, 23, 42, 0.45)" />
+        <ModalContent bg={modalBg} borderRadius="24px" border="1px solid" borderColor={toolbarBorder} boxShadow="0px 18px 40px rgba(112, 144, 176, 0.18)">
+          <ModalHeader color={modalTextColor} fontSize="xl" fontWeight="700" pb="8px">
+            Добавить ссылку
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Flex direction="column" gap="14px">
+              <Box>
+                <Text color={modalTextColor} fontSize="sm" fontWeight="700" mb="8px">
+                  URL
+                </Text>
+                <Input
+                  h="52px"
+                  borderRadius="16px"
+                  borderColor={borderColor}
+                  value={linkUrl}
+                  onChange={(event) => {
+                    setLinkUrl(event.target.value);
+                    if (linkError) {
+                      setLinkError("");
+                    }
+                  }}
+                  placeholder="https://example.com"
+                />
+              </Box>
+              <Box>
+                <Text color={modalTextColor} fontSize="sm" fontWeight="700" mb="8px">
+                  Текст ссылки
+                </Text>
+                <Input
+                  h="52px"
+                  borderRadius="16px"
+                  borderColor={borderColor}
+                  value={linkText}
+                  onChange={(event) => setLinkText(event.target.value)}
+                  placeholder="Например: Открыть сайт"
+                />
+                <Text color={modalMutedColor} fontSize="xs" mt="8px">
+                  Если поле оставить пустым, подставим сам URL.
+                </Text>
+              </Box>
+              {linkError ? (
+                <Text color="red.400" fontSize="sm" fontWeight="600">
+                  {linkError}
+                </Text>
+              ) : null}
+            </Flex>
+          </ModalBody>
+          <ModalFooter gap="10px">
+            <Button variant="outline" borderRadius="16px" onClick={handleCloseLinkModal}>
+              Отмена
+            </Button>
+            <Button bg="brand.500" color="white" borderRadius="16px" fontWeight="700" onClick={handleSubmitLink} _hover={{ bg: "brand.600" }}>
+              Добавить
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 }
