@@ -29,7 +29,9 @@ import {
 } from "./prizeStore.js";
 import {
   createPush,
+  deletePush,
   listPushes,
+  revokePush,
   sendPush,
 } from "./pushStore.js";
 import { resolveTelegramUser } from "./telegramUser.js";
@@ -307,6 +309,16 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/pushes/send") {
       res.json(await sendPush(body));
+      return;
+    }
+
+    if (path === "/api/pushes/revoke") {
+      res.json(await revokePush(body));
+      return;
+    }
+
+    if (path === "/api/pushes/delete") {
+      res.json(await deletePush(body));
       return;
     }
 

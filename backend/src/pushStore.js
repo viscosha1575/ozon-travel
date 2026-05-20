@@ -1,9 +1,12 @@
 import { deleteManagedImage, normalizeStoredImage, storeManagedImage } from "./imageStorage.js";
 import { query, withTransaction } from "./db.js";
 
-const PUSH_STATUS_VALUES = new Set(["template", "scheduled", "sent"]);
+const PUSH_STATUS_VALUES = new Set(["template", "scheduled", "sent", "revoked"]);
 const INTERNAL_BROADCAST_URL = String(
   process.env.MAX_INTERNAL_BROADCAST_URL || "http://max-bot:3011/internal/broadcast/send"
+).trim();
+const INTERNAL_BROADCAST_DELETE_URL = String(
+  process.env.MAX_INTERNAL_BROADCAST_DELETE_URL || "http://max-bot:3011/internal/broadcast/delete"
 ).trim();
 const INTERNAL_BROADCAST_TOKEN = String(
   process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || ""
@@ -130,6 +133,10 @@ function normalizePushRow(row) {
   const openedCount = Number(row?.opened_count || 0);
   const clickedCount = Number(row?.clicked_count || 0);
   const status = PUSH_STATUS_VALUES.has(row?.status) ? row.status : "template";
+  const totalDeliveries = Number(row?.total_deliveries || 0);
+  const deliveriesWithMessageIds = Number(row?.deliveries_with_message_ids || 0);
+  const revokedDeliveriesCount = Number(row?.revoked_deliveries_count || 0);
+  const pendingRevokeCount = Number(row?.pending_revoke_count || 0);
 
   return {
     id: Number(row.id),
@@ -155,17 +162,41 @@ function normalizePushRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     canSendLive: status === "template" && Boolean(row.test_sent_at),
+    totalDeliveries,
+    deliveriesWithMessageIds,
+    revokedDeliveriesCount,
+    pendingRevokeCount,
+    canRevoke: (status === "sent" || status === "revoked") && pendingRevokeCount > 0,
   };
+}
+
+function buildPushSelectQuery(whereClause = "") {
+  return `
+    SELECT
+      pc.*,
+      COALESCE(delivery_stats.total_deliveries, 0)::int AS total_deliveries,
+      COALESCE(delivery_stats.deliveries_with_message_ids, 0)::int AS deliveries_with_message_ids,
+      COALESCE(delivery_stats.revoked_deliveries_count, 0)::int AS revoked_deliveries_count,
+      COALESCE(delivery_stats.pending_revoke_count, 0)::int AS pending_revoke_count
+    FROM push_campaigns pc
+    LEFT JOIN (
+      SELECT
+        campaign_id,
+        COUNT(*)::int AS total_deliveries,
+        COUNT(*) FILTER (WHERE message_id IS NOT NULL)::int AS deliveries_with_message_ids,
+        COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS revoked_deliveries_count,
+        COUNT(*) FILTER (WHERE message_id IS NOT NULL AND deleted_at IS NULL)::int AS pending_revoke_count
+      FROM push_deliveries
+      GROUP BY campaign_id
+    ) AS delivery_stats
+      ON delivery_stats.campaign_id = pc.id
+    ${whereClause}
+  `;
 }
 
 async function fetchPushById(executor, pushId) {
   const result = await executor.query(
-    `
-      SELECT *
-      FROM push_campaigns
-      WHERE id = $1
-      LIMIT 1
-    `,
+    `${buildPushSelectQuery("WHERE pc.id = $1")} LIMIT 1`,
     [Number(pushId) || 0],
   );
 
@@ -270,6 +301,32 @@ async function callMaxBroadcast(payload) {
   return data;
 }
 
+async function callMaxBroadcastDelete(payload) {
+  if (!INTERNAL_BROADCAST_DELETE_URL) {
+    throw new Error("MAX internal broadcast delete URL is not configured");
+  }
+
+  if (!INTERNAL_BROADCAST_TOKEN) {
+    throw new Error("MAX internal broadcast token is not configured");
+  }
+
+  const response = await fetch(INTERNAL_BROADCAST_DELETE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-broadcast-token": INTERNAL_BROADCAST_TOKEN,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || `MAX broadcast delete failed with ${response.status}`);
+  }
+
+  return data;
+}
+
 async function runWithConcurrency(items, run) {
   let cursor = 0;
   const results = new Array(items.length);
@@ -348,7 +405,7 @@ function validatePushPayload(payload = {}) {
 export async function listPushes(payload = {}) {
   const search = normalizeSearch(payload?.search);
   const status = String(payload?.status || "all").trim();
-  const result = await query("SELECT * FROM push_campaigns ORDER BY COALESCE(sent_at, scheduled_at, created_at) DESC, id DESC");
+  const result = await query(`${buildPushSelectQuery()} ORDER BY COALESCE(pc.sent_at, pc.scheduled_at, pc.created_at) DESC, pc.id DESC`);
   let items = result.rows.map(normalizePushRow);
 
   if (status !== "all") {
@@ -441,6 +498,33 @@ export async function createPush(payload = {}) {
   }
 }
 
+export async function deletePush(payload = {}) {
+  const pushId = Number(payload?.pushId) || 0;
+  const row = await fetchPushById({ query }, pushId);
+
+  if (!row) {
+    throw new Error("Push not found");
+  }
+
+  const push = normalizePushRow(row);
+
+  if (push.sentAt) {
+    throw new Error("Нельзя удалить уже отправленную рассылку. Сначала используйте отзыв у получателей.");
+  }
+
+  await query("DELETE FROM push_campaigns WHERE id = $1", [push.id]);
+
+  if (push.image) {
+    await deleteManagedImage(push.image).catch(() => {});
+  }
+
+  return {
+    ok: true,
+    pushId: push.id,
+    title: push.title,
+  };
+}
+
 export async function sendPush(payload = {}) {
   const pushId = Number(payload?.pushId) || 0;
   const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
@@ -496,17 +580,22 @@ export async function sendPush(payload = {}) {
 
   const results = await runWithConcurrency(recipientIds, async (recipientId) => {
     try {
-      await callMaxBroadcast({
+      const response = await callMaxBroadcast({
         userId: recipientId,
         html: buildBroadcastHtml(push),
         mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
         disablePreview: Boolean(push.disableLinkPreview),
       });
 
-      return { ok: true };
+      return {
+        ok: true,
+        recipientId,
+        messageId: Number(response?.messageId) || null,
+      };
     } catch (error) {
       return {
         ok: false,
+        recipientId,
         error: error?.message || String(error),
       };
     }
@@ -514,6 +603,41 @@ export async function sendPush(payload = {}) {
 
   const deliveredCount = results.filter((item) => item?.ok).length;
   const failedCount = recipientIds.length - deliveredCount;
+
+  if (results.length > 0) {
+    const values = [];
+    const placeholders = [];
+
+    results.forEach((resultItem, index) => {
+      const base = index * 6;
+      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, NOW())`);
+      values.push(
+        push.id,
+        resultItem?.recipientId ? `max:${resultItem.recipientId}` : "",
+        String(resultItem?.recipientId || ""),
+        Number.isFinite(Number(resultItem?.messageId)) ? Number(resultItem.messageId) : null,
+        resultItem?.ok ? "sent" : "send_failed",
+        String(resultItem?.error || ""),
+      );
+    });
+
+    await query(
+      `
+        INSERT INTO push_deliveries (
+          campaign_id,
+          user_external_id,
+          max_user_id,
+          message_id,
+          delivery_status,
+          error_message,
+          updated_at
+        )
+        VALUES ${placeholders.join(", ")}
+      `,
+      values,
+    );
+  }
+
   const updateResult = await query(
     `
       UPDATE push_campaigns
@@ -538,6 +662,101 @@ export async function sendPush(payload = {}) {
     stats: {
       recipientsCount: recipientIds.length,
       deliveredCount,
+      failedCount,
+    },
+  };
+}
+
+export async function revokePush(payload = {}) {
+  const pushId = Number(payload?.pushId) || 0;
+  const row = await fetchPushById({ query }, pushId);
+
+  if (!row) {
+    throw new Error("Push not found");
+  }
+
+  const push = normalizePushRow(row);
+
+  if (!push.sentAt) {
+    throw new Error("Отзывать можно только уже отправленную рассылку.");
+  }
+
+  if (push.deliveriesWithMessageIds <= 0) {
+    throw new Error("Для этой рассылки не сохранены messageId, поэтому отозвать её уже нельзя.");
+  }
+
+  const deliveriesResult = await query(
+    `
+      SELECT id, max_user_id, message_id
+      FROM push_deliveries
+      WHERE campaign_id = $1
+        AND message_id IS NOT NULL
+        AND deleted_at IS NULL
+      ORDER BY id ASC
+    `,
+    [push.id],
+  );
+  const deliveries = deliveriesResult.rows;
+
+  if (deliveries.length === 0) {
+    throw new Error("У этой рассылки больше нет сообщений, доступных для отзыва.");
+  }
+
+  const revokeResults = await runWithConcurrency(deliveries, async (delivery) => {
+    try {
+      await callMaxBroadcastDelete({
+        userId: String(delivery.max_user_id || ""),
+        messageId: Number(delivery.message_id),
+      });
+
+      await query(
+        `
+          UPDATE push_deliveries
+          SET delivery_status = 'deleted', deleted_at = NOW(), error_message = '', updated_at = NOW()
+          WHERE id = $1
+        `,
+        [Number(delivery.id)],
+      );
+
+      return { ok: true };
+    } catch (error) {
+      await query(
+        `
+          UPDATE push_deliveries
+          SET delivery_status = 'delete_failed', error_message = $2, updated_at = NOW()
+          WHERE id = $1
+        `,
+        [Number(delivery.id), String(error?.message || error || "")],
+      );
+
+      return {
+        ok: false,
+        error: error?.message || String(error),
+      };
+    }
+  });
+
+  const revokedCount = revokeResults.filter((item) => item?.ok).length;
+  const failedCount = revokeResults.length - revokedCount;
+  const refreshedRow = await fetchPushById({ query }, push.id);
+  const refreshedPush = normalizePushRow(refreshedRow);
+  const nextStatus = refreshedPush.pendingRevokeCount <= 0 ? "revoked" : "sent";
+  const updatedPushResult = await query(
+    `
+      UPDATE push_campaigns
+      SET status = $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [push.id, nextStatus],
+  );
+  const finalRow = await fetchPushById({ query }, Number(updatedPushResult.rows[0].id));
+
+  return {
+    ok: true,
+    push: normalizePushRow(finalRow),
+    stats: {
+      revokedCount,
       failedCount,
     },
   };

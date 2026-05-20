@@ -1108,10 +1108,17 @@ function decoratePush(push) {
   const deliveredCount = Number(push.deliveredCount || 0);
   const openedCount = Number(push.openedCount || 0);
   const clickedCount = Number(push.clickedCount || 0);
+  const revokedDeliveriesCount = Number(push.revokedDeliveriesCount || 0);
+  const deliveriesWithMessageIds = Number(push.deliveriesWithMessageIds || deliveredCount || 0);
+  const pendingRevokeCount = Math.max(0, deliveriesWithMessageIds - revokedDeliveriesCount);
 
   return {
     ...push,
     canSendLive: push.status === "template" && Boolean(push.testSentAt),
+    deliveriesWithMessageIds,
+    revokedDeliveriesCount,
+    pendingRevokeCount,
+    canRevoke: (push.status === "sent" || push.status === "revoked") && pendingRevokeCount > 0,
     openRate: deliveredCount > 0 ? (openedCount / deliveredCount) * 100 : 0,
     ctr: openedCount > 0 ? (clickedCount / openedCount) * 100 : 0,
   };
@@ -1248,7 +1255,7 @@ function buildLogsListResponse(payload = {}) {
 
 function buildPushesResponse(payload = {}) {
   const search = normalizeSearch(payload?.search);
-  const status = ["all", "template", "scheduled", "sent"].includes(payload?.status) ? payload.status : "all";
+  const status = ["all", "template", "scheduled", "sent", "revoked"].includes(payload?.status) ? payload.status : "all";
   let items = mockState.pushes.map(decoratePush);
 
   if (status !== "all") {
@@ -1380,9 +1387,7 @@ function sendPush(payload = {}) {
   const openedCount = Math.round(deliveredCount * 0.37);
   const clickedCount = Math.round(openedCount * 0.18);
 
-  if (push.status !== "template") {
-    push.status = "sent";
-  }
+  push.status = "sent";
 
   push.scheduledAt = push.scheduledAt || nowIso;
   push.sentAt = nowIso;
@@ -1394,6 +1399,62 @@ function sendPush(payload = {}) {
   return {
     push: decoratePush(push),
     mode,
+  };
+}
+
+function revokePush(payload = {}) {
+  const pushId = Number(payload?.pushId);
+  const push = mockState.pushes.find((item) => item.id === pushId);
+
+  if (!push) {
+    throw new Error("Push not found");
+  }
+
+  if (!push.sentAt) {
+    throw new Error("Отзывать можно только уже отправленную рассылку.");
+  }
+
+  const currentDecoratedPush = decoratePush(push);
+
+  if (!currentDecoratedPush.deliveriesWithMessageIds) {
+    throw new Error("Для этой рассылки не сохранены messageId, поэтому отозвать её уже нельзя.");
+  }
+
+  const revokedCount = currentDecoratedPush.pendingRevokeCount;
+  push.revokedDeliveriesCount = currentDecoratedPush.deliveriesWithMessageIds;
+  push.status = "revoked";
+  push.updatedAt = new Date().toISOString();
+
+  return {
+    ok: true,
+    push: decoratePush(push),
+    stats: {
+      revokedCount,
+      failedCount: 0,
+    },
+  };
+}
+
+function deletePush(payload = {}) {
+  const pushId = Number(payload?.pushId);
+  const index = mockState.pushes.findIndex((item) => item.id === pushId);
+
+  if (index === -1) {
+    throw new Error("Push not found");
+  }
+
+  const push = mockState.pushes[index];
+
+  if (push.sentAt) {
+    throw new Error("Нельзя удалить уже отправленную рассылку. Сначала используйте отзыв у получателей.");
+  }
+
+  mockState.pushes.splice(index, 1);
+
+  return {
+    ok: true,
+    pushId,
+    title: push.title,
   };
 }
 
@@ -1792,6 +1853,14 @@ export function resolveMockAdminResponse(path, body = {}) {
 
   if (path === "/api/pushes/send") {
     return sendPush(body);
+  }
+
+  if (path === "/api/pushes/revoke") {
+    return revokePush(body);
+  }
+
+  if (path === "/api/pushes/delete") {
+    return deletePush(body);
   }
 
   if (path === "/api/users/delete") {

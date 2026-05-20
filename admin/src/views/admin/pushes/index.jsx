@@ -24,7 +24,7 @@ import {
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { MdSend } from "react-icons/md";
+import { MdDeleteOutline, MdSend, MdUndo } from "react-icons/md";
 import Card from "components/card/Card";
 import MiniStatistics from "components/card/MiniStatistics";
 import ImageUploader from "components/editor/ImageUploader";
@@ -36,6 +36,7 @@ const STATUS_OPTIONS = [
   { value: "template", label: "Шаблоны" },
   { value: "scheduled", label: "Запланированные" },
   { value: "sent", label: "Отправленные" },
+  { value: "revoked", label: "Отозванные" },
 ];
 
 const SEGMENT_OPTIONS = [
@@ -93,6 +94,13 @@ function getStatusBadgeProps(status) {
     return {
       colorScheme: "green",
       label: "Отправлен",
+    };
+  }
+
+  if (status === "revoked") {
+    return {
+      colorScheme: "orange",
+      label: "Отозван",
     };
   }
 
@@ -359,6 +367,14 @@ export default function PushesPage() {
   }
 
   async function handleSendPush(pushId, mode) {
+    if (mode === "live") {
+      const confirmed = window.confirm("Подтвердите реальную рассылку. Сообщение уйдёт живым получателям.");
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const actionKey = `${pushId}:${mode}`;
     setSendingPushAction(actionKey);
     setError("");
@@ -418,6 +434,12 @@ export default function PushesPage() {
         return;
       }
 
+      const confirmed = window.confirm("Подтвердите реальную рассылку. Сообщение уйдёт живым получателям.");
+
+      if (!confirmed) {
+        return;
+      }
+
       setSendingPushAction("form:live");
       setError("");
       setSuccessMessage("");
@@ -459,6 +481,58 @@ export default function PushesPage() {
       setSuccessMessage(`Тестовая рассылка для шаблона «${result?.push?.title || "Без названия"}» выполнена.`);
     } catch (requestError) {
       setError(requestError.message || "Не удалось отправить тестовую рассылку");
+    } finally {
+      setSendingPushAction("");
+    }
+  }
+
+  async function handleDeletePush(pushId) {
+    const confirmed = window.confirm("Удалить этот шаблон рассылки?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSendingPushAction(`${pushId}:delete`);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/pushes/delete", { pushId });
+      await loadPushes();
+
+      if (preparedTemplateId === pushId) {
+        setPreparedTemplateId(null);
+        setTestedTemplateFingerprint("");
+      }
+
+      setSuccessMessage(`Шаблон «${result?.title || `#${pushId}`}» удалён.`);
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось удалить шаблон");
+    } finally {
+      setSendingPushAction("");
+    }
+  }
+
+  async function handleRevokePush(pushId) {
+    const confirmed = window.confirm("Отозвать эту рассылку у получателей? Будут удалены только сообщения, для которых сохранены messageId.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSendingPushAction(`${pushId}:revoke`);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/pushes/revoke", { pushId });
+      await loadPushes();
+      setSuccessMessage(
+        `Отзыв завершён: удалено ${result?.stats?.revokedCount || 0}, ошибок ${result?.stats?.failedCount || 0}.`,
+      );
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось отозвать рассылку");
     } finally {
       setSendingPushAction("");
     }
@@ -1062,6 +1136,44 @@ export default function PushesPage() {
                               >
                                 Реальная рассылка
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                borderRadius="14px"
+                                fontWeight="700"
+                                isLoading={sendingPushAction === `${item.id}:delete`}
+                                leftIcon={<Icon as={MdDeleteOutline} boxSize="16px" />}
+                                loadingText="Удаляем"
+                                onClick={() => handleDeletePush(item.id)}
+                              >
+                                Удалить шаблон
+                              </Button>
+                            </Stack>
+                          ) : item.status === "sent" || item.status === "revoked" ? (
+                            <Stack spacing="8px">
+                              <Text color={textColorSecondary} fontSize="sm">
+                                {item.status === "revoked" ? "Отзыв выполнен" : "Завершено"}
+                              </Text>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                borderRadius="14px"
+                                fontWeight="700"
+                                leftIcon={<Icon as={MdUndo} boxSize="16px" />}
+                                isLoading={sendingPushAction === `${item.id}:revoke`}
+                                loadingText="Отзываем"
+                                onClick={() => handleRevokePush(item.id)}
+                                isDisabled={!item.canRevoke}
+                              >
+                                Отозвать у получателей
+                              </Button>
+                              {!item.canRevoke ? (
+                                <Text color={textColorSecondary} fontSize="xs">
+                                  {item.deliveriesWithMessageIds > 0
+                                    ? "Для этой рассылки больше нет доступных сообщений для отзыва."
+                                    : "messageId для этой отправки не были сохранены, поэтому отзыв недоступен."}
+                                </Text>
+                              ) : null}
                             </Stack>
                           ) : (
                             <Text color={textColorSecondary} fontSize="sm">

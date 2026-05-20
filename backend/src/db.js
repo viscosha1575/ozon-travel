@@ -207,6 +207,31 @@ async function ensureSchema() {
     ALTER TABLE push_campaigns
     ADD COLUMN IF NOT EXISTS disable_link_preview BOOLEAN NOT NULL DEFAULT FALSE
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_deliveries (
+      id BIGSERIAL PRIMARY KEY,
+      campaign_id BIGINT NOT NULL REFERENCES push_campaigns(id) ON DELETE CASCADE,
+      user_external_id TEXT NOT NULL DEFAULT '',
+      max_user_id TEXT NOT NULL DEFAULT '',
+      message_id BIGINT NULL,
+      delivery_status TEXT NOT NULL DEFAULT 'sent',
+      error_message TEXT NOT NULL DEFAULT '',
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS push_deliveries_campaign_id_idx
+    ON push_deliveries (campaign_id, sent_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS push_deliveries_message_id_idx
+    ON push_deliveries (message_id)
+  `);
 }
 
 async function seedPrizesIfEmpty() {
