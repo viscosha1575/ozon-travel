@@ -108,6 +108,19 @@ function insertHtmlAtRange(range, html) {
   }
 }
 
+function isEffectivelyEmptyBlock(element) {
+  if (!element) {
+    return false;
+  }
+
+  const normalizedText = String(element.textContent || "")
+    .replace(/\u200B/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+
+  return !normalizedText;
+}
+
 const EMPTY_TOOLBAR_STATE = {
   bold: false,
   italic: false,
@@ -369,11 +382,18 @@ export default function RichTextEditor({
       const marker = findLinkMarker();
 
       if (marker?.parentNode) {
-        const fragment = document.createRange().createContextualFragment(
-          `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
-        );
-        const lastNode = fragment.lastChild;
-        marker.replaceWith(fragment);
+        const anchorHtml = `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`;
+        const parentBlock = marker.parentElement?.closest?.("p,div,li");
+        let lastNode = null;
+
+        if (parentBlock && isEffectivelyEmptyBlock(parentBlock)) {
+          parentBlock.innerHTML = anchorHtml;
+          lastNode = parentBlock.lastChild;
+        } else {
+          const fragment = document.createRange().createContextualFragment(anchorHtml);
+          lastNode = fragment.lastChild;
+          marker.replaceWith(fragment);
+        }
 
         if (lastNode) {
           const nextRange = document.createRange();

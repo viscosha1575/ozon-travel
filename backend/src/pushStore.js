@@ -23,6 +23,26 @@ function normalizeAudienceKey(value) {
   return String(value || "").trim() === "selected_users" ? "selected_users" : "all_users";
 }
 
+function normalizeActionUrl(value) {
+  const trimmedValue = String(value || "").trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+
+    if (!/^https?:$/i.test(url.protocol)) {
+      return "";
+    }
+
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function stripHtml(value) {
   return String(value || "")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -237,6 +257,20 @@ function normalizePushImage(payload = {}) {
   return null;
 }
 
+function normalizePushButton(payload = {}) {
+  const text = String(payload?.button?.text || payload?.buttonText || "").trim();
+  const url = normalizeActionUrl(payload?.button?.url || payload?.buttonUrl || "");
+
+  if (!text && !url) {
+    return null;
+  }
+
+  return {
+    text,
+    url,
+  };
+}
+
 function normalizePushRow(row) {
   const image = normalizeStoredImage(row?.image);
   const selectedUsers = sanitizeSelectedUsers(row?.selected_users);
@@ -249,6 +283,10 @@ function normalizePushRow(row) {
   const deliveriesWithMessageIds = Number(row?.deliveries_with_message_ids || 0);
   const revokedDeliveriesCount = Number(row?.revoked_deliveries_count || 0);
   const pendingRevokeCount = Number(row?.pending_revoke_count || 0);
+  const button = normalizePushButton({
+    buttonText: row?.button_text,
+    buttonUrl: row?.button_url,
+  });
 
   return {
     id: Number(row.id),
@@ -260,6 +298,7 @@ function normalizePushRow(row) {
     selectedUsers,
     image,
     imageUrl: image?.previewUrl || null,
+    button: button?.text && button?.url ? button : null,
     disableLinkPreview: Boolean(row?.disable_link_preview),
     status,
     recipientsCount,
@@ -489,6 +528,7 @@ function validatePushPayload(payload = {}) {
   const normalizedHtml = html || messageToHtml(message);
   const audienceKey = normalizeAudienceKey(payload?.audienceKey);
   const selectedUsers = sanitizeSelectedUsers(payload?.selectedUsers);
+  const button = normalizePushButton(payload);
 
   if (!title) {
     throw new Error("Push title is required");
@@ -506,6 +546,20 @@ function validatePushPayload(payload = {}) {
     throw new Error("Select at least one user");
   }
 
+  if (button) {
+    if (!button.text) {
+      throw new Error("Название кнопки обязательно");
+    }
+
+    if (!button.url) {
+      throw new Error("Укажите корректную ссылку для кнопки");
+    }
+
+    if (button.url.length > 2048) {
+      throw new Error("Ссылка в кнопке превышает лимит MAX: 2048 символов");
+    }
+  }
+
   return {
     title,
     message,
@@ -514,6 +568,7 @@ function validatePushPayload(payload = {}) {
     audienceLabel: buildAudienceLabel(audienceKey, selectedUsers, payload?.audienceLabel),
     selectedUsers,
     image: normalizePushImage(payload),
+    button,
     disableLinkPreview: Boolean(payload?.disableLinkPreview),
   };
 }
@@ -534,6 +589,8 @@ export async function listPushes(payload = {}) {
         item.title,
         item.message,
         item.audienceLabel,
+        item.button?.text,
+        item.button?.url,
         ...item.selectedUsers.map((user) => [user.displayName, user.username, user.telegramUserId].join(" ")),
       ].join(" ").toLowerCase();
 
@@ -577,6 +634,8 @@ export async function createPush(payload = {}) {
             audience_label,
             selected_users,
             image,
+            button_text,
+            button_url,
             disable_link_preview,
             status,
             recipients_count,
@@ -585,7 +644,7 @@ export async function createPush(payload = {}) {
             clicked_count,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, 'template', $9, 0, 0, 0, NOW())
+          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, 'template', $11, 0, 0, 0, NOW())
           RETURNING *
         `,
         [
@@ -596,6 +655,8 @@ export async function createPush(payload = {}) {
           nextPush.audienceLabel,
           JSON.stringify(nextPush.selectedUsers),
           nextPush.image ? JSON.stringify(nextPush.image) : null,
+          nextPush.button?.text || "",
+          nextPush.button?.url || "",
           nextPush.disableLinkPreview,
           recipientsCount,
         ],
@@ -662,6 +723,7 @@ export async function sendPush(payload = {}) {
         userId: MAX_PUSH_TEST_USER_ID,
         html: buildBroadcastHtml(push),
         mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
+        button: push.button,
         disablePreview: resolveMaxLinkPreviewFlag(push),
       });
     } catch (error) {
@@ -700,6 +762,7 @@ export async function sendPush(payload = {}) {
         userId: recipientId,
         html: buildBroadcastHtml(push),
         mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
+        button: push.button,
         disablePreview: resolveMaxLinkPreviewFlag(push),
       });
 

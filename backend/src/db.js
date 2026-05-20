@@ -209,6 +209,16 @@ async function ensureSchema() {
   `);
 
   await query(`
+    ALTER TABLE push_campaigns
+    ADD COLUMN IF NOT EXISTS button_text TEXT NOT NULL DEFAULT ''
+  `);
+
+  await query(`
+    ALTER TABLE push_campaigns
+    ADD COLUMN IF NOT EXISTS button_url TEXT NOT NULL DEFAULT ''
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS push_deliveries (
       id BIGSERIAL PRIMARY KEY,
       campaign_id BIGINT NOT NULL REFERENCES push_campaigns(id) ON DELETE CASCADE,

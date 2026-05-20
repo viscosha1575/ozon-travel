@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { bot } from '../maxInstance.js';
+import { Keyboard } from '@maxhub/max-bot-api';
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i;
 const VIDEO_EXT_RE = /\.(mp4|mov|m4v|webm|ogg)(\?.*)?$/i;
@@ -16,11 +17,16 @@ function isVideoUrl(url) {
 }
 
 function buildReplyAttachment(button) {
-  if (!button || !button.text) {
+  const text = String(button?.text || "").trim();
+  const url = String(button?.url || "").trim();
+
+  if (!text || !url) {
     return null;
   }
 
-  return null;
+  return Keyboard.inlineKeyboard([
+    [Keyboard.button.link(text, url)],
+  ]);
 }
 
 async function downloadToTempFile(url) {

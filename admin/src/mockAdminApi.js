@@ -170,6 +170,7 @@ function createMockPush({
   audienceLabel,
   selectedUsers = [],
   imageUrl = null,
+  button = null,
   disableLinkPreview = false,
   status = "template",
   recipientsCount = 0,
@@ -190,6 +191,12 @@ function createMockPush({
     audienceLabel,
     selectedUsers,
     imageUrl,
+    button: button && button.text && button.url
+      ? {
+        text: String(button.text),
+        url: String(button.url),
+      }
+      : null,
     disableLinkPreview: Boolean(disableLinkPreview),
     status,
     recipientsCount,
@@ -1268,6 +1275,8 @@ function buildPushesResponse(payload = {}) {
         item.title,
         item.message,
         item.audienceLabel,
+        item.button?.text,
+        item.button?.url,
         ...(Array.isArray(item.selectedUsers) ? item.selectedUsers.map((user) => [user.displayName, user.username, user.telegramUserId].join(" ")) : []),
       ].join(" ").toLowerCase();
 
@@ -1313,6 +1322,8 @@ function createPush(payload = {}) {
       ? String(payload.imageUrl)
       : null;
   const disableLinkPreview = Boolean(payload?.disableLinkPreview);
+  const buttonText = String(payload?.button?.text || payload?.buttonText || "").trim();
+  const buttonUrl = String(payload?.button?.url || payload?.buttonUrl || "").trim();
   const selectedUsers = Array.isArray(payload?.selectedUsers)
     ? payload.selectedUsers
       .map((user) => ({
@@ -1336,6 +1347,10 @@ function createPush(payload = {}) {
     throw new Error("Select at least one user");
   }
 
+  if ((buttonText || buttonUrl) && (!buttonText || !buttonUrl)) {
+    throw new Error("Для кнопки заполните и название, и ссылку");
+  }
+
   const nextPush = createMockPush({
     id: Math.max(0, ...mockState.pushes.map((item) => item.id)) + 1,
     title,
@@ -1345,6 +1360,7 @@ function createPush(payload = {}) {
     audienceLabel,
     selectedUsers,
     imageUrl,
+    button: buttonText && buttonUrl ? { text: buttonText, url: buttonUrl } : null,
     disableLinkPreview,
     status: "template",
     recipientsCount: resolvePushRecipientsCount({ audienceKey, selectedUsers }),

@@ -144,6 +144,26 @@ function hasLinkInText(value) {
   return /(https?:\/\/|www\.)[^\s<]+/i.test(String(value || ""));
 }
 
+function normalizeActionUrl(value) {
+  const trimmedValue = String(value || "").trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+
+    if (!/^https?:$/i.test(url.protocol)) {
+      return "";
+    }
+
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function autolinkPreviewHtml(value) {
   const rawHtml = String(value || "").trim();
 
@@ -208,6 +228,9 @@ export default function PushesPage() {
     image: null,
     selectedUsers: [],
     showLinkPreview: true,
+    buttonEnabled: false,
+    buttonText: "",
+    buttonUrl: "",
   });
 
   const textColor = useColorModeValue("navy.700", "white");
@@ -361,6 +384,10 @@ export default function PushesPage() {
   const draftPreviewText = htmlToPlainText(draftForm.html);
   const previewHtml = autolinkPreviewHtml(draftForm.html);
   const draftHasLink = hasLinkInText(draftForm.html) || hasLinkInText(draftPreviewText);
+  const normalizedButtonUrl = normalizeActionUrl(draftForm.buttonUrl);
+  const hasInlineButton = draftForm.buttonEnabled
+    && String(draftForm.buttonText || "").trim()
+    && normalizedButtonUrl;
   const draftFingerprint = JSON.stringify({
     title: draftForm.title.trim(),
     audienceKey: draftForm.audienceKey,
@@ -368,9 +395,16 @@ export default function PushesPage() {
     imageUrl: draftForm.image?.previewUrl || null,
     selectedUsers: draftForm.selectedUsers.map((item) => item.id).sort((left, right) => left - right),
     showLinkPreview: draftHasLink ? draftForm.showLinkPreview : true,
+    button: hasInlineButton
+      ? {
+        text: draftForm.buttonText.trim(),
+        url: normalizedButtonUrl,
+      }
+      : null,
   });
   const canCreateDraft = draftForm.title.trim()
     && draftPreviewText
+    && (!draftForm.buttonEnabled || hasInlineButton)
     && (draftForm.audienceKey !== "selected_users" || draftForm.selectedUsers.length > 0);
   const canSendLiveFromForm = Boolean(preparedTemplateId) && testedTemplateFingerprint === draftFingerprint;
 
@@ -385,6 +419,12 @@ export default function PushesPage() {
         ? {
           name: draftForm.image.name || "push-image",
           previewUrl: draftForm.image.previewUrl || "",
+        }
+        : null,
+      button: hasInlineButton
+        ? {
+          text: draftForm.buttonText.trim(),
+          url: normalizedButtonUrl,
         }
         : null,
       disableLinkPreview: draftHasLink ? !draftForm.showLinkPreview : false,
@@ -835,6 +875,79 @@ export default function PushesPage() {
                   </Box>
                 ) : null}
 
+                <Box
+                  border="1px solid"
+                  borderColor={borderColor}
+                  borderRadius="18px"
+                  bg={filterBg}
+                  p="14px 16px"
+                >
+                  <Checkbox
+                    colorScheme="purple"
+                    isChecked={draftForm.buttonEnabled}
+                    onChange={(event) => {
+                      setDraftForm((current) => ({
+                        ...current,
+                        buttonEnabled: event.target.checked,
+                      }));
+                    }}
+                  >
+                    <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
+                      Кнопка под сообщением
+                    </Text>
+                  </Checkbox>
+
+                  {draftForm.buttonEnabled ? (
+                    <Stack spacing="12px" mt="14px">
+                      <Box>
+                        <Text color={textColor} fontSize="xs" fontWeight="700" mb="6px" textTransform="uppercase">
+                          Название кнопки
+                        </Text>
+                        <Input
+                          h="48px"
+                          bg={filterBg}
+                          borderColor={borderColor}
+                          borderRadius="16px"
+                          fontSize="sm"
+                          fontWeight="500"
+                          placeholder="Например: Открыть сайт"
+                          value={draftForm.buttonText}
+                          onChange={(event) => {
+                            setDraftForm((current) => ({ ...current, buttonText: event.target.value }));
+                          }}
+                        />
+                      </Box>
+
+                      <Box>
+                        <Text color={textColor} fontSize="xs" fontWeight="700" mb="6px" textTransform="uppercase">
+                          Ссылка в кнопке
+                        </Text>
+                        <Input
+                          h="48px"
+                          bg={filterBg}
+                          borderColor={borderColor}
+                          borderRadius="16px"
+                          fontSize="sm"
+                          fontWeight="500"
+                          placeholder="https://example.com"
+                          value={draftForm.buttonUrl}
+                          onChange={(event) => {
+                            setDraftForm((current) => ({ ...current, buttonUrl: event.target.value }));
+                          }}
+                        />
+                        <Text color={textColorSecondary} fontSize="xs" mt="8px">
+                          Если заполнить оба поля, отправим сообщение в MAX с инлайн-кнопкой-ссылкой.
+                        </Text>
+                        {draftForm.buttonEnabled && !hasInlineButton ? (
+                          <Text color="orange.400" fontSize="xs" mt="8px">
+                            Для кнопки нужны и название, и корректная ссылка с http:// или https://
+                          </Text>
+                        ) : null}
+                      </Box>
+                    </Stack>
+                  ) : null}
+                </Box>
+
                 <Box>
                   <Text color={textColor} fontSize="sm" fontWeight="700" mb="8px">
                     Фото
@@ -859,7 +972,7 @@ export default function PushesPage() {
                   Превью рассылки
                 </Text>
                 <Text color={textColorSecondary} fontSize="sm" mb="16px">
-                  В рассылке пользователю уйдут только текст и фото. Заголовок используется только внутри админки.
+                  В рассылке пользователю уйдут текст, фото и кнопка, если она включена. Заголовок используется только внутри админки.
                 </Text>
 
                 <Stack spacing="14px">
@@ -968,11 +1081,30 @@ export default function PushesPage() {
                               }}
                             />
 
+                            {hasInlineButton ? (
+                              <Button
+                                as="a"
+                                href={normalizedButtonUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                alignSelf="flex-start"
+                                size="sm"
+                                bg="brand.500"
+                                color="white"
+                                borderRadius="14px"
+                                fontWeight="700"
+                                _hover={{ bg: "brand.600", textDecoration: "none" }}
+                              >
+                                {draftForm.buttonText.trim()}
+                              </Button>
+                            ) : null}
+
                             <Flex align="center" justify="space-between" gap="12px" pt="2px">
                               <Text color={previewMetaColor} fontSize="xs" fontWeight="700">
                                 {draftForm.image?.previewUrl
                                   ? (draftHasLink && !draftForm.showLinkPreview ? "Фото + текст · без превью ссылки" : "Фото + текст")
                                   : (draftHasLink && !draftForm.showLinkPreview ? "Только текст · без превью ссылки" : "Только текст")}
+                                {hasInlineButton ? " · кнопка" : ""}
                               </Text>
                               <Text color={previewCaptionColor} fontSize="xs" fontWeight="700">
                                 14:34
@@ -1091,11 +1223,10 @@ export default function PushesPage() {
                     <Th color={textColorSecondary} w="24%">Шаблон</Th>
                     <Th color={textColorSecondary} w="15%">Сегмент</Th>
                     <Th color={textColorSecondary} w="11%">Статус</Th>
-                    <Th color={textColorSecondary} w="8%">Охват</Th>
-                    <Th color={textColorSecondary} w="9%">Open rate</Th>
-                    <Th color={textColorSecondary} w="7%">CTR</Th>
+                    <Th color={textColorSecondary} w="10%">Охват</Th>
+                    <Th color={textColorSecondary} w="8%">CTR</Th>
                     <Th color={textColorSecondary} w="16%">Отправки</Th>
-                    <Th color={textColorSecondary} w="20%">Действие</Th>
+                    <Th color={textColorSecondary} w="16%">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1121,6 +1252,11 @@ export default function PushesPage() {
                             <Text color={textColorSecondary} fontSize="xs" whiteSpace="pre-line">
                               {item.message}
                             </Text>
+                            {item.button?.text ? (
+                              <Text color={textColorSecondary} fontSize="xs">
+                                Кнопка: {item.button.text}
+                              </Text>
+                            ) : null}
                           </Stack>
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
@@ -1136,11 +1272,6 @@ export default function PushesPage() {
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
                           <Text color={textColorSecondary} fontSize="sm">
                             {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
-                          </Text>
-                        </Td>
-                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Text color={textColorSecondary} fontSize="sm">
-                            {formatPercent(item.openRate)}
                           </Text>
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
