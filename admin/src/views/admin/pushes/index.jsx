@@ -9,6 +9,14 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Progress,
   Select,
   SimpleGrid,
   Skeleton,
@@ -221,6 +229,7 @@ export default function PushesPage() {
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [preparedTemplateId, setPreparedTemplateId] = useState(null);
   const [testedTemplateFingerprint, setTestedTemplateFingerprint] = useState("");
+  const [selectedPushId, setSelectedPushId] = useState(null);
   const [draftForm, setDraftForm] = useState({
     title: "",
     audienceKey: SEGMENT_OPTIONS[0].value,
@@ -407,6 +416,10 @@ export default function PushesPage() {
     && (!draftForm.buttonEnabled || hasInlineButton)
     && (draftForm.audienceKey !== "selected_users" || draftForm.selectedUsers.length > 0);
   const canSendLiveFromForm = Boolean(preparedTemplateId) && testedTemplateFingerprint === draftFingerprint;
+  const selectedPush = useMemo(
+    () => response.items.find((item) => item.id === selectedPushId) || null,
+    [response.items, selectedPushId],
+  );
 
   function buildDraftPayload() {
     return {
@@ -598,6 +611,10 @@ export default function PushesPage() {
         setTestedTemplateFingerprint("");
       }
 
+      if (selectedPushId === pushId) {
+        setSelectedPushId(null);
+      }
+
       setSuccessMessage(`Шаблон «${result?.title || `#${pushId}`}» удалён.`);
     } catch (requestError) {
       setError(requestError.message || "Не удалось удалить шаблон");
@@ -628,6 +645,152 @@ export default function PushesPage() {
     } finally {
       setSendingPushAction("");
     }
+  }
+
+  function renderPushPreview(push) {
+    if (!push) {
+      return null;
+    }
+
+    const itemPreviewText = htmlToPlainText(push.html || push.message || "");
+    const itemPreviewHtml = autolinkPreviewHtml(push.html || "");
+    const itemHasLink = hasLinkInText(push.html) || hasLinkInText(itemPreviewText);
+    const itemButton = push.button?.text && push.button?.url ? push.button : null;
+
+    return (
+      <Box
+        borderRadius="28px"
+        border="1px solid"
+        borderColor={previewFrameBorder}
+        bgImage={previewShellBg}
+        boxShadow={previewShellShadow}
+        overflow="hidden"
+        p={{ base: "16px", md: "18px" }}
+      >
+        <Stack spacing="14px">
+          <Flex align="center" justify="space-between" gap="12px">
+            <Flex align="center" gap="10px" minW="0">
+              <Flex
+                boxSize="38px"
+                borderRadius="14px"
+                align="center"
+                justify="center"
+                bg="linear-gradient(135deg, #6c63ff 0%, #4f2fff 100%)"
+                color="white"
+                fontSize="sm"
+                fontWeight="800"
+                boxShadow="0px 10px 22px rgba(79, 47, 255, 0.28)"
+                flexShrink={0}
+              >
+                OT
+              </Flex>
+              <Box minW="0">
+                <Text color={textColor} fontSize="sm" fontWeight="800" noOfLines={1}>
+                  Ozon Travel
+                </Text>
+                <Text color={previewCaptionColor} fontSize="xs" noOfLines={1}>
+                  Реальный вид сообщения в MAX
+                </Text>
+              </Box>
+            </Flex>
+            <Text color={previewCaptionColor} fontSize="xs" fontWeight="700" flexShrink={0}>
+              {push.sentAt ? formatDateTime(push.sentAt) : "черновик"}
+            </Text>
+          </Flex>
+
+          <Flex justify="flex-start">
+            <Box
+              maxW={{ base: "100%", md: "420px" }}
+              w="100%"
+              borderRadius="22px"
+              border="1px solid"
+              borderColor={previewBubbleBorder}
+              bgImage={previewBubbleBg}
+              px={{ base: "14px", md: "16px" }}
+              py={{ base: "14px", md: "16px" }}
+              boxShadow={previewBubbleShadow}
+            >
+              <Stack spacing="12px">
+                {push.imageUrl ? (
+                  <Image
+                    src={push.imageUrl}
+                    alt={push.title}
+                    borderRadius="18px"
+                    maxH="280px"
+                    objectFit="cover"
+                    w="100%"
+                  />
+                ) : null}
+
+                <Box
+                  color={textColor}
+                  fontSize="sm"
+                  lineHeight="1.75"
+                  sx={{
+                    "& p": {
+                      marginBottom: "10px",
+                    },
+                    "& p:last-of-type": {
+                      marginBottom: "0",
+                    },
+                    "& ul, & ol": {
+                      paddingLeft: "20px",
+                      marginBottom: "10px",
+                    },
+                    "& li + li": {
+                      marginTop: "6px",
+                    },
+                    "& a": {
+                      color: "var(--chakra-colors-brand-500)",
+                      textDecoration: "underline",
+                    },
+                    "& strong": {
+                      fontWeight: "800",
+                    },
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: itemPreviewHtml || `<p>${itemPreviewText || "Текст сообщения появится здесь."}</p>`,
+                  }}
+                />
+
+                {itemButton ? (
+                  <Button
+                    as="a"
+                    href={itemButton.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    display="flex"
+                    w="100%"
+                    minH="48px"
+                    px="18px"
+                    bg="brand.500"
+                    color="white"
+                    borderRadius="14px"
+                    fontWeight="700"
+                    justifyContent="center"
+                    _hover={{ bg: "brand.600", textDecoration: "none" }}
+                  >
+                    {itemButton.text}
+                  </Button>
+                ) : null}
+
+                <Flex align="center" justify="space-between" gap="12px" pt="2px">
+                  <Text color={previewMetaColor} fontSize="xs" fontWeight="700">
+                    {push.imageUrl
+                      ? (itemHasLink && push.disableLinkPreview ? "Фото + текст · без превью ссылки" : "Фото + текст")
+                      : (itemHasLink && push.disableLinkPreview ? "Только текст · без превью ссылки" : "Только текст")}
+                    {itemButton ? " · кнопка" : ""}
+                  </Text>
+                  <Text color={previewCaptionColor} fontSize="xs" fontWeight="700">
+                    {push.sentAt ? new Date(push.sentAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "14:34"}
+                  </Text>
+                </Flex>
+              </Stack>
+            </Box>
+          </Flex>
+        </Stack>
+      </Box>
+    );
   }
 
   return (
@@ -1153,7 +1316,7 @@ export default function PushesPage() {
                   fontSize="sm"
                   fontWeight="500"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск по названию пуша или сегменту"
+                  placeholder="Поиск по названию, ссылке или получателю"
                   ps="44px"
                   value={search}
                   _hover={{ borderColor: "transparent" }}
@@ -1219,62 +1382,61 @@ export default function PushesPage() {
 
         <Card p={{ base: "18px", md: "24px" }}>
           <Skeleton isLoaded={!loading}>
-            <Box overflowX="auto">
-              <Table variant="simple" sx={{ tableLayout: "fixed", minWidth: "1280px" }}>
+            <Box overflow="hidden">
+              <Table variant="simple" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} w="24%">Шаблон</Th>
-                    <Th color={textColorSecondary} w="15%">Сегмент</Th>
-                    <Th color={textColorSecondary} w="11%">Статус</Th>
-                    <Th color={textColorSecondary} w="10%">Охват</Th>
+                    <Th color={textColorSecondary} w="34%">Заголовок</Th>
+                    <Th color={textColorSecondary} w="28%">Доставка</Th>
+                    <Th color={textColorSecondary} w="14%">Статус</Th>
                     <Th color={textColorSecondary} w="8%">CTR</Th>
-                    <Th color={textColorSecondary} w="16%">Отправки</Th>
-                    <Th color={textColorSecondary} w="16%">Действие</Th>
+                    <Th color={textColorSecondary} w="16%">Отправлено</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {response.items.length > 0 ? response.items.map((item) => {
                     const badge = getStatusBadgeProps(item.status);
+                    const progressValue = item.recipientsCount > 0
+                      ? Math.min(100, Math.max(0, (Number(item.deliveredCount || 0) / Number(item.recipientsCount || 1)) * 100))
+                      : 0;
 
                     return (
-                      <Tr key={item.id}>
+                      <Tr
+                        key={item.id}
+                        cursor="pointer"
+                        onClick={() => setSelectedPushId(item.id)}
+                        _hover={{ bg: previewBg }}
+                      >
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Stack spacing="8px">
-                            {item.imageUrl ? (
-                              <Image
-                                src={item.imageUrl}
-                                alt={item.title}
-                                borderRadius="16px"
-                                boxSize="56px"
-                                objectFit="cover"
-                              />
-                            ) : null}
-                            <Text color={textColor} fontSize="sm" fontWeight="700">
-                              {item.title}
-                            </Text>
-                            <Text color={textColorSecondary} fontSize="xs" whiteSpace="pre-line">
-                              {item.message}
-                            </Text>
-                            {item.button?.text ? (
-                              <Text color={textColorSecondary} fontSize="xs">
-                                Кнопка: {item.button.text}
+                          <Text color={textColor} fontSize="sm" fontWeight="700" noOfLines={2}>
+                            {item.title}
+                          </Text>
+                        </Td>
+                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
+                          <Stack spacing="10px">
+                            <Flex align="center" justify="space-between" gap="10px">
+                              <Text color={textColor} fontSize="sm" fontWeight="700">
+                                {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
                               </Text>
-                            ) : null}
+                              <Text color={textColorSecondary} fontSize="xs" fontWeight="700">
+                                {formatPercent(progressValue)}
+                              </Text>
+                            </Flex>
+                            <Progress
+                              value={progressValue}
+                              size="sm"
+                              borderRadius="999px"
+                              bg={previewBg}
+                              colorScheme={item.status === "revoked" ? "orange" : item.status === "sent" ? "green" : "purple"}
+                            />
+                            <Text color={textColorSecondary} fontSize="xs" noOfLines={1}>
+                              {item.audienceLabel}
+                            </Text>
                           </Stack>
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Badge borderRadius="999px" colorScheme="purple" px="10px" py="6px">
-                            {item.audienceLabel}
-                          </Badge>
-                        </Td>
-                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Badge borderRadius="999px" colorScheme={badge.colorScheme} px="10px" py="6px">
+                          <Text color={textColor} fontSize="sm" fontWeight="700">
                             {badge.label}
-                          </Badge>
-                        </Td>
-                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Text color={textColorSecondary} fontSize="sm">
-                            {formatNumber(item.deliveredCount)} / {formatNumber(item.recipientsCount)}
                           </Text>
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
@@ -1283,99 +1445,15 @@ export default function PushesPage() {
                           </Text>
                         </Td>
                         <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          <Stack spacing="4px">
-                            <Text color={textColorSecondary} fontSize="sm">
-                              Тестовая: {formatDateTime(item.testSentAt)}
-                            </Text>
-                            <Text color={textColorSecondary} fontSize="xs">
-                              Реальная: {formatDateTime(item.sentAt)}
-                            </Text>
-                          </Stack>
-                        </Td>
-                        <Td borderColor={borderColor} verticalAlign="top" py="22px">
-                          {item.status === "template" ? (
-                            <Stack spacing="8px" align="flex-start" maxW="260px">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                borderRadius="14px"
-                                fontWeight="700"
-                                minW="220px"
-                                isLoading={sendingPushAction === `${item.id}:test`}
-                                leftIcon={<Icon as={MdSend} boxSize="16px" />}
-                                loadingText="Шлём"
-                                onClick={() => handleSendPush(item.id, "test")}
-                              >
-                                Тестовая рассылка
-                              </Button>
-                              <Button
-                                size="sm"
-                                bg="brand.500"
-                                color="white"
-                                borderRadius="14px"
-                                fontWeight="700"
-                                minW="220px"
-                                isLoading={sendingPushAction === `${item.id}:live`}
-                                leftIcon={<Icon as={MdSend} boxSize="16px" />}
-                                loadingText="Шлём"
-                                onClick={() => handleSendPush(item.id, "live")}
-                                _hover={{ bg: "brand.600" }}
-                                isDisabled={!item.canSendLive}
-                              >
-                                Реальная рассылка
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                borderRadius="14px"
-                                fontWeight="700"
-                                minW="220px"
-                                isLoading={sendingPushAction === `${item.id}:delete`}
-                                leftIcon={<Icon as={MdDeleteOutline} boxSize="16px" />}
-                                loadingText="Удаляем"
-                                onClick={() => handleDeletePush(item.id)}
-                              >
-                                Удалить шаблон
-                              </Button>
-                            </Stack>
-                          ) : item.status === "sent" || item.status === "revoked" ? (
-                            <Stack spacing="8px" align="flex-start" maxW="280px">
-                              <Text color={textColorSecondary} fontSize="sm">
-                                {item.status === "revoked" ? "Отзыв выполнен" : "Завершено"}
-                              </Text>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                borderRadius="14px"
-                                fontWeight="700"
-                                minW="220px"
-                                leftIcon={<Icon as={MdUndo} boxSize="16px" />}
-                                isLoading={sendingPushAction === `${item.id}:revoke`}
-                                loadingText="Отзываем"
-                                onClick={() => handleRevokePush(item.id)}
-                                isDisabled={!item.canRevoke}
-                              >
-                                Отозвать у получателей
-                              </Button>
-                              {!item.canRevoke ? (
-                                <Text color={textColorSecondary} fontSize="xs" lineHeight="1.5">
-                                  {item.deliveriesWithMessageIds > 0
-                                    ? "Для этой рассылки больше нет доступных сообщений для отзыва."
-                                    : "messageId для этой отправки не были сохранены, поэтому отзыв недоступен."}
-                                </Text>
-                              ) : null}
-                            </Stack>
-                          ) : (
-                            <Text color={textColorSecondary} fontSize="sm">
-                              {item.status === "sent" ? "Завершено" : "Ждёт отправки"}
-                            </Text>
-                          )}
+                          <Text color={textColorSecondary} fontSize="sm">
+                            {formatDateTime(item.sentAt)}
+                          </Text>
                         </Td>
                       </Tr>
                     );
                   }) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={8}>
+                      <Td borderColor={borderColor} colSpan={5}>
                         <Text color={textColorSecondary} fontSize="sm" py="12px" textAlign="center">
                           Пушей по текущему фильтру пока нет.
                         </Text>
@@ -1387,6 +1465,179 @@ export default function PushesPage() {
             </Box>
           </Skeleton>
         </Card>
+
+        <Modal isOpen={Boolean(selectedPush)} onClose={() => setSelectedPushId(null)} size="6xl" isCentered>
+          <ModalOverlay bg="rgba(15, 23, 61, 0.48)" backdropFilter="blur(6px)" />
+          <ModalContent borderRadius="28px" overflow="hidden" mx="16px">
+            <ModalHeader borderBottom="1px solid" borderColor={borderColor}>
+              <Stack spacing="4px" pr="36px">
+                <Text color={textColor} fontSize="xl" fontWeight="800">
+                  {selectedPush?.title || "Рассылка"}
+                </Text>
+                <Text color={textColorSecondary} fontSize="sm">
+                  Превью сообщения, подробности и все доступные действия собраны здесь.
+                </Text>
+              </Stack>
+            </ModalHeader>
+            <ModalCloseButton />
+            <ModalBody p={{ base: "18px", md: "24px" }}>
+              {selectedPush ? (
+                <SimpleGrid columns={{ base: 1, xl: 2 }} gap="20px">
+                  <Stack spacing="16px">
+                    <SimpleGrid columns={{ base: 1, md: 2 }} gap="12px">
+                      <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="14px 16px">
+                        <Text color={textColorSecondary} fontSize="xs" fontWeight="700" textTransform="uppercase" mb="6px">
+                          Статус
+                        </Text>
+                        <Text color={textColor} fontSize="sm" fontWeight="700">
+                          {getStatusBadgeProps(selectedPush.status).label}
+                        </Text>
+                      </Box>
+                      <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="14px 16px">
+                        <Text color={textColorSecondary} fontSize="xs" fontWeight="700" textTransform="uppercase" mb="6px">
+                          Сегмент
+                        </Text>
+                        <Text color={textColor} fontSize="sm" fontWeight="700">
+                          {selectedPush.audienceLabel}
+                        </Text>
+                      </Box>
+                      <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="14px 16px">
+                        <Text color={textColorSecondary} fontSize="xs" fontWeight="700" textTransform="uppercase" mb="6px">
+                          Отправлено реально
+                        </Text>
+                        <Text color={textColor} fontSize="sm" fontWeight="700">
+                          {formatDateTime(selectedPush.sentAt)}
+                        </Text>
+                      </Box>
+                      <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="14px 16px">
+                        <Text color={textColorSecondary} fontSize="xs" fontWeight="700" textTransform="uppercase" mb="6px">
+                          CTR
+                        </Text>
+                        <Text color={textColor} fontSize="sm" fontWeight="700">
+                          {formatPercent(selectedPush.ctr)}
+                        </Text>
+                      </Box>
+                    </SimpleGrid>
+
+                    <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="16px">
+                      <Stack spacing="10px">
+                        <Flex align="center" justify="space-between" gap="10px">
+                          <Text color={textColor} fontSize="sm" fontWeight="700">
+                            Прогресс доставки
+                          </Text>
+                          <Text color={textColorSecondary} fontSize="sm" fontWeight="700">
+                            {formatNumber(selectedPush.deliveredCount)} / {formatNumber(selectedPush.recipientsCount)}
+                          </Text>
+                        </Flex>
+                        <Progress
+                          value={selectedPush.recipientsCount > 0 ? (Number(selectedPush.deliveredCount || 0) / Number(selectedPush.recipientsCount || 1)) * 100 : 0}
+                          size="sm"
+                          borderRadius="999px"
+                          bg={previewBg}
+                          colorScheme={selectedPush.status === "revoked" ? "orange" : selectedPush.status === "sent" ? "green" : "purple"}
+                        />
+                      </Stack>
+                    </Box>
+
+                    <Box border="1px solid" borderColor={borderColor} borderRadius="18px" p="16px">
+                      <Stack spacing="10px">
+                        <Text color={textColorSecondary} fontSize="xs" fontWeight="700" textTransform="uppercase">
+                          Подробности
+                        </Text>
+                        <Text color={textColor} fontSize="sm">
+                          Создано: {formatDateTime(selectedPush.createdAt)}
+                        </Text>
+                        <Text color={textColor} fontSize="sm">
+                          Тестовая отправка: {formatDateTime(selectedPush.testSentAt)}
+                        </Text>
+                        <Text color={textColor} fontSize="sm">
+                          Превью ссылки: {selectedPush.disableLinkPreview ? "скрыто" : "показать"}
+                        </Text>
+                        <Text color={textColor} fontSize="sm">
+                          Кнопка: {selectedPush.button?.text ? `${selectedPush.button.text} -> ${selectedPush.button.url}` : "нет"}
+                        </Text>
+                      </Stack>
+                    </Box>
+                  </Stack>
+
+                  <Stack spacing="16px">
+                    {renderPushPreview(selectedPush)}
+                  </Stack>
+                </SimpleGrid>
+              ) : null}
+            </ModalBody>
+            <ModalFooter borderTop="1px solid" borderColor={borderColor}>
+              {selectedPush ? (
+                <Flex w="100%" justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap="12px">
+                  <Text color={textColorSecondary} fontSize="sm">
+                    Действия вынесены сюда, чтобы сама таблица оставалась компактной.
+                  </Text>
+                  <Flex wrap="wrap" gap="10px" justify={{ base: "stretch", md: "flex-end" }}>
+                    {selectedPush.status === "template" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="14px"
+                          fontWeight="700"
+                          isLoading={sendingPushAction === `${selectedPush.id}:test`}
+                          leftIcon={<Icon as={MdSend} boxSize="16px" />}
+                          loadingText="Шлём"
+                          onClick={() => handleSendPush(selectedPush.id, "test")}
+                        >
+                          Тестовая рассылка
+                        </Button>
+                        <Button
+                          size="sm"
+                          bg="brand.500"
+                          color="white"
+                          borderRadius="14px"
+                          fontWeight="700"
+                          isLoading={sendingPushAction === `${selectedPush.id}:live`}
+                          leftIcon={<Icon as={MdSend} boxSize="16px" />}
+                          loadingText="Шлём"
+                          onClick={() => handleSendPush(selectedPush.id, "live")}
+                          _hover={{ bg: "brand.600" }}
+                          isDisabled={!selectedPush.canSendLive}
+                        >
+                          Реальная рассылка
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          borderRadius="14px"
+                          fontWeight="700"
+                          isLoading={sendingPushAction === `${selectedPush.id}:delete`}
+                          leftIcon={<Icon as={MdDeleteOutline} boxSize="16px" />}
+                          loadingText="Удаляем"
+                          onClick={() => handleDeletePush(selectedPush.id)}
+                        >
+                          Удалить шаблон
+                        </Button>
+                      </>
+                    ) : null}
+
+                    {selectedPush.status === "sent" || selectedPush.status === "revoked" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        borderRadius="14px"
+                        fontWeight="700"
+                        leftIcon={<Icon as={MdUndo} boxSize="16px" />}
+                        isLoading={sendingPushAction === `${selectedPush.id}:revoke`}
+                        loadingText="Отзываем"
+                        onClick={() => handleRevokePush(selectedPush.id)}
+                        isDisabled={!selectedPush.canRevoke}
+                      >
+                        Отозвать у получателей
+                      </Button>
+                    ) : null}
+                  </Flex>
+                </Flex>
+              ) : null}
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </Stack>
     </Box>
   );
