@@ -158,6 +158,7 @@ export default function RichTextEditor({
   const editorRef = useRef(null);
   const savedSelectionRef = useRef(null);
   const isLinkModalFlowRef = useRef(false);
+  const linkMarkerIdRef = useRef("");
   const [toolbarState, setToolbarState] = useState(EMPTY_TOOLBAR_STATE);
   const [linkUrl, setLinkUrl] = useState("https://");
   const [linkText, setLinkText] = useState("");
@@ -219,6 +220,46 @@ export default function RichTextEditor({
     onChange?.((editorRef.current?.innerHTML || "").trim());
   }
 
+  function createLinkMarker(range) {
+    const marker = document.createElement("span");
+    marker.setAttribute("data-link-marker", "true");
+    marker.setAttribute("data-link-marker-id", crypto.randomUUID());
+    marker.textContent = "\u200B";
+
+    const markerRange = range.cloneRange();
+    markerRange.insertNode(marker);
+    linkMarkerIdRef.current = marker.getAttribute("data-link-marker-id") || "";
+
+    const selection = window.getSelection();
+    const nextRange = document.createRange();
+    nextRange.setStartAfter(marker);
+    nextRange.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(nextRange);
+
+    return marker;
+  }
+
+  function findLinkMarker() {
+    if (!editorRef.current || !linkMarkerIdRef.current) {
+      return null;
+    }
+
+    return editorRef.current.querySelector(
+      `[data-link-marker="true"][data-link-marker-id="${linkMarkerIdRef.current}"]`,
+    );
+  }
+
+  function clearLinkMarker() {
+    const marker = findLinkMarker();
+
+    if (marker) {
+      marker.remove();
+    }
+
+    linkMarkerIdRef.current = "";
+  }
+
   function exec(command, commandValue) {
     document.execCommand(command, false, commandValue);
     emitValue();
@@ -268,8 +309,14 @@ export default function RichTextEditor({
 
     if (range && isInsideEditor) {
       savedSelectionRef.current = range.cloneRange();
+      if (selection.isCollapsed) {
+        createLinkMarker(range);
+      } else {
+        clearLinkMarker();
+      }
     } else {
       savedSelectionRef.current = null;
+      clearLinkMarker();
     }
 
     isLinkModalFlowRef.current = true;
@@ -286,6 +333,7 @@ export default function RichTextEditor({
     setLinkError("");
     setLinkSelectionCollapsed(true);
     savedSelectionRef.current = null;
+    clearLinkMarker();
     isLinkModalFlowRef.current = false;
     closeLinkModal();
   }
@@ -318,10 +366,28 @@ export default function RichTextEditor({
 
     if (linkSelectionCollapsed || !restoredRange || restoredRange.collapsed) {
       const nextLinkText = String(linkText || "").trim() || href;
-      insertHtmlAtRange(
-        restoredRange || selection?.getRangeAt?.(0) || null,
-        `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
-      );
+      const marker = findLinkMarker();
+
+      if (marker?.parentNode) {
+        const fragment = document.createRange().createContextualFragment(
+          `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
+        );
+        const lastNode = fragment.lastChild;
+        marker.replaceWith(fragment);
+
+        if (lastNode) {
+          const nextRange = document.createRange();
+          nextRange.setStartAfter(lastNode);
+          nextRange.collapse(true);
+          selection?.removeAllRanges();
+          selection?.addRange(nextRange);
+        }
+      } else {
+        insertHtmlAtRange(
+          restoredRange || selection?.getRangeAt?.(0) || null,
+          `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(nextLinkText)}</a>`,
+        );
+      }
     } else {
       document.execCommand("createLink", false, href);
 
