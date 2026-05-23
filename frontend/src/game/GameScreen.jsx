@@ -352,11 +352,19 @@ export default function GameScreen() {
       return
     }
 
-    const assetVersion = Date.now()
+    const targetPositionId = spinResponse?.result?.positionId
+    const targetBagIndex = Math.max(
+      0,
+      activeRouletteItems.findIndex((item) => item.id === targetPositionId)
+    )
+    const matchedRouletteItem = activeRouletteItems[targetBagIndex] || null
+    const assetVersion = matchedRouletteItem?.assetVersion || Date.now()
     const nextResult = spinResponse?.result
       ? {
         ...spinResponse.result,
-        image: withAssetVersion(spinResponse.result.image, assetVersion),
+        // Reuse the already rendered carousel asset so the result popup
+        // does not force a second network fetch right at reveal time.
+        image: matchedRouletteItem?.path || spinResponse.result.image || "",
       }
       : null
     const nextMyPrizes = Array.isArray(spinResponse?.myPrizes)
@@ -366,11 +374,6 @@ export default function GameScreen() {
       }))
       : []
 
-    const targetPositionId = nextResult?.positionId
-    const targetBagIndex = Math.max(
-      0,
-      activeRouletteItems.findIndex((item) => item.id === targetPositionId)
-    )
     const alignmentSteps = getLoopedIndex(
       targetBagIndex - currentCenterBagIndex,
       activeRouletteItems.length
