@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { startTransition, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
 
@@ -73,21 +73,36 @@ const DEFAULT_ROULETTE_ITEMS = [
 const LEFT_TRIANGLE_PATH = "/game/left-triangle.svg"
 const RIGHT_TRIANGLE_PATH = "/game/rigth-triangle.svg"
 const CENTER_PATTERN_PATH = "/game/center.webp"
-const SPIN_TOTAL_DURATION = 5000
+const SPIN_TOTAL_DURATION = 7500
 const SURFACE_ANIMATION_DURATION = 420
-const SPIN_MIN_FULL_LOOPS = 9
-const SPIN_MAX_FULL_LOOPS = 11
+const SPIN_MIN_FULL_LOOPS = 6
+const SPIN_MAX_FULL_LOOPS = 7
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
 const TRACK_TAIL_BUFFER = 9
-const SPIN_TOTAL_EASING = "cubic-bezier(0.18, 0.74, 0.24, 1)"
+const SPIN_TOTAL_EASING = "cubic-bezier(0.12, 0.72, 0.2, 1)"
+const RESULT_REVEAL_DELAY = 72
+const DEBUG_PANEL_UPDATE_INTERVAL = 120
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
   { id: "gift", icon: "/game/icons/gift.svg", label: "Подарки" },
 ]
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
+
+function roundToDevicePixel(value) {
+  const ratio = typeof window !== "undefined" && Number(window.devicePixelRatio) > 0
+    ? Number(window.devicePixelRatio)
+    : 1
+
+  return Math.round(Number(value || 0) * ratio) / ratio
+}
+
+function easeSpinProgress(value) {
+  const progress = Math.min(1, Math.max(0, Number(value) || 0))
+  return 1 - ((1 - progress) ** 1.65)
+}
 
 function formatAttemptsLabel(value) {
   const count = Math.max(0, Number(value) || 0)
@@ -118,11 +133,19 @@ function createTrackItems(rouletteItems, centerBagIndex, totalSteps) {
   })
 }
 
+function getTrackWindowSteps(rouletteItemsLength) {
+  return Math.max(rouletteItemsLength + TRACK_TAIL_BUFFER, TRACK_CENTER_OFFSET + TRACK_TAIL_BUFFER + 6)
+}
+
 export default function GameScreen() {
   const slotRef = useRef(null)
+  const patternRef = useRef(null)
+  const trackRef = useRef(null)
   const stepRef = useRef(0)
   const animationFrameRef = useRef(0)
   const overlayTimeoutRef = useRef(0)
+  const resultRevealTimeoutRef = useRef(0)
+  const virtualTranslateRef = useRef(0)
   const pendingSpinRef = useRef(null)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
@@ -140,16 +163,13 @@ export default function GameScreen() {
   const [centerBagIndex, setCenterBagIndex] = useState(0)
   const [trackItems, setTrackItems] = useState(() => createTrackItems(DEFAULT_ROULETTE_ITEMS, 0, 0))
   const [trackTranslate, setTrackTranslate] = useState(0)
-  const [isTrackAnimated, setIsTrackAnimated] = useState(false)
-  const [trackAnimationDuration, setTrackAnimationDuration] = useState(SPIN_TOTAL_DURATION)
-  const [trackAnimationEasing, setTrackAnimationEasing] = useState(SPIN_TOTAL_EASING)
   const [lockedSlotHeight, setLockedSlotHeight] = useState(null)
   const [spinError, setSpinError] = useState("")
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
   const isDevWidgetVisible = true
 
   const measureStep = () => {
-    const nextStep = (slotRef.current?.getBoundingClientRect().height ?? 0) + SLOT_GAP
+    const nextStep = roundToDevicePixel((slotRef.current?.getBoundingClientRect().height ?? 0) + SLOT_GAP)
 
     if (nextStep > SLOT_GAP) {
       stepRef.current = nextStep
@@ -160,17 +180,37 @@ export default function GameScreen() {
 
   const activeRouletteItems = rouletteItems.length ? rouletteItems : DEFAULT_ROULETTE_ITEMS
 
+  const applyTrackStyles = (translateY, patternOffsetY = translateY) => {
+    const normalizedTranslateY = roundToDevicePixel(translateY)
+    const normalizedPatternOffsetY = roundToDevicePixel(patternOffsetY)
+
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translate3d(0, ${normalizedTranslateY}px, 0)`
+    }
+
+    if (patternRef.current) {
+      patternRef.current.style.backgroundPosition = `center ${normalizedPatternOffsetY}px`
+    }
+  }
+
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
     const step = measureStep()
+    const normalizedCenterBagIndex = getLoopedIndex(nextCenterBagIndex, activeRouletteItems.length)
+    const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
 
-    setIsTrackAnimated(false)
-    setTrackAnimationDuration(SPIN_TOTAL_DURATION)
-    setTrackAnimationEasing(SPIN_TOTAL_EASING)
     setLockedSlotHeight(null)
-    setTrackItems(createTrackItems(activeRouletteItems, nextCenterBagIndex, 0))
+    setTrackItems(createTrackItems(
+      activeRouletteItems,
+      normalizedCenterBagIndex,
+      getTrackWindowSteps(activeRouletteItems.length),
+    ))
 
     if (step > 0) {
-      setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
+      setTrackTranslate(baseTranslate)
+      virtualTranslateRef.current = baseTranslate
+      requestAnimationFrame(() => {
+        applyTrackStyles(baseTranslate)
+      })
     }
   }
 
@@ -214,13 +254,18 @@ export default function GameScreen() {
     const totalSteps = (fullLoops + 1) * activeRouletteItems.length + alignmentSteps
 
     pendingSpinRef.current = {
+      currentCenterBagIndex,
       targetBagIndex,
       result: spinResponse?.result || null,
       myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
       attempts: spinResponse?.attempts || null,
+      step,
+      totalSteps,
+      startedAt: 0,
     }
 
     clearTimeout(overlayTimeoutRef.current)
+    clearTimeout(resultRevealTimeoutRef.current)
     setSpinError("")
     setActiveOverlay(null)
     setRenderedOverlay(null)
@@ -229,19 +274,79 @@ export default function GameScreen() {
     setResultPrize(null)
     setIsResultCopied(false)
     setIsSpinActive(true)
-    setIsTrackAnimated(false)
-    setTrackAnimationDuration(SPIN_TOTAL_DURATION)
-    setTrackAnimationEasing(SPIN_TOTAL_EASING)
     setLockedSlotHeight(step - SLOT_GAP)
-    setTrackItems(createTrackItems(activeRouletteItems, currentCenterBagIndex, totalSteps))
-    setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
+    setTrackItems(createTrackItems(
+      activeRouletteItems,
+      currentCenterBagIndex,
+      getTrackWindowSteps(activeRouletteItems.length),
+    ))
+    const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
+    setTrackTranslate(baseTranslate)
+    virtualTranslateRef.current = baseTranslate
 
     cancelAnimationFrame(animationFrameRef.current)
     animationFrameRef.current = requestAnimationFrame(() => {
-      animationFrameRef.current = requestAnimationFrame(() => {
-        setIsTrackAnimated(true)
-        setTrackTranslate(-(TRACK_VISIBLE_START_OFFSET + totalSteps) * step)
-      })
+      const runSpinFrame = (frameAt) => {
+        const spinState = pendingSpinRef.current
+
+        if (!spinState) {
+          return
+        }
+
+        if (!spinState.startedAt) {
+          spinState.startedAt = frameAt
+        }
+
+        const progress = Math.min(1, (frameAt - spinState.startedAt) / SPIN_TOTAL_DURATION)
+        const easedProgress = easeSpinProgress(progress)
+        const traveledSteps = spinState.totalSteps * easedProgress
+        const wholeSteps = Math.floor(traveledSteps)
+        const fractionalStep = traveledSteps - wholeSteps
+        const cycleLength = activeRouletteItems.length
+        const localWholeSteps = wholeSteps % cycleLength
+        const localTraveledSteps = localWholeSteps + fractionalStep
+        virtualTranslateRef.current = -(TRACK_VISIBLE_START_OFFSET + traveledSteps) * spinState.step
+
+        applyTrackStyles(
+          -(TRACK_VISIBLE_START_OFFSET + localTraveledSteps) * spinState.step,
+          -(localTraveledSteps * spinState.step),
+        )
+
+        if (progress < 1) {
+          animationFrameRef.current = requestAnimationFrame(runSpinFrame)
+          return
+        }
+
+        const finalOffsetSteps = spinState.totalSteps % cycleLength
+        virtualTranslateRef.current = -(TRACK_VISIBLE_START_OFFSET + spinState.totalSteps) * spinState.step
+        applyTrackStyles(
+          -(TRACK_VISIBLE_START_OFFSET + finalOffsetSteps) * spinState.step,
+          -(finalOffsetSteps * spinState.step),
+        )
+        pendingSpinRef.current = null
+        centerBagIndexRef.current = spinState.targetBagIndex
+
+        clearTimeout(resultRevealTimeoutRef.current)
+        resultRevealTimeoutRef.current = window.setTimeout(() => {
+          startTransition(() => {
+            setCenterBagIndex(spinState.targetBagIndex)
+            setResultBag(activeRouletteItems[spinState.targetBagIndex] || null)
+            setResultPrize(spinState.result)
+            setMyPrizes(spinState.myPrizes)
+            setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
+            setIsSpinActive(false)
+          })
+        }, RESULT_REVEAL_DELAY)
+
+        void trackGameEvent("spin_result_shown", {
+          positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
+          type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
+          hasPromoCode: Boolean(spinState.result?.promoCode),
+        })
+      }
+
+      applyTrackStyles(baseTranslate, 0)
+      animationFrameRef.current = requestAnimationFrame(runSpinFrame)
     })
   }
 
@@ -298,6 +403,7 @@ export default function GameScreen() {
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
+    clearTimeout(resultRevealTimeoutRef.current)
     resetCarousel(centerBagIndexRef.current)
   }
 
@@ -354,32 +460,6 @@ export default function GameScreen() {
     } catch {
       setIsResultCopied(true)
     }
-  }
-
-  const handleTrackTransitionEnd = (event) => {
-    if (event.propertyName !== "transform" || !pendingSpinRef.current) {
-      return
-    }
-
-    const { targetBagIndex, result, myPrizes: nextMyPrizes, attempts: nextAttempts } = pendingSpinRef.current
-    pendingSpinRef.current = null
-    centerBagIndexRef.current = targetBagIndex
-
-    // Let the browser paint the final transform frame before swapping the UI.
-    cancelAnimationFrame(animationFrameRef.current)
-    animationFrameRef.current = requestAnimationFrame(() => {
-      setCenterBagIndex(targetBagIndex)
-      setResultBag(activeRouletteItems[targetBagIndex] || null)
-      setResultPrize(result)
-      setMyPrizes(nextMyPrizes)
-      setAvailableAttempts(Number(nextAttempts?.availableAttempts || 0))
-      setIsSpinActive(false)
-      void trackGameEvent("spin_result_shown", {
-        positionId: result?.positionId ?? activeRouletteItems[targetBagIndex]?.id ?? null,
-        type: result?.type || activeRouletteItems[targetBagIndex]?.type || "",
-        hasPromoCode: Boolean(result?.promoCode),
-      })
-    })
   }
 
   const loadGameBootstrap = async () => {
@@ -464,10 +544,18 @@ export default function GameScreen() {
   useEffect(() => {
     centerBagIndexRef.current = 0
     setCenterBagIndex(0)
-    setTrackItems(createTrackItems(activeRouletteItems, 0, 0))
+    setTrackItems(createTrackItems(activeRouletteItems, 0, getTrackWindowSteps(activeRouletteItems.length)))
     setTrackTranslate(0)
     setLockedSlotHeight(null)
   }, [rouletteItems])
+
+  useEffect(() => {
+    if (isSpinActiveRef.current) {
+      return
+    }
+
+    applyTrackStyles(trackTranslate)
+  }, [trackItems, trackTranslate])
 
   useEffect(() => {
     const syncCarousel = () => {
@@ -475,10 +563,15 @@ export default function GameScreen() {
       const step = measuredHeight > 0 ? measuredHeight + SLOT_GAP : stepRef.current
 
       if (step > SLOT_GAP) {
-        stepRef.current = step
-        setIsTrackAnimated(false)
-        setTrackItems(createTrackItems(activeRouletteItems, centerBagIndexRef.current, 0))
-        setTrackTranslate(-TRACK_VISIBLE_START_OFFSET * step)
+        stepRef.current = roundToDevicePixel(step)
+        setTrackItems(createTrackItems(
+          activeRouletteItems,
+          centerBagIndexRef.current,
+          getTrackWindowSteps(activeRouletteItems.length),
+        ))
+        const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * stepRef.current)
+        setTrackTranslate(baseTranslate)
+        applyTrackStyles(baseTranslate)
       }
     }
 
@@ -499,6 +592,7 @@ export default function GameScreen() {
       window.removeEventListener("resize", handleResize)
       cancelAnimationFrame(animationFrameRef.current)
       clearTimeout(overlayTimeoutRef.current)
+      clearTimeout(resultRevealTimeoutRef.current)
     }
   }, [activeRouletteItems])
 
@@ -558,23 +652,14 @@ export default function GameScreen() {
           <div className={`game-carousel-scene ${isSpinActive ? "is-spinning" : ""}`}>
             <div className="game-carousel-backdrop">
               <div
-                className={`game-carousel-pattern ${isTrackAnimated ? "is-animating" : ""}`}
-                style={{
-                  backgroundPosition: `center ${trackTranslate}px`,
-                  transitionDuration: isTrackAnimated ? `${trackAnimationDuration}ms` : undefined,
-                  transitionTimingFunction: isTrackAnimated ? trackAnimationEasing : undefined,
-                }}
+                ref={patternRef}
+                className="game-carousel-pattern"
                 aria-hidden="true"
               />
               <div className="game-carousel-viewport">
                 <div
-                  className={`game-carousel-track ${isTrackAnimated ? "is-animating" : ""}`}
-                  style={{
-                    transform: `translate3d(0, ${trackTranslate}px, 0)`,
-                    transitionDuration: isTrackAnimated ? `${trackAnimationDuration}ms` : undefined,
-                    transitionTimingFunction: isTrackAnimated ? trackAnimationEasing : undefined,
-                  }}
-                  onTransitionEnd={handleTrackTransitionEnd}
+                  ref={trackRef}
+                  className="game-carousel-track"
                 >
                   {trackItems.map((bag, index) => (
                     <div

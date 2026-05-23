@@ -173,6 +173,7 @@ body {
   transition:
     opacity 220ms ease,
     transform 260ms ease;
+  contain: layout paint;
 }
 
 .game-carousel-backdrop {
@@ -198,6 +199,7 @@ body {
     transparent url("/game/center.webp")
     center top / 100% auto
     repeat-y;
+  will-change: background-position;
 }
 
 .game-carousel-pattern.is-animating {
@@ -222,6 +224,8 @@ body {
   opacity: 1;
   transition: opacity 180ms ease;
   will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
 }
 
 .game-carousel-track.is-animating {
