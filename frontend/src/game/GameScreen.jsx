@@ -5,10 +5,12 @@ import { getJson, postJson, trackGameEvent } from "../api.js"
 const LEFT_TRIANGLE_PATH = "/game/left-triangle.svg"
 const RIGHT_TRIANGLE_PATH = "/game/rigth-triangle.svg"
 const CENTER_PATTERN_PATH = "/game/center.webp"
-const SPIN_TOTAL_DURATION = 7500
 const SURFACE_ANIMATION_DURATION = 420
-const SPIN_MIN_FULL_LOOPS = 6
-const SPIN_MAX_FULL_LOOPS = 7
+const SPIN_MIN_FULL_LOOPS = 4
+const SPIN_MAX_FULL_LOOPS = 5
+const SPIN_MIN_DURATION = 6200
+const SPIN_MAX_DURATION = 9200
+const SPIN_SCREENFULS_PER_SECOND = 0.95
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
@@ -36,7 +38,26 @@ function roundToDevicePixel(value) {
 
 function easeSpinProgress(value) {
   const progress = Math.min(1, Math.max(0, Number(value) || 0))
-  return 1 - ((1 - progress) ** 1.65)
+  const easedOut = 1 - ((1 - progress) ** 1.08)
+  return easedOut * easedOut * (3 - (2 * easedOut))
+}
+
+function getSpinDurationMs(totalSteps, step) {
+  const safeTotalSteps = Math.max(0, Number(totalSteps) || 0)
+  const safeStep = Math.max(0, Number(step) || 0)
+  const viewportHeight = typeof window !== "undefined"
+    ? Math.max(
+      Number(window.Telegram?.WebApp?.viewportStableHeight) || 0,
+      Number(window.innerHeight) || 0,
+      1,
+    )
+    : 1
+  const distancePx = safeTotalSteps * safeStep
+  const durationByViewport = distancePx > 0
+    ? (distancePx / (viewportHeight * SPIN_SCREENFULS_PER_SECOND)) * 1000
+    : SPIN_MIN_DURATION
+
+  return Math.round(Math.min(SPIN_MAX_DURATION, Math.max(SPIN_MIN_DURATION, durationByViewport)))
 }
 
 function formatAttemptsLabel(value) {
@@ -394,6 +415,7 @@ export default function GameScreen() {
       SPIN_MIN_FULL_LOOPS
       + Math.floor(Math.random() * (SPIN_MAX_FULL_LOOPS - SPIN_MIN_FULL_LOOPS + 1))
     const totalSteps = (fullLoops + 1) * activeRouletteItems.length + alignmentSteps
+    const durationMs = getSpinDurationMs(totalSteps, step)
 
     pendingSpinRef.current = {
       currentCenterBagIndex,
@@ -403,6 +425,7 @@ export default function GameScreen() {
       attempts: spinResponse?.attempts || null,
       step,
       totalSteps,
+      durationMs,
       startedAt: 0,
     }
 
@@ -439,7 +462,7 @@ export default function GameScreen() {
           spinState.startedAt = frameAt
         }
 
-        const progress = Math.min(1, (frameAt - spinState.startedAt) / SPIN_TOTAL_DURATION)
+        const progress = Math.min(1, (frameAt - spinState.startedAt) / Math.max(1, spinState.durationMs || 0))
         const easedProgress = easeSpinProgress(progress)
         const traveledSteps = spinState.totalSteps * easedProgress
         const wholeSteps = Math.floor(traveledSteps)
