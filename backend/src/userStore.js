@@ -132,81 +132,55 @@ async function attachReferrer(executor, userRow) {
     return linkedUser;
   }
 
-  const bonusExistsResult = await executor.query(
+  await executor.query(
     `
-      SELECT 1
-      FROM user_attempt_transactions
-      WHERE user_id = $1
-        AND reason = 'referral_bonus'
-        AND related_user_id = $2
-      LIMIT 1
+      INSERT INTO user_attempt_transactions (
+        user_id,
+        delta,
+        reason,
+        related_user_id,
+        details
+      )
+      VALUES ($1, 1, 'referral_bonus', $2, $3::jsonb)
+      ON CONFLICT DO NOTHING
     `,
-    [referrer.id, linkedUser.id],
+    [
+      referrer.id,
+      linkedUser.id,
+      JSON.stringify({
+        invitedUserId: Number(linkedUser.id),
+        invitedExternalId: linkedUser.external_id,
+        referralCode: startParam,
+      }),
+    ],
   );
-
-  if (!bonusExistsResult.rowCount) {
-    await executor.query(
-      `
-        INSERT INTO user_attempt_transactions (
-          user_id,
-          delta,
-          reason,
-          related_user_id,
-          details
-        )
-        VALUES ($1, 1, 'referral_bonus', $2, $3::jsonb)
-      `,
-      [
-        referrer.id,
-        linkedUser.id,
-        JSON.stringify({
-          invitedUserId: Number(linkedUser.id),
-          invitedExternalId: linkedUser.external_id,
-          referralCode: startParam,
-        }),
-      ],
-    );
-  }
 
   return linkedUser;
 }
 
 async function ensureDailyAttemptGrantInternal(executor, userId) {
   const todayValue = getMoscowDateValue();
-  const existingGrantResult = await executor.query(
+  await executor.query(
     `
-      SELECT 1
-      FROM user_attempt_transactions
-      WHERE user_id = $1
-        AND reason = 'daily_login_attempt'
-        AND attempt_date = $2
-      LIMIT 1
+      INSERT INTO user_attempt_transactions (
+        user_id,
+        delta,
+        reason,
+        attempt_date,
+        details
+      )
+      VALUES ($1, 1, 'daily_login_attempt', $2, $3::jsonb)
+      ON CONFLICT DO NOTHING
     `,
-    [userId, todayValue],
+    [
+      userId,
+      todayValue,
+      JSON.stringify({
+        timezone: MSK_TIMEZONE,
+        grantedAtDate: todayValue,
+      }),
+    ],
   );
-
-  if (!existingGrantResult.rowCount) {
-    await executor.query(
-      `
-        INSERT INTO user_attempt_transactions (
-          user_id,
-          delta,
-          reason,
-          attempt_date,
-          details
-        )
-        VALUES ($1, 1, 'daily_login_attempt', $2, $3::jsonb)
-      `,
-      [
-        userId,
-        todayValue,
-        JSON.stringify({
-          timezone: MSK_TIMEZONE,
-          grantedAtDate: todayValue,
-        }),
-      ],
-    );
-  }
 }
 
 async function getAttemptSummaryInternal(executor, userId) {
