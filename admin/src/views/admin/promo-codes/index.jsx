@@ -7,6 +7,7 @@ import {
   FormControl,
   FormLabel,
   Icon,
+  Image,
   Input,
   InputGroup,
   InputLeftElement,
@@ -695,14 +696,42 @@ export default function PromoCodesPage() {
                         />
                       </Td>
                       <Td borderColor={borderColor}>
-                        <Stack spacing="4px">
-                          <Text color={textColor} fontSize="sm" fontWeight="700">
-                            {item.myPrizeText || item.title}
-                          </Text>
-                          <Text color={textColorSecondary} fontSize="xs">
-                            ID: {item.id}
-                          </Text>
-                        </Stack>
+                        <Flex align="center" gap="12px">
+                          <Flex
+                            w="44px"
+                            h="44px"
+                            align="center"
+                            justify="center"
+                            borderRadius="14px"
+                            bg={categoryBadgeBg}
+                            overflow="hidden"
+                            flexShrink={0}
+                          >
+                            {item.rouletteImage?.previewUrl ? (
+                              <Image
+                                src={item.rouletteImage.previewUrl}
+                                alt={item.title || "Превью позиции"}
+                                w="100%"
+                                h="100%"
+                                objectFit="contain"
+                              />
+                            ) : (
+                              <Icon
+                                as={item.type === "Приз" ? MdCardGiftcard : MdDoNotDisturbAlt}
+                                boxSize="18px"
+                                color={textColorSecondary}
+                              />
+                            )}
+                          </Flex>
+                          <Stack spacing="4px">
+                            <Text color={textColor} fontSize="sm" fontWeight="700">
+                              {item.myPrizeText || item.title}
+                            </Text>
+                            <Text color={textColorSecondary} fontSize="xs">
+                              ID: {item.id}
+                            </Text>
+                          </Stack>
+                        </Flex>
                       </Td>
                       <Td borderColor={borderColor}>
                         <Tooltip label={item.type} hasArrow placement="top">
