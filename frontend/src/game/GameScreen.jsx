@@ -40,6 +40,9 @@ function roundToDevicePixel(value) {
 
 function easeSpinProgress(value) {
   const progress = Math.min(1, Math.max(0, Number(value) || 0))
+  if (isMobileSpinViewport()) {
+    return 1 - ((1 - progress) ** 2.2)
+  }
   const easedOut = 1 - ((1 - progress) ** 1.03)
   return easedOut * easedOut * (3 - (2 * easedOut))
 }
