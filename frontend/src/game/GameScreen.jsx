@@ -2,79 +2,6 @@ import { startTransition, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
 
-const DEFAULT_ROULETTE_ITEMS = [
-  {
-    id: 3501,
-    key: "game-bag-1",
-    slotPath: "/game/bags/case.webp",
-    path: "/game/bags/case.webp",
-    label: "case-1",
-    title: "Скидка 800 ₽ на первый заказ отеля от 15 000 ₽",
-    description: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽",
-    description2: "",
-    myPrizeText: "Скидка 800 ₽",
-    expiresAt: "до 31.08.26",
-    chanceValue: "1x",
-    type: "Приз",
-  },
-  {
-    id: 3502,
-    key: "game-bag-2",
-    slotPath: "/game/bags/case2.webp",
-    path: "/game/bags/case2.webp",
-    label: "case-2",
-    title: "Скидка 300 ₽ на заказ отеля от 5 000 ₽",
-    description: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽",
-    description2: "",
-    myPrizeText: "Скидка 300 ₽",
-    expiresAt: "до 31.08.26",
-    chanceValue: "1x",
-    type: "Приз",
-  },
-  {
-    id: 3503,
-    key: "game-bag-3",
-    slotPath: "/game/bags/case3.webp",
-    path: "/game/bags/case3.webp",
-    label: "case-3",
-    title: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
-    description: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
-    description2: "",
-    myPrizeText: "Скидка 800 ₽",
-    expiresAt: "до 31.08.26",
-    chanceValue: "1x",
-    type: "Приз",
-  },
-  {
-    id: 3504,
-    key: "game-bag-4",
-    slotPath: "/game/bags/case4.webp",
-    path: "/game/bags/case4.webp",
-    label: "case-4",
-    title: "Скидка 300 ₽ на заказ авиа от 15 000 ₽",
-    description: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов",
-    description2: "",
-    myPrizeText: "Скидка 300 ₽",
-    expiresAt: "до 31.08.26",
-    chanceValue: "1x",
-    type: "Приз",
-  },
-  {
-    id: 3505,
-    key: "game-bag-5",
-    slotPath: "/game/bags/case5.webp",
-    path: "/game/bags/case5.webp",
-    label: "case-5",
-    title: "1 000 баллов Ozon",
-    description: "Начисление 1 000 баллов Ozon",
-    description2: "",
-    myPrizeText: "1 000 баллов Ozon",
-    expiresAt: "до 30.06.26",
-    chanceValue: "1x",
-    type: "Не приз",
-  },
-]
-
 const LEFT_TRIANGLE_PATH = "/game/left-triangle.svg"
 const RIGHT_TRIANGLE_PATH = "/game/rigth-triangle.svg"
 const CENTER_PATTERN_PATH = "/game/center.webp"
@@ -89,6 +16,8 @@ const TRACK_TAIL_BUFFER = 9
 const SPIN_TOTAL_EASING = "cubic-bezier(0.12, 0.72, 0.2, 1)"
 const RESULT_REVEAL_DELAY = 72
 const DEBUG_PANEL_UPDATE_INTERVAL = 120
+const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
+const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
@@ -125,6 +54,162 @@ function formatAttemptsLabel(value) {
   return `${count} попыток`
 }
 
+function withAssetVersion(url, assetVersion) {
+  const value = String(url || "").trim()
+
+  if (!value || !assetVersion) {
+    return value
+  }
+
+  try {
+    const nextUrl = new URL(value, "http://localhost")
+    nextUrl.searchParams.set("v", String(assetVersion))
+
+    if (/^https?:\/\//i.test(value)) {
+      return nextUrl.toString()
+    }
+
+    return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+  } catch {
+    return value
+  }
+}
+
+function readBootstrapCache() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(BOOTSTRAP_CACHE_KEY)
+
+    if (!rawValue) {
+      return null
+    }
+
+    const parsed = JSON.parse(rawValue)
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeBootstrapCache(value) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(BOOTSTRAP_CACHE_KEY, JSON.stringify(value))
+  } catch {
+    // Ignore sessionStorage failures.
+  }
+}
+
+function normalizeRouletteItems(items, assetVersion) {
+  if (!Array.isArray(items) || !items.length) {
+    return []
+  }
+
+  return items.map((item, index) => ({
+    id: item.id ?? index,
+    key: `roulette-item-${item.id ?? index}-${assetVersion}`,
+    assetVersion,
+    slotPath: withAssetVersion(item.image, assetVersion),
+    path: withAssetVersion(item.image, assetVersion),
+    label: item.title || `item-${index}`,
+    title: item.title || "",
+    description: item.description || "",
+    myPrizeText: item.myPrizeText || item.title || "",
+    expiresAt: item.expiresAt || "",
+    chanceValue: item.chanceValue || "1x",
+    type: item.type || "Приз",
+  }))
+}
+
+function normalizeMyPrizes(items, assetVersion) {
+  if (!Array.isArray(items) || !items.length) {
+    return []
+  }
+
+  return items.map((item) => ({
+    ...item,
+    assetVersion,
+    image: withAssetVersion(item.image, assetVersion),
+  }))
+}
+
+function renderResultDescription(description, isNonPrize, toneClassName = "") {
+  const text = String(description || "").trim()
+
+  if (!text) {
+    return "Описание позиции появится после настройки в админке."
+  }
+
+  if (!isNonPrize) {
+    return text
+  }
+
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  return (
+    <div className="game-result-description-stack">
+      {paragraphs.map((paragraph, paragraphIndex) => {
+        const explicitLines = paragraph
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+        const sentenceLines = paragraphIndex === 0 && explicitLines.length === 1
+          ? paragraph
+            .split(/(?<=[.!?])\s+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+          : []
+        const lines = sentenceLines.length > 1 ? sentenceLines : explicitLines
+
+        return (
+        <p
+          key={paragraph}
+          className={`game-result-description game-result-description--paragraph ${toneClassName}`.trim()}
+        >
+          {lines.map((line) => (
+            <span key={line} className="game-result-description-line">{line}</span>
+          ))}
+        </p>
+        )
+      })}
+    </div>
+  )
+}
+
+function buildResultBag(result, rouletteItems) {
+  if (!result) {
+    return null
+  }
+
+  const matchedItem = Array.isArray(rouletteItems)
+    ? rouletteItems.find((item) => item.id === result.positionId)
+    : null
+
+  return {
+    id: result.positionId ?? matchedItem?.id ?? null,
+    key: matchedItem?.key || `result-${result.positionId ?? "item"}`,
+    assetVersion: matchedItem?.assetVersion || 0,
+    path: result.image || "",
+    slotPath: result.image || "",
+    label: result.fullTitle || result.title || matchedItem?.label || `result-${result.positionId ?? "item"}`,
+    title: result.fullTitle || result.title || matchedItem?.title || "",
+    description: result.description || matchedItem?.description || "",
+    myPrizeText: result.title || matchedItem?.myPrizeText || "",
+    expiresAt: result.expiresAt || matchedItem?.expiresAt || "",
+    chanceValue: matchedItem?.chanceValue || "1x",
+    type: result.type || matchedItem?.type || "Приз",
+  }
+}
+
 function createTrackItems(rouletteItems, centerBagIndex, totalSteps) {
   if (!rouletteItems.length) {
     return []
@@ -143,6 +228,7 @@ function getTrackWindowSteps(rouletteItemsLength) {
 }
 
 export default function GameScreen() {
+  const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
   const patternRef = useRef(null)
   const trackRef = useRef(null)
@@ -155,9 +241,9 @@ export default function GameScreen() {
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
   const isMountedRef = useRef(true)
-  const [rouletteItems, setRouletteItems] = useState(DEFAULT_ROULETTE_ITEMS)
-  const [myPrizes, setMyPrizes] = useState([])
-  const [availableAttempts, setAvailableAttempts] = useState(0)
+  const [rouletteItems, setRouletteItems] = useState(() => normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0))
+  const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(cachedBootstrap?.myPrizes, 0))
+  const [availableAttempts, setAvailableAttempts] = useState(() => Number(cachedBootstrap?.attempts?.availableAttempts || 0))
   const [isSpinActive, setIsSpinActive] = useState(false)
   const [activeOverlay, setActiveOverlay] = useState(null)
   const [renderedOverlay, setRenderedOverlay] = useState(null)
@@ -166,11 +252,12 @@ export default function GameScreen() {
   const [resultPrize, setResultPrize] = useState(null)
   const [isResultCopied, setIsResultCopied] = useState(false)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
-  const [trackItems, setTrackItems] = useState(() => createTrackItems(DEFAULT_ROULETTE_ITEMS, 0, 0))
+  const [trackItems, setTrackItems] = useState(() => createTrackItems([], 0, 0))
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [lockedSlotHeight, setLockedSlotHeight] = useState(null)
   const [spinError, setSpinError] = useState("")
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
+  const [isDevBootstrapReloading, setIsDevBootstrapReloading] = useState(false)
   const isDevWidgetVisible = true
 
   const measureStep = () => {
@@ -183,7 +270,7 @@ export default function GameScreen() {
     return stepRef.current
   }
 
-  const activeRouletteItems = rouletteItems.length ? rouletteItems : DEFAULT_ROULETTE_ITEMS
+  const activeRouletteItems = rouletteItems
 
   const openOverlay = (overlayId) => {
     clearTimeout(overlayTimeoutRef.current)
@@ -206,6 +293,11 @@ export default function GameScreen() {
   }
 
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
+    if (!activeRouletteItems.length) {
+      setTrackItems([])
+      return
+    }
+
     const step = measureStep()
     const normalizedCenterBagIndex = getLoopedIndex(nextCenterBagIndex, activeRouletteItems.length)
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
@@ -258,7 +350,21 @@ export default function GameScreen() {
       return
     }
 
-    const targetPositionId = spinResponse?.result?.positionId
+    const assetVersion = Date.now()
+    const nextResult = spinResponse?.result
+      ? {
+        ...spinResponse.result,
+        image: withAssetVersion(spinResponse.result.image, assetVersion),
+      }
+      : null
+    const nextMyPrizes = Array.isArray(spinResponse?.myPrizes)
+      ? spinResponse.myPrizes.map((item) => ({
+        ...item,
+        image: withAssetVersion(item.image, assetVersion),
+      }))
+      : []
+
+    const targetPositionId = nextResult?.positionId
     const targetBagIndex = Math.max(
       0,
       activeRouletteItems.findIndex((item) => item.id === targetPositionId)
@@ -275,8 +381,8 @@ export default function GameScreen() {
     pendingSpinRef.current = {
       currentCenterBagIndex,
       targetBagIndex,
-      result: spinResponse?.result || null,
-      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
+      result: nextResult,
+      myPrizes: nextMyPrizes,
       attempts: spinResponse?.attempts || null,
       step,
       totalSteps,
@@ -349,7 +455,7 @@ export default function GameScreen() {
         resultRevealTimeoutRef.current = window.setTimeout(() => {
           startTransition(() => {
             setCenterBagIndex(spinState.targetBagIndex)
-            setResultBag(activeRouletteItems[spinState.targetBagIndex] || null)
+            setResultBag(buildResultBag(spinState.result, activeRouletteItems))
             setResultPrize(spinState.result)
             setMyPrizes(spinState.myPrizes)
             setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
@@ -441,12 +547,11 @@ export default function GameScreen() {
     setResultBag({
       id: prize.id,
       key: `my-prize-${prize.id}`,
-      path: prize.image || "/game/bags/case.webp",
-      slotPath: prize.image || "/game/bags/case.webp",
+      path: prize.image || "",
+      slotPath: prize.image || "",
       label: prize.title || `prize-${prize.id}`,
       title: prize.title || "",
       description: prize.description || "",
-      description2: prize.description2 || "",
       myPrizeText: prize.title || "",
       expiresAt: prize.expiresAt || "",
       chanceValue: prize.chanceValue || "1x",
@@ -456,7 +561,6 @@ export default function GameScreen() {
       type: prize.type || "Приз",
       title: prize.title || "",
       description: prize.description || "",
-      description2: prize.description2 || "",
       image: prize.image || "",
       promoCode: prize.promoCode || "",
       expiresAt: prize.expiresAt || "",
@@ -483,35 +587,27 @@ export default function GameScreen() {
   const loadGameBootstrap = async () => {
     try {
       const response = await getJson("/game/bootstrap")
+      const assetVersion = Date.now()
 
       if (!isMountedRef.current) {
         return
       }
 
-      const nextRouletteItems = Array.isArray(response?.rouletteItems) && response.rouletteItems.length
-        ? response.rouletteItems.map((item, index) => ({
-          id: item.id ?? index,
-          key: `roulette-item-${item.id ?? index}`,
-          slotPath: item.image || DEFAULT_ROULETTE_ITEMS[index % DEFAULT_ROULETTE_ITEMS.length].slotPath,
-          path: item.image || DEFAULT_ROULETTE_ITEMS[index % DEFAULT_ROULETTE_ITEMS.length].path,
-          label: item.title || `item-${index}`,
-          title: item.title || "",
-          description: item.description || "",
-          description2: item.description2 || "",
-          myPrizeText: item.myPrizeText || item.title || "",
-          expiresAt: item.expiresAt || "",
-          chanceValue: item.chanceValue || "1x",
-          type: item.type || "Приз",
-        }))
-        : DEFAULT_ROULETTE_ITEMS
+      const nextRouletteItems = normalizeRouletteItems(response?.rouletteItems, assetVersion)
+      const nextMyPrizes = normalizeMyPrizes(response?.myPrizes, assetVersion)
 
       setRouletteItems(nextRouletteItems)
-      setMyPrizes(Array.isArray(response?.myPrizes) ? response.myPrizes : [])
+      setMyPrizes(nextMyPrizes)
       setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
-      setSpinError("")
+      setSpinError(nextRouletteItems.length ? "" : "Сервер не вернул позиции для карусели")
+      writeBootstrapCache({
+        rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
+        myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
+        attempts: response?.attempts || {},
+      })
       void trackGameEvent("bootstrap_loaded", {
         rouletteItemsCount: nextRouletteItems.length,
-        myPrizesCount: Array.isArray(response?.myPrizes) ? response.myPrizes.length : 0,
+        myPrizesCount: nextMyPrizes.length,
         availableAttempts: Number(response?.attempts?.availableAttempts || 0),
       })
     } catch (error) {
@@ -530,6 +626,34 @@ export default function GameScreen() {
       setIsDevWidgetOpen(false)
     } catch (error) {
       setSpinError(error.message || "Не удалось начислить попытки")
+    }
+  }
+
+  const handleDevReloadBootstrap = async () => {
+    if (isDevBootstrapReloading) {
+      return
+    }
+
+    setIsDevBootstrapReloading(true)
+    cancelAnimationFrame(animationFrameRef.current)
+    pendingSpinRef.current = null
+    clearTimeout(overlayTimeoutRef.current)
+    clearTimeout(resultRevealTimeoutRef.current)
+    setActiveOverlay(null)
+    setRenderedOverlay(null)
+    setIsOverlayClosing(false)
+    setResultBag(null)
+    setResultPrize(null)
+    setIsResultCopied(false)
+    setIsSpinActive(false)
+    setLockedSlotHeight(null)
+    setSpinError("")
+
+    try {
+      await loadGameBootstrap()
+      setIsDevWidgetOpen(false)
+    } finally {
+      setIsDevBootstrapReloading(false)
     }
   }
 
@@ -637,6 +761,14 @@ export default function GameScreen() {
           </button>
           {isDevWidgetOpen ? (
             <div className="game-dev-widget-panel">
+              <button
+                type="button"
+                className="game-dev-widget-action"
+                onClick={handleDevReloadBootstrap}
+                disabled={isDevBootstrapReloading}
+              >
+                {isDevBootstrapReloading ? "Обновляем" : "Обновить ленту"}
+              </button>
               <button
                 type="button"
                 className="game-dev-widget-action game-dev-widget-action--danger"
@@ -875,18 +1007,25 @@ export default function GameScreen() {
             </div>
             <div className="game-result-sheet">
               <div className="game-result-sheet-inner">
-                <p className="game-result-kicker">
-                  {resultPrize?.type === "Не приз" ? "Результат" : "Ваш приз"}
-                </p>
-                <h2 className="game-result-title">{resultPrize?.title || resultBag?.title || "Позиция"}</h2>
-                <p className="game-result-description">
-                  {resultPrize?.description || resultBag?.description || "Описание позиции появится после настройки в админке."}
-                </p>
-                {resultPrize?.type === "Не приз" && (resultPrize?.description2 || resultBag?.description2) ? (
-                  <p className="game-result-description game-result-description--secondary">
-                    {resultPrize?.description2 || resultBag?.description2}
+                {resultPrize?.type !== "Не приз" ? (
+                  <p className="game-result-kicker">
+                    Ваш приз
                   </p>
                 ) : null}
+                <h2 className="game-result-title">{resultPrize?.title || resultBag?.title || "Позиция"}</h2>
+                {resultPrize?.type === "Не приз" ? (
+                  <>
+                    {renderResultDescription(NON_PRIZE_COPY, true)}
+                    {renderResultDescription(
+                      resultPrize?.description || resultBag?.description,
+                      true,
+                      "game-result-description--dark",
+                    )}
+                  </>
+                ) : renderResultDescription(
+                  resultPrize?.description || resultBag?.description,
+                  false,
+                )}
                 <div className="game-result-actions">
                   {resultPrize?.promoCode ? (
                     <button type="button" className="game-result-code" onClick={handleCopyResultCode}>
@@ -935,7 +1074,7 @@ export default function GameScreen() {
                 >
                   <div className="game-prize-card-media">
                     <img
-                      src={prize.image || "/game/bags/case.webp"}
+                      src={prize.image || ""}
                       alt=""
                       className="game-prize-card-image"
                       aria-hidden="true"

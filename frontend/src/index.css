@@ -832,8 +832,22 @@ body {
   letter-spacing: 0.12px;
 }
 
-.game-result-description--secondary {
-  margin-top: 0;
+.game-result-description-stack {
+  display: grid;
+  gap: clamp(10px, 1.659svh, 14px);
+  margin-top: clamp(4px, 0.948svh, 8px);
+}
+
+.game-result-description--paragraph {
+  margin: 0;
+}
+
+.game-result-description-line {
+  display: block;
+}
+
+.game-result-description--dark {
+  color: #070707;
 }
 
 .game-result-actions {

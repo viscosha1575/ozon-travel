@@ -135,7 +135,6 @@ function createMockPrize({
   rouletteImage = null,
   myPrizeText = "",
   rouletteDescription = "",
-  rouletteDescription2 = "",
 }) {
   return {
     id,
@@ -157,7 +156,6 @@ function createMockPrize({
     rouletteImage,
     myPrizeText,
     rouletteDescription,
-    rouletteDescription2,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -299,7 +297,6 @@ const mockState = {
       activeTo: "2026-08-31",
       myPrizeText: "Скидка 800 ₽",
       rouletteDescription: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽",
-      rouletteDescription2: "",
     }),
     createMockPrize({
       id: 3502,
@@ -319,7 +316,6 @@ const mockState = {
       activeTo: "2026-08-31",
       myPrizeText: "Скидка 300 ₽",
       rouletteDescription: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽",
-      rouletteDescription2: "",
     }),
     createMockPrize({
       id: 3503,
@@ -339,7 +335,6 @@ const mockState = {
       activeTo: "2026-08-31",
       myPrizeText: "Скидка 800 ₽",
       rouletteDescription: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
-      rouletteDescription2: "",
     }),
     createMockPrize({
       id: 3504,
@@ -358,7 +353,6 @@ const mockState = {
       activeTo: "2026-08-31",
       myPrizeText: "Скидка 300 ₽",
       rouletteDescription: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов",
-      rouletteDescription2: "",
     }),
     createMockPrize({
       id: 3505,
@@ -376,7 +370,6 @@ const mockState = {
       activeTo: "2026-06-30",
       myPrizeText: "1 000 баллов Ozon",
       rouletteDescription: "Начисление 1 000 баллов Ozon",
-      rouletteDescription2: "",
     }),
     createMockPrize({
       id: 3506,
@@ -394,7 +387,6 @@ const mockState = {
       activeTo: "2026-06-30",
       myPrizeText: "300 миль",
       rouletteDescription: "Начисление 300 миль",
-      rouletteDescription2: "",
     }),
   ],
   pushes: [
@@ -760,7 +752,6 @@ function buildPrizesResponse(payload = {}) {
         item.promoCodeValue,
         item.myPrizeText,
         item.rouletteDescription,
-        item.rouletteDescription2,
       ].join(" ").toLowerCase();
       return haystack.includes(search);
     });
@@ -864,7 +855,6 @@ function createPrize(payload = {}) {
   const rouletteImage = payload?.rouletteImage ?? null;
   const myPrizeText = String(payload?.myPrizeText || "").trim();
   const rouletteDescription = String(payload?.rouletteDescription || "").trim();
-  const rouletteDescription2 = String(payload?.rouletteDescription2 || "").trim();
 
   if (!title) {
     throw new Error("Prize title is required");
@@ -906,7 +896,6 @@ function createPrize(payload = {}) {
     rouletteImage,
     myPrizeText,
     rouletteDescription,
-    rouletteDescription2,
   });
 
   mockState.prizes.unshift(nextPrize);
@@ -965,7 +954,6 @@ function updatePrize(payload = {}) {
   const rouletteImage = payload?.rouletteImage ?? null;
   const myPrizeText = String(payload?.myPrizeText || "").trim();
   const rouletteDescription = String(payload?.rouletteDescription || "").trim();
-  const rouletteDescription2 = String(payload?.rouletteDescription2 || "").trim();
 
   if (!id) {
     throw new Error("Prize id is required");
@@ -1019,7 +1007,6 @@ function updatePrize(payload = {}) {
     rouletteImage,
     myPrizeText,
     rouletteDescription,
-    rouletteDescription2,
     updatedAt: new Date().toISOString(),
   };
 

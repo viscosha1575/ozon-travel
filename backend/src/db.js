@@ -279,11 +279,10 @@ async function seedPrizesIfEmpty() {
           active_to,
           roulette_image,
           my_prize_text,
-          roulette_description,
-          roulette_description_2
+          roulette_description
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20
+          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19
         )
       `,
       [
@@ -306,7 +305,6 @@ async function seedPrizesIfEmpty() {
         item.rouletteImage ? JSON.stringify(item.rouletteImage) : null,
         item.myPrizeText,
         item.rouletteDescription,
-        item.rouletteDescription2 || "",
       ],
     );
   }
