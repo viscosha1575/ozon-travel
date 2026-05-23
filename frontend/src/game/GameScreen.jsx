@@ -23,6 +23,7 @@ const DEBUG_PANEL_UPDATE_INTERVAL = 120
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
 const REFERRAL_SHARE_TITLE = "Приглашаю в игру"
+const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
@@ -125,6 +126,30 @@ function withAssetVersion(url, assetVersion) {
   } catch {
     return value
   }
+}
+
+function getReadableErrorMessage(error, fallback = DEFAULT_ERROR_MESSAGE) {
+  const rawMessage = String(error?.message || error || "").trim()
+
+  if (!rawMessage) {
+    return fallback
+  }
+
+  const normalizedMessage = rawMessage.toLowerCase()
+
+  if (
+    normalizedMessage === "request failed"
+    || normalizedMessage === "failed to fetch"
+    || normalizedMessage.includes("networkerror")
+  ) {
+    return "Не удалось выполнить запрос. Попробуйте еще раз."
+  }
+
+  if (/^[\x00-\x7F\s.,!?;:'"()/-]+$/.test(rawMessage)) {
+    return fallback
+  }
+
+  return rawMessage
 }
 
 function readBootstrapCache() {
@@ -344,6 +369,11 @@ export default function GameScreen() {
     setRenderedOverlay(overlayId)
   }
 
+  const openErrorOverlay = (error, fallback = DEFAULT_ERROR_MESSAGE) => {
+    setSpinError(getReadableErrorMessage(error, fallback))
+    openOverlay("error")
+  }
+
   const applyTrackStyles = (translateY, patternOffsetY = translateY) => {
     const normalizedTranslateY = roundToDevicePixel(translateY)
     const normalizedPatternOffsetY = roundToDevicePixel(patternOffsetY)
@@ -411,7 +441,7 @@ export default function GameScreen() {
         return
       }
 
-      setSpinError(error.message || "Не удалось выполнить попытку")
+      openErrorOverlay(error, "Не удалось выполнить попытку")
       return
     }
 
@@ -575,7 +605,7 @@ export default function GameScreen() {
     const shareText = buildReferralShareText(referralLink)
 
     if (!shareText) {
-      setSpinError("Не удалось подготовить реферальную ссылку")
+      openErrorOverlay("Не удалось подготовить реферальную ссылку")
       return
     }
 
@@ -601,7 +631,7 @@ export default function GameScreen() {
       }
     } catch (error) {
       console.warn("MAX share failed", error)
-      setSpinError("Не удалось открыть отправку в MAX")
+      openErrorOverlay(error, "Не удалось открыть отправку в MAX")
     }
   }
 
@@ -711,7 +741,11 @@ export default function GameScreen() {
       setMyPrizes(nextMyPrizes)
       setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
       setReferralLink(String(response?.referral?.referralLink || "").trim())
-      setSpinError(nextRouletteItems.length ? "" : "Сервер не вернул позиции для карусели")
+      if (nextRouletteItems.length) {
+        setSpinError("")
+      } else {
+        openErrorOverlay("Сервер не вернул позиции для карусели")
+      }
       writeBootstrapCache({
         rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
         myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
@@ -725,7 +759,7 @@ export default function GameScreen() {
       })
     } catch (error) {
       console.warn("Game bootstrap failed", error)
-      setSpinError(error.message || "Не удалось загрузить игру")
+      openErrorOverlay(error, "Не удалось загрузить игру")
     }
   }
 
@@ -738,7 +772,7 @@ export default function GameScreen() {
       setSpinError("")
       setIsDevWidgetOpen(false)
     } catch (error) {
-      setSpinError(error.message || "Не удалось начислить попытки")
+      openErrorOverlay(error, "Не удалось начислить попытки")
     }
   }
 
@@ -777,7 +811,7 @@ export default function GameScreen() {
         window.location.reload()
       }
     } catch (error) {
-      setSpinError(error.message || "Не удалось удалить игрока")
+      openErrorOverlay(error, "Не удалось удалить игрока")
     }
   }
 
@@ -1003,12 +1037,36 @@ export default function GameScreen() {
             <span className="game-spin-button-label">Крутить</span>
             <span className="game-spin-button-attempt">{formatAttemptsLabel(availableAttempts)}</span>
           </button>
-          {spinError ? (
-            <div className="game-controls-error" role="status" aria-live="polite">
-              {spinError}
-            </div>
-          ) : null}
         </div>
+        {renderedOverlay === "error" ? (
+          <div
+            className={`game-overlay ${isOverlayClosing ? "is-closing" : "is-opening"}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-error-title"
+          >
+            <div className="game-overlay-backdrop" />
+            <section className="game-overlay-sheet">
+              <div className="game-overlay-sheet-inner">
+                <h2 id="game-error-title" className="game-overlay-title">
+                  Упс!
+                </h2>
+                <p className="game-overlay-description">
+                  {spinError || DEFAULT_ERROR_MESSAGE}
+                </p>
+                <div className="game-overlay-actions">
+                  <button
+                    type="button"
+                    className="game-overlay-action game-overlay-action--primary"
+                    onClick={handleCloseOverlay}
+                  >
+                    Понятно
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
         {renderedOverlay === "question" ? (
           <div
             className={`game-overlay ${isOverlayClosing ? "is-closing" : "is-opening"}`}
