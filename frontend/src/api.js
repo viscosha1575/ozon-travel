@@ -53,6 +53,16 @@ function buildHeaders(headers = {}) {
   return nextHeaders;
 }
 
+function buildRequestError(data = {}) {
+  const error = new Error(data.message || "Request failed");
+
+  if (data?.code) {
+    error.code = String(data.code);
+  }
+
+  return error;
+}
+
 export async function getJson(path) {
   const response = await fetch(buildApiUrl(path), {
     method: "GET",
@@ -61,7 +71,7 @@ export async function getJson(path) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "Request failed");
+    throw buildRequestError(data);
   }
 
   return data;
@@ -78,7 +88,7 @@ export async function postJson(path, body = {}) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "Request failed");
+    throw buildRequestError(data);
   }
 
   return data;

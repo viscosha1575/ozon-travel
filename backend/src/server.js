@@ -341,7 +341,8 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 app.use((error, _req, res, _next) => {
   const statusCode = error?.statusCode || 500;
   const message = error?.message || "Internal server error";
-  res.status(statusCode).json({ message });
+  const code = error?.code ? String(error.code) : "";
+  res.status(statusCode).json(code ? { message, code } : { message });
 });
 
 async function start() {

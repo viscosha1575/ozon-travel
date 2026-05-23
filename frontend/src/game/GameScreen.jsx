@@ -180,6 +180,13 @@ export default function GameScreen() {
 
   const activeRouletteItems = rouletteItems.length ? rouletteItems : DEFAULT_ROULETTE_ITEMS
 
+  const openOverlay = (overlayId) => {
+    clearTimeout(overlayTimeoutRef.current)
+    setIsOverlayClosing(false)
+    setActiveOverlay(overlayId)
+    setRenderedOverlay(overlayId)
+  }
+
   const applyTrackStyles = (translateY, patternOffsetY = translateY) => {
     const normalizedTranslateY = roundToDevicePixel(translateY)
     const normalizedPatternOffsetY = roundToDevicePixel(patternOffsetY)
@@ -235,6 +242,13 @@ export default function GameScreen() {
       spinResponse = await postJson("/game/spin", {})
     } catch (error) {
       console.warn("Spin request failed", error)
+
+      if (error?.code === "PROMO_CODES_EXHAUSTED") {
+        setSpinError("")
+        openOverlay("promo-exhausted")
+        return
+      }
+
       setSpinError(error.message || "Не удалось выполнить попытку")
       return
     }
@@ -355,10 +369,7 @@ export default function GameScreen() {
       overlayId: actionId,
       myPrizesCount: actionId === "gift" ? myPrizes.length : undefined,
     })
-    clearTimeout(overlayTimeoutRef.current)
-    setIsOverlayClosing(false)
-    setActiveOverlay(actionId)
-    setRenderedOverlay(actionId)
+    openOverlay(actionId)
 
     if (actionId === "question") {
       return
@@ -809,6 +820,34 @@ export default function GameScreen() {
                     onClick={handleCloseOverlay}
                   >
                     К Ленте призов
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
+        {renderedOverlay === "promo-exhausted" ? (
+          <div
+            className={`game-overlay ${isOverlayClosing ? "is-closing" : "is-opening"}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-promo-exhausted-title"
+          >
+            <div className="game-overlay-backdrop" />
+            <section className="game-overlay-sheet">
+              <div className="game-overlay-sheet-inner">
+                <h2 id="game-promo-exhausted-title" className="game-overlay-title game-overlay-title--multiline">
+                  Упс, все доступные
+                  <br />
+                  промокоды закончились
+                </h2>
+                <div className="game-overlay-actions">
+                  <button
+                    type="button"
+                    className="game-overlay-action game-overlay-action--primary"
+                    onClick={handleCloseOverlay}
+                  >
+                    Понятно
                   </button>
                 </div>
               </div>

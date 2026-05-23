@@ -591,6 +591,35 @@ function chooseWeightedPrize(prizes) {
   return weightedItems[weightedItems.length - 1];
 }
 
+async function getAwardedPrizeCountsByPrizeId(client, userId) {
+  const result = await client.query(
+    `
+      SELECT prize_id, COUNT(*)::int AS awarded_count
+      FROM awarded_prizes
+      WHERE user_id = $1
+        AND prize_id IS NOT NULL
+      GROUP BY prize_id
+    `,
+    [userId],
+  );
+
+  return new Map(
+    result.rows.map((row) => [Number(row.prize_id), Number(row.awarded_count || 0)]),
+  );
+}
+
+function isPrizeEligibleForUser(prize, awardedPrizeCountsByPrizeId) {
+  if (prize.type !== "Приз") {
+    return true;
+  }
+
+  if (!prize.hasUserLimit || prize.userLimitCount <= 0) {
+    return true;
+  }
+
+  return (awardedPrizeCountsByPrizeId.get(Number(prize.id)) || 0) < prize.userLimitCount;
+}
+
 async function listAwardedPrizesForUser(userId) {
   const result = await query(
     `
@@ -684,13 +713,25 @@ export async function spinPrize(userInfo = {}) {
   return withTransaction(async (client) => {
     const rawUser = await getOrCreateUser(userInfo, client);
     await ensureDailyAttemptGrant(rawUser.id, client);
-    const attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
-      sessionId: userInfo.sessionId || "",
-    }, client);
     const prizes = await getAllPrizes(client);
     const todayValue = getTodayValue();
     const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
-    const selectedPrize = chooseWeightedPrize(activePrizes.length ? activePrizes : prizes);
+    const prizePool = activePrizes.length ? activePrizes : prizes;
+    const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);
+    const eligiblePrizes = prizePool.filter((item) => isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId));
+    const eligibleRewardPrizes = eligiblePrizes.filter((item) => item.type === "Приз");
+
+    if (!eligibleRewardPrizes.length) {
+      const error = new Error("Упс, все доступные промокоды закончились");
+      error.statusCode = 409;
+      error.code = "PROMO_CODES_EXHAUSTED";
+      throw error;
+    }
+
+    const attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
+      sessionId: userInfo.sessionId || "",
+    }, client);
+    const selectedPrize = chooseWeightedPrize(eligiblePrizes);
 
     if (!selectedPrize) {
       throw new Error("No prize positions available");
