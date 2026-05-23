@@ -29,7 +29,7 @@
   --graphic-accent-primary: rgba(241, 17, 126, 1);
   --bg-app-primary: rgba(226, 231, 236, 1);
   --text-secondary: rgba(0, 26, 52, 0.6);
-  --game-center-block-max-width: 430px;
+  --game-center-block-max-width: 360px;
   --game-center-block-side-padding: 32px;
   --game-carousel-pattern-max-width: 286px;
   --game-carousel-slot-height: clamp(150px, 23svh, 188px);
@@ -38,10 +38,17 @@
   --game-surface-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --game-surface-duration: 420ms;
   --game-result-bag-scale: 1.12;
+  --app-sheet-side-padding: 36px;
+  --app-sheet-actions-side-padding: 36px;
+  --app-button-width: 272px;
+  --app-button-height: 60px;
+  --app-button-radius: 14px;
+  --app-button-font-size: 17px;
+  --app-muted-copy-font-size: clamp(14px, 2.133svh, 18px);
   --intro-screen-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --intro-screen-duration: 460ms;
   --background-vector-scale: 0.36;
-  --content-panel-padding: 37.5px 28px;
+  --content-panel-padding: 37.5px var(--app-sheet-side-padding);
   --content-panel-gap: 20px;
   --tg-viewport-height: 100svh;
   --tg-viewport-stable-height: 100svh;
@@ -450,11 +457,13 @@ body {
 
 .game-controls {
   position: absolute;
-  left: 12px;
-  right: 12px;
+  left: 0;
+  right: 0;
   bottom: calc(20px + var(--app-safe-bottom));
   display: flex;
   justify-content: center;
+  padding: 0 var(--app-sheet-side-padding);
+  box-sizing: border-box;
   pointer-events: none;
   z-index: 6;
   transition:
@@ -511,7 +520,7 @@ body {
   display: grid;
   justify-items: center;
   gap: 14px;
-  padding: 28px 18px 24px;
+  padding: 28px var(--app-sheet-side-padding) 24px;
   text-align: center;
 }
 
@@ -533,10 +542,10 @@ body {
   margin: 0;
   color: #6d7d90;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: 14px;
+  font-size: var(--app-muted-copy-font-size);
   font-weight: 400;
   line-height: 1.3;
-  letter-spacing: 0.14px;
+  letter-spacing: 0.12px;
 }
 
 .game-overlay-description--rich {
@@ -578,12 +587,12 @@ body {
 }
 
 .game-overlay-action {
-  width: 70%;
-  min-height: 50px;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--app-button-radius);
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: 17px;
+  font-size: var(--app-button-font-size);
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
@@ -626,7 +635,7 @@ body {
   box-sizing: border-box;
   padding:
     calc(clamp(56px, 11svh, 88px) + var(--app-safe-top))
-    28px
+    var(--app-sheet-side-padding)
     calc(18px + var(--app-safe-bottom));
   animation: game-page-rise-in 460ms var(--game-surface-easing) both;
 }
@@ -730,14 +739,14 @@ body {
 }
 
 .game-prizes-close {
-  width: min(506px, 70%);
-  min-height: 50px;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
   border: 0;
-  border-radius: 18px;
+  border-radius: var(--app-button-radius);
   background: rgba(0, 91, 255, 0.12);
   color: rgba(0, 91, 255, 1);
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: 17px;
+  font-size: var(--app-button-font-size);
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
@@ -798,7 +807,7 @@ body {
   gap: clamp(8px, 1.185svh, 12px);
   width: 100%;
   box-sizing: border-box;
-  padding: clamp(22px, 3.317svh, 28px) 28px clamp(22px, 3.317svh, 28px);
+  padding: clamp(22px, 3.317svh, 28px) var(--app-sheet-side-padding) clamp(22px, 3.317svh, 28px);
   text-align: center;
 }
 
@@ -864,12 +873,12 @@ body {
 
 .game-result-code,
 .game-result-primary-action {
-  width: 100%;
-  min-height: clamp(48px, 6.635svh, 56px);
+  width: var(--app-button-width);
+  height: var(--app-button-height);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--app-button-radius);
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: clamp(17px, 2.37svh, 20px);
+  font-size: var(--app-button-font-size);
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
@@ -903,9 +912,9 @@ body {
 @media (max-height: 760px) {
   .game-prizes-page-inner {
     padding-top: calc(48px + var(--app-safe-top));
-    padding-right: 28px;
+    padding-right: var(--app-sheet-side-padding);
     padding-bottom: calc(14px + var(--app-safe-bottom));
-    padding-left: 28px;
+    padding-left: var(--app-sheet-side-padding);
   }
 
   .game-prizes-list {
@@ -976,11 +985,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  width: calc(100% - 80px);
-  min-height: 60px;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
   padding: 8px 18px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--app-button-radius);
   background: linear-gradient(180deg, #1d69f8 0%, #155cf0 100%);
   box-shadow:
     0 14px 28px rgba(21, 92, 240, 0.24),
@@ -999,10 +1008,10 @@ body {
 }
 
 .game-spin-button-label {
-  font-size: 18px;
+  font-size: var(--app-button-font-size);
   font-weight: 400;
   line-height: 1;
-  letter-spacing: 0.18px;
+  letter-spacing: 0.17px;
 }
 
 .game-spin-button-attempt {
@@ -1585,7 +1594,7 @@ body {
   grid-template-rows: repeat(3, auto);
   align-content: start;
   justify-items: center;
-  gap: 25px;
+  gap: 12px;
   text-align: center;
 }
 
@@ -1594,11 +1603,11 @@ body {
   color: var(--text-secondary);
   text-align: center;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: 42px;
+  font-size: var(--app-muted-copy-font-size);
   font-style: normal;
   font-weight: 400;
-  line-height: 120%;
-  letter-spacing: 0.42px;
+  line-height: 1.3;
+  letter-spacing: 0.12px;
 }
 
 .content-title {
@@ -1633,21 +1642,21 @@ body {
   color: var(--text-secondary);
   text-align: center;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: 42px;
+  font-size: var(--app-muted-copy-font-size);
   font-style: normal;
   font-weight: 400;
-  line-height: 120%;
-  letter-spacing: 0.42px;
+  line-height: 1.3;
+  letter-spacing: 0.12px;
 }
 
 .content-action {
-  width: 70%;
-  min-height: 56px;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--app-button-radius);
   background: var(--bg-action-primary);
   color: #fff;
-  font-size: 20px;
+  font-size: var(--app-button-font-size);
   line-height: 1;
   font-weight: 400;
   cursor: pointer;
@@ -1676,9 +1685,9 @@ body {
 
 .content-description--result {
   max-width: 100%;
-  font-size: 18px;
-  line-height: 130%;
-  letter-spacing: 0.18px;
+  font-size: var(--app-muted-copy-font-size);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
 }
 
 @media (max-width: 720px) {
@@ -1720,17 +1729,17 @@ body {
   }
 
   .content-screen {
-    padding: clamp(24px, 4.443svh, 48px) 20px;
+    padding: clamp(24px, 4.443svh, 48px) var(--app-sheet-side-padding);
     gap: clamp(12px, 1.896svh, 20px);
   }
 
   .content-copy {
-    gap: clamp(16px, 2.962svh, 30px);
+    gap: clamp(8px, 1.481svh, 15px);
   }
 
   .content-kicker,
   .content-description {
-    font-size: clamp(12px, 1.659svh, 18px);
+    font-size: var(--app-muted-copy-font-size);
   }
 
   .content-title {
@@ -1738,8 +1747,8 @@ body {
   }
 
   .content-action {
-    min-height: clamp(44px, 6.635svh, 64px);
-    font-size: clamp(16px, 2.133svh, 22px);
+    height: var(--app-button-height);
+    font-size: var(--app-button-font-size);
   }
 
   .content-screen--subscription {
@@ -1755,7 +1764,7 @@ body {
   }
 
   .content-description--result {
-    font-size: clamp(14px, 1.896svh, 18px);
+    font-size: var(--app-muted-copy-font-size);
   }
 }
 
