@@ -832,6 +832,10 @@ body {
   letter-spacing: 0.12px;
 }
 
+.game-result-description--secondary {
+  margin-top: 0;
+}
+
 .game-result-actions {
   display: grid;
   width: 100%;

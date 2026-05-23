@@ -11,6 +11,7 @@ const DEFAULT_ROULETTE_ITEMS = [
     label: "case-1",
     title: "Скидка 800 ₽ на первый заказ отеля от 15 000 ₽",
     description: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽",
+    description2: "",
     myPrizeText: "Скидка 800 ₽",
     expiresAt: "до 31.08.26",
     chanceValue: "1x",
@@ -24,6 +25,7 @@ const DEFAULT_ROULETTE_ITEMS = [
     label: "case-2",
     title: "Скидка 300 ₽ на заказ отеля от 5 000 ₽",
     description: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽",
+    description2: "",
     myPrizeText: "Скидка 300 ₽",
     expiresAt: "до 31.08.26",
     chanceValue: "1x",
@@ -37,6 +39,7 @@ const DEFAULT_ROULETTE_ITEMS = [
     label: "case-3",
     title: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
     description: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
+    description2: "",
     myPrizeText: "Скидка 800 ₽",
     expiresAt: "до 31.08.26",
     chanceValue: "1x",
@@ -50,6 +53,7 @@ const DEFAULT_ROULETTE_ITEMS = [
     label: "case-4",
     title: "Скидка 300 ₽ на заказ авиа от 15 000 ₽",
     description: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов",
+    description2: "",
     myPrizeText: "Скидка 300 ₽",
     expiresAt: "до 31.08.26",
     chanceValue: "1x",
@@ -63,6 +67,7 @@ const DEFAULT_ROULETTE_ITEMS = [
     label: "case-5",
     title: "1 000 баллов Ozon",
     description: "Начисление 1 000 баллов Ozon",
+    description2: "",
     myPrizeText: "1 000 баллов Ozon",
     expiresAt: "до 30.06.26",
     chanceValue: "1x",
@@ -441,6 +446,7 @@ export default function GameScreen() {
       label: prize.title || `prize-${prize.id}`,
       title: prize.title || "",
       description: prize.description || "",
+      description2: prize.description2 || "",
       myPrizeText: prize.title || "",
       expiresAt: prize.expiresAt || "",
       chanceValue: prize.chanceValue || "1x",
@@ -450,6 +456,7 @@ export default function GameScreen() {
       type: prize.type || "Приз",
       title: prize.title || "",
       description: prize.description || "",
+      description2: prize.description2 || "",
       image: prize.image || "",
       promoCode: prize.promoCode || "",
       expiresAt: prize.expiresAt || "",
@@ -490,6 +497,7 @@ export default function GameScreen() {
           label: item.title || `item-${index}`,
           title: item.title || "",
           description: item.description || "",
+          description2: item.description2 || "",
           myPrizeText: item.myPrizeText || item.title || "",
           expiresAt: item.expiresAt || "",
           chanceValue: item.chanceValue || "1x",
@@ -874,6 +882,11 @@ export default function GameScreen() {
                 <p className="game-result-description">
                   {resultPrize?.description || resultBag?.description || "Описание позиции появится после настройки в админке."}
                 </p>
+                {resultPrize?.type === "Не приз" && (resultPrize?.description2 || resultBag?.description2) ? (
+                  <p className="game-result-description game-result-description--secondary">
+                    {resultPrize?.description2 || resultBag?.description2}
+                  </p>
+                ) : null}
                 <div className="game-result-actions">
                   {resultPrize?.promoCode ? (
                     <button type="button" className="game-result-code" onClick={handleCopyResultCode}>

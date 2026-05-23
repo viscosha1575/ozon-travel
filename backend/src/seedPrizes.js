@@ -21,7 +21,8 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case.webp"
     },
     myPrizeText: "Скидка 800 ₽",
-    rouletteDescription: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽"
+    rouletteDescription: "Скидка 800 ₽ на повторный заказ отеля от 15 000 ₽",
+    rouletteDescription2: ""
   },
   {
     id: 3502,
@@ -45,7 +46,8 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case2.webp"
     },
     myPrizeText: "Скидка 300 ₽",
-    rouletteDescription: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽"
+    rouletteDescription: "Скидка 300 ₽ на первый заказ отеля от 5 000 ₽",
+    rouletteDescription2: ""
   },
   {
     id: 3503,
@@ -69,7 +71,8 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case3.webp"
     },
     myPrizeText: "Скидка 800 ₽",
-    rouletteDescription: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽"
+    rouletteDescription: "Скидка 800 ₽ на первый заказ авиа от 15 000 ₽",
+    rouletteDescription2: ""
   },
   {
     id: 3504,
@@ -93,7 +96,8 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case4.webp"
     },
     myPrizeText: "Скидка 300 ₽",
-    rouletteDescription: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов"
+    rouletteDescription: "Скидка 300 ₽ на повторный заказ авиа без общего лимита призов",
+    rouletteDescription2: ""
   },
   {
     id: 3505,
@@ -117,7 +121,8 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case5.webp"
     },
     myPrizeText: "1 000 баллов Ozon",
-    rouletteDescription: "Начисление 1 000 баллов Ozon"
+    rouletteDescription: "Начисление 1 000 баллов Ozon",
+    rouletteDescription2: ""
   },
   {
     id: 3506,
@@ -141,6 +146,7 @@ export const seedPrizes = [
       previewUrl: "/game/bags/case2.webp"
     },
     myPrizeText: "300 миль",
-    rouletteDescription: "Начисление 300 миль"
+    rouletteDescription: "Начисление 300 миль",
+    rouletteDescription2: ""
   }
 ];

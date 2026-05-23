@@ -218,6 +218,7 @@ function createInitialPrizeForm() {
     rouletteImage: null,
     myPrizeText: "",
     rouletteDescription: "",
+    rouletteDescription2: "",
   };
 }
 
@@ -342,6 +343,7 @@ export default function PromoCodesPage() {
         rouletteImage: form.rouletteImage,
         myPrizeText: isNonPrize ? form.title : form.myPrizeText,
         rouletteDescription: form.rouletteDescription,
+        rouletteDescription2: form.rouletteDescription2,
       });
 
       await reloadPrizes();
@@ -410,6 +412,7 @@ export default function PromoCodesPage() {
       rouletteImage: item.rouletteImage || null,
       myPrizeText: item.myPrizeText || "",
       rouletteDescription: item.rouletteDescription || "",
+      rouletteDescription2: item.rouletteDescription2 || "",
     });
     setPromoCodesUploadError("");
 
@@ -1101,6 +1104,20 @@ export default function PromoCodesPage() {
                       placeholder="Описание приза для интерфейса рулетки"
                     />
                   </FormControl>
+
+                  <FormControl>
+                    <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                      Второй абзац описания
+                    </FormLabel>
+                    <Textarea
+                      minH="140px"
+                      borderRadius="20px"
+                      resize="vertical"
+                      value={form.rouletteDescription2}
+                      onChange={(event) => setForm((current) => ({ ...current, rouletteDescription2: event.target.value }))}
+                      placeholder="Дополнительный текст под основным описанием"
+                    />
+                  </FormControl>
                 </Stack>
               </FormSection>
 
@@ -1210,6 +1227,20 @@ export default function PromoCodesPage() {
                     value={form.rouletteDescription}
                     onChange={(event) => setForm((current) => ({ ...current, rouletteDescription: event.target.value }))}
                     placeholder="Описание позиции"
+                  />
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                    Второй абзац описания
+                  </FormLabel>
+                  <Textarea
+                    minH="160px"
+                    borderRadius="20px"
+                    resize="vertical"
+                    value={form.rouletteDescription2}
+                    onChange={(event) => setForm((current) => ({ ...current, rouletteDescription2: event.target.value }))}
+                    placeholder="Дополнительный абзац для результата"
                   />
                 </FormControl>
 

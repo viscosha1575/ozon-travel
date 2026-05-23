@@ -81,6 +81,7 @@ function mapPrizeRow(row) {
     rouletteImage: normalizeStoredImage(row.roulette_image),
     myPrizeText: row.my_prize_text,
     rouletteDescription: row.roulette_description,
+    rouletteDescription2: row.roulette_description_2,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +110,7 @@ async function getAllPrizes(client = null) {
       roulette_image,
       my_prize_text,
       roulette_description,
+      roulette_description_2,
       created_at,
       updated_at
     FROM prize_positions
@@ -131,6 +133,7 @@ export async function listPrizes(payload = {}) {
         item.promoCodeValue,
         item.myPrizeText,
         item.rouletteDescription,
+        item.rouletteDescription2,
       ].join(" ").toLowerCase();
 
       return haystack.includes(search);
@@ -169,6 +172,7 @@ function validatePrizePayload(payload = {}) {
   const rouletteImage = payload.rouletteImage ?? null;
   const myPrizeText = String(payload.myPrizeText || "").trim();
   const rouletteDescription = String(payload.rouletteDescription || "").trim();
+  const rouletteDescription2 = String(payload.rouletteDescription2 || "").trim();
 
   if (!title) {
     throw new Error("Prize title is required");
@@ -208,6 +212,7 @@ function validatePrizePayload(payload = {}) {
     rouletteImage,
     myPrizeText: type === "Не приз" ? title : myPrizeText,
     rouletteDescription,
+    rouletteDescription2,
   };
 }
 
@@ -244,10 +249,11 @@ export async function createPrize(payload = {}) {
           roulette_image,
           my_prize_text,
           roulette_description,
+          roulette_description_2,
           updated_at
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20, NOW()
         )
       `,
       [
@@ -270,6 +276,7 @@ export async function createPrize(payload = {}) {
         nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
         nextPrize.myPrizeText,
         nextPrize.rouletteDescription,
+        nextPrize.rouletteDescription2,
       ],
     );
 
@@ -344,6 +351,7 @@ export async function updatePrize(payload = {}) {
             roulette_image = $17::jsonb,
             my_prize_text = $18,
             roulette_description = $19,
+            roulette_description_2 = $20,
             updated_at = NOW()
           WHERE id = $1
         `,
@@ -367,6 +375,7 @@ export async function updatePrize(payload = {}) {
           nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
           nextPrize.myPrizeText,
           nextPrize.rouletteDescription,
+          nextPrize.rouletteDescription2,
         ],
       );
     });
@@ -631,7 +640,8 @@ async function listAwardedPrizesForUser(userId) {
         awarded_prizes.expires_at,
         awarded_prizes.created_at,
         prize_positions.type AS prize_type,
-        prize_positions.roulette_description AS prize_description
+        prize_positions.roulette_description AS prize_description,
+        prize_positions.roulette_description_2 AS prize_description_2
       FROM awarded_prizes
       LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
       WHERE awarded_prizes.user_id = $1
@@ -649,6 +659,7 @@ async function listAwardedPrizesForUser(userId) {
     expiresAt: row.expires_at,
     type: row.prize_type || "Приз",
     description: row.prize_description || "",
+    description2: row.prize_description_2 || "",
     createdAt: row.created_at,
   }));
 }
@@ -661,6 +672,7 @@ function buildFrontendPrize(prize) {
     chanceValue: prize.chanceValue,
     image: prize.rouletteImage?.previewUrl || "",
     description: prize.rouletteDescription || "",
+    description2: prize.rouletteDescription2 || "",
     myPrizeText: prize.myPrizeText || prize.title,
     expiresAt: formatDateLabel(prize.activeTo),
   };
@@ -701,6 +713,7 @@ export async function getGameBootstrap(userInfo = {}) {
       image: item.image?.previewUrl || "",
       title: item.title,
       description: item.description,
+      description2: item.description2,
       expiresAt: item.expiresAt,
       promoCode: item.promoCode,
       type: item.type,
@@ -786,7 +799,8 @@ export async function spinPrize(userInfo = {}) {
           awarded_prizes.expires_at,
           awarded_prizes.created_at,
           prize_positions.type AS prize_type,
-          prize_positions.roulette_description AS prize_description
+          prize_positions.roulette_description AS prize_description,
+          prize_positions.roulette_description_2 AS prize_description_2
         FROM awarded_prizes
         LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
         WHERE awarded_prizes.user_id = $1
@@ -803,6 +817,7 @@ export async function spinPrize(userInfo = {}) {
       promoCode: row.promo_code,
       type: row.prize_type || "Приз",
       description: row.prize_description || "",
+      description2: row.prize_description_2 || "",
     }));
 
     await logGameEvent(userInfo, "spin_result", {
@@ -828,6 +843,7 @@ export async function spinPrize(userInfo = {}) {
         title: selectedPrize.myPrizeText || selectedPrize.title,
         fullTitle: selectedPrize.title,
         description: selectedPrize.rouletteDescription || "",
+        description2: selectedPrize.rouletteDescription2 || "",
         image: selectedPrize.rouletteImage?.previewUrl || "",
         promoCode,
         expiresAt: formatDateLabel(selectedPrize.activeTo),
