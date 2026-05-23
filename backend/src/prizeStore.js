@@ -733,9 +733,8 @@ export async function spinPrize(userInfo = {}) {
     const prizePool = activePrizes.length ? activePrizes : prizes;
     const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);
     const eligiblePrizes = prizePool.filter((item) => isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId));
-    const eligibleRewardPrizes = eligiblePrizes.filter((item) => item.type === "Приз");
 
-    if (!eligibleRewardPrizes.length) {
+    if (!eligiblePrizes.length) {
       const error = new Error("Упс, все доступные промокоды закончились");
       error.statusCode = 409;
       error.code = "PROMO_CODES_EXHAUSTED";
