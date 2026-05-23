@@ -679,14 +679,16 @@ export default function GameScreen() {
                       className="game-carousel-slot"
                       style={lockedSlotHeight ? { height: `${lockedSlotHeight}px` } : undefined}
                     >
-                      <img
-                        src={bag.slotPath}
-                        alt=""
-                        className="game-carousel-slot-image"
-                        aria-hidden="true"
-                        fetchPriority="low"
-                        loading="eager"
-                      />
+                      <div className="game-carousel-slot-media">
+                        <img
+                          src={bag.slotPath}
+                          alt=""
+                          className="game-carousel-slot-image"
+                          aria-hidden="true"
+                          fetchPriority="low"
+                          loading="eager"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -856,11 +858,13 @@ export default function GameScreen() {
         ) : null}
         {resultBag ? (
           <section className="game-result" aria-label="Результат приза">
-            <img
-              src={resultBag.path}
-              alt={resultBag.label}
-              className="game-result-bag"
-            />
+            <div className="game-result-bag-frame">
+              <img
+                src={resultBag.path}
+                alt={resultBag.label}
+                className="game-result-bag"
+              />
+            </div>
             <div className="game-result-sheet">
               <div className="game-result-sheet-inner">
                 <p className="game-result-kicker">
@@ -916,12 +920,14 @@ export default function GameScreen() {
                   className="game-prize-card"
                   onClick={() => openPrizeResult(prize)}
                 >
-                  <img
-                    src={prize.image || "/game/bags/case.webp"}
-                    alt=""
-                    className="game-prize-card-image"
-                    aria-hidden="true"
-                  />
+                  <div className="game-prize-card-media">
+                    <img
+                      src={prize.image || "/game/bags/case.webp"}
+                      alt=""
+                      className="game-prize-card-image"
+                      aria-hidden="true"
+                    />
+                  </div>
                   <div className="game-prize-card-content">
                     <h3 className="game-prize-card-title">{prize.title}</h3>
                     <p className="game-prize-card-date">{prize.expiresAt}</p>

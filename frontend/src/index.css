@@ -242,12 +242,24 @@ body {
   box-sizing: border-box;
 }
 
+.game-carousel-slot-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 360px);
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .game-carousel-slot-image {
   display: block;
   width: 100%;
-  max-width: 360px;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
+  object-position: center;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -663,16 +675,23 @@ body {
   -webkit-appearance: none;
 }
 
+.game-prize-card-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 118px;
+  height: 92px;
+  overflow: hidden;
+}
+
 .game-prize-card-image {
   display: block;
-  width: 132px;
-  height: 132px;
-  margin-top: -20px;
-  margin-bottom: -20px;
+  width: min(100%, 132px);
+  height: min(100%, 132px);
   object-fit: contain;
   object-position: center;
-  transform: scale(1.16);
-  transform-origin: center;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .game-prize-card-content {
@@ -735,18 +754,31 @@ body {
   box-sizing: border-box;
 }
 
-.game-result-bag {
+.game-result-bag-frame {
   grid-row: 1;
   justify-self: center;
   align-self: end;
   z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   width: min(100vw, clamp(360px, 62svh, 720px));
   max-width: 720px;
+  height: min(74svh, 720px);
   max-height: min(74svh, 720px);
-  height: auto;
-  object-fit: contain;
+  overflow: hidden;
   transform: scale(var(--game-result-bag-scale));
   transform-origin: center bottom;
+}
+
+.game-result-bag {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
 }
 
 .game-result-sheet {
@@ -864,12 +896,14 @@ body {
     border-radius: 16px;
   }
 
+  .game-prize-card-media {
+    width: 108px;
+    height: 82px;
+  }
+
   .game-prize-card-image {
-    width: 120px;
-    height: 120px;
-    margin-top: -19px;
-    margin-bottom: -19px;
-    transform: scale(1.16);
+    width: min(100%, 120px);
+    height: min(100%, 120px);
   }
 
   .game-prize-card-content {
@@ -889,9 +923,10 @@ body {
     padding-top: 14px;
   }
 
-  .game-result-bag {
+  .game-result-bag-frame {
     width: min(94vw, clamp(300px, 52svh, 520px));
     max-width: 520px;
+    height: min(62svh, 520px);
     max-height: min(62svh, 520px);
     --game-result-bag-scale: 1.05;
   }
@@ -902,13 +937,13 @@ body {
 }
 
 @media (min-height: 780px) {
-  .game-result-bag {
+  .game-result-bag-frame {
     --game-result-bag-scale: 1.22;
   }
 }
 
 @media (min-height: 840px) {
-  .game-result-bag {
+  .game-result-bag-frame {
     --game-result-bag-scale: 1.3;
   }
 }
