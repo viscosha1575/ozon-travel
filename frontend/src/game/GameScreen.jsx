@@ -11,6 +11,7 @@ const SPIN_MAX_FULL_LOOPS = 4
 const SPIN_MIN_DURATION = 8400
 const SPIN_MAX_DURATION = 12800
 const SPIN_SCREENFULS_PER_SECOND = 0.58
+const MOBILE_SPIN_DISTANCE_MULTIPLIER = 0.5
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
@@ -40,6 +41,22 @@ function easeSpinProgress(value) {
   const progress = Math.min(1, Math.max(0, Number(value) || 0))
   const easedOut = 1 - ((1 - progress) ** 1.03)
   return easedOut * easedOut * (3 - (2 * easedOut))
+}
+
+function getSpinDistanceMultiplier() {
+  if (typeof window === "undefined") {
+    return 1
+  }
+
+  const viewportWidth = Math.max(
+    Number(window.Telegram?.WebApp?.viewportStableWidth) || 0,
+    Number(window.Telegram?.WebApp?.viewportWidth) || 0,
+    Number(window.innerWidth) || 0,
+  )
+
+  return viewportWidth > 0 && viewportWidth <= 768
+    ? MOBILE_SPIN_DISTANCE_MULTIPLIER
+    : 1
 }
 
 function getSpinDurationMs(totalSteps, step) {
@@ -414,7 +431,12 @@ export default function GameScreen() {
     const fullLoops =
       SPIN_MIN_FULL_LOOPS
       + Math.floor(Math.random() * (SPIN_MAX_FULL_LOOPS - SPIN_MIN_FULL_LOOPS + 1))
-    const totalSteps = (fullLoops + 1) * activeRouletteItems.length + alignmentSteps
+    const baseLoopSteps = (fullLoops + 1) * activeRouletteItems.length
+    const loopSteps = Math.max(
+      activeRouletteItems.length,
+      Math.round(baseLoopSteps * getSpinDistanceMultiplier()),
+    )
+    const totalSteps = loopSteps + alignmentSteps
     const durationMs = getSpinDurationMs(totalSteps, step)
 
     pendingSpinRef.current = {
