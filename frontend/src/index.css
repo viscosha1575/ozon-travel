@@ -31,6 +31,7 @@
   --text-secondary: rgba(0, 26, 52, 0.6);
   --game-center-block-max-width: 430px;
   --game-center-block-side-padding: 32px;
+  --game-carousel-pattern-max-width: 286px;
   --game-carousel-slot-height: clamp(150px, 23svh, 188px);
   --game-carousel-slot-gap: 24px;
   --game-spin-easing: cubic-bezier(0.22, 0.72, 0.3, 1);
@@ -192,7 +193,7 @@ body {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: min(100%, 286px);
+  width: min(100%, var(--game-carousel-pattern-max-width));
   transform: translateX(-50%);
   opacity: 0.92;
   background:
@@ -246,7 +247,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(100%, 360px);
+  width: min(100%, var(--game-carousel-pattern-max-width));
   height: 100%;
   max-height: 100%;
   overflow: hidden;
