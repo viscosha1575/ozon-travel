@@ -228,6 +228,8 @@ export default function PromoCodesPage() {
   const nonPrizeModal = useDisclosure();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [promoCodeTypeFilter, setPromoCodeTypeFilter] = useState("");
   const [response, setResponse] = useState(EMPTY_RESPONSE);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -274,6 +276,8 @@ export default function PromoCodesPage() {
       try {
         const nextResponse = await postJson("/api/prizes/list", {
           search: deferredSearch,
+          category: categoryFilter,
+          promoCodeType: promoCodeTypeFilter,
         });
 
         if (!cancelled) {
@@ -298,7 +302,7 @@ export default function PromoCodesPage() {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearch]);
+  }, [deferredSearch, categoryFilter, promoCodeTypeFilter]);
 
   useEffect(() => {
     const visibleIds = new Set(response.items.map((item) => item.id));
@@ -308,6 +312,8 @@ export default function PromoCodesPage() {
   async function reloadPrizes() {
     const nextResponse = await postJson("/api/prizes/list", {
       search: deferredSearch,
+      category: categoryFilter,
+      promoCodeType: promoCodeTypeFilter,
     });
 
     setResponse({
@@ -611,6 +617,54 @@ export default function PromoCodesPage() {
                   }}
                 />
               </InputGroup>
+              <Select
+                h="56px"
+                flex={{ base: "1 1 100%", lg: "0 0 220px" }}
+                bg={filterBg}
+                borderColor="transparent"
+                borderRadius="20px"
+                boxShadow={filterShadow}
+                fontSize="sm"
+                fontWeight="500"
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                _hover={{ borderColor: "transparent" }}
+                _focusVisible={{
+                  borderColor: "brand.200",
+                  boxShadow: `0 0 0 1px var(--chakra-colors-brand-200), ${filterShadow}`,
+                }}
+              >
+                <option value="">Все категории</option>
+                {PRIZE_CATEGORY_OPTIONS.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                h="56px"
+                flex={{ base: "1 1 100%", lg: "0 0 280px" }}
+                bg={filterBg}
+                borderColor="transparent"
+                borderRadius="20px"
+                boxShadow={filterShadow}
+                fontSize="sm"
+                fontWeight="500"
+                value={promoCodeTypeFilter}
+                onChange={(event) => setPromoCodeTypeFilter(event.target.value)}
+                _hover={{ borderColor: "transparent" }}
+                _focusVisible={{
+                  borderColor: "brand.200",
+                  boxShadow: `0 0 0 1px var(--chakra-colors-brand-200), ${filterShadow}`,
+                }}
+              >
+                <option value="">Все типы промокода</option>
+                {PROMO_CODE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value || "__empty"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
 
               <Button
                 h="56px"

@@ -119,6 +119,8 @@ async function getAllPrizes(client = null) {
 
 export async function listPrizes(payload = {}) {
   const search = normalizeSearch(payload.search);
+  const categoryFilter = String(payload.category || "").trim();
+  const promoCodeTypeFilter = String(payload.promoCodeType || "").trim();
   let items = await getAllPrizes();
 
   if (search) {
@@ -135,6 +137,14 @@ export async function listPrizes(payload = {}) {
 
       return haystack.includes(search);
     });
+  }
+
+  if (categoryFilter) {
+    items = items.filter((item) => String(item.category || "").trim() === categoryFilter);
+  }
+
+  if (promoCodeTypeFilter) {
+    items = items.filter((item) => String(item.promoCodeType || "").trim() === promoCodeTypeFilter);
   }
 
   items.sort((left, right) => left.title.localeCompare(right.title, "ru"));
