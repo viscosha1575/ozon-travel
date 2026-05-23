@@ -635,6 +635,7 @@ async function listAwardedPrizesForUser(userId) {
       FROM awarded_prizes
       LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
       WHERE awarded_prizes.user_id = $1
+        AND COALESCE(prize_positions.type, 'Приз') = 'Приз'
       ORDER BY awarded_prizes.created_at DESC, awarded_prizes.id DESC
     `,
     [userId],
@@ -789,6 +790,7 @@ export async function spinPrize(userInfo = {}) {
         FROM awarded_prizes
         LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
         WHERE awarded_prizes.user_id = $1
+          AND COALESCE(prize_positions.type, 'Приз') = 'Приз'
         ORDER BY awarded_prizes.created_at DESC, awarded_prizes.id DESC
       `,
       [rawUser.id],
