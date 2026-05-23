@@ -1031,6 +1031,31 @@ body {
   letter-spacing: 0.17px;
 }
 
+.game-controls-error {
+  display: grid;
+  place-items: center;
+  width: min(
+    var(--game-center-block-max-width),
+    calc(100% - var(--game-center-block-side-padding) * 2)
+  );
+  min-height: 56px;
+  margin-top: 12px;
+  padding: 14px 18px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 14px 30px rgba(12, 32, 74, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--app-muted-copy-font-size);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+  text-align: center;
+}
+
 @keyframes fade-in-layer {
   from {
     opacity: 0;

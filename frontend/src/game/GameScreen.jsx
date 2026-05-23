@@ -1004,9 +1004,9 @@ export default function GameScreen() {
             <span className="game-spin-button-attempt">{formatAttemptsLabel(availableAttempts)}</span>
           </button>
           {spinError ? (
-            <p className="game-result-description" style={{ marginTop: "12px", textAlign: "center" }}>
+            <div className="game-controls-error" role="status" aria-live="polite">
               {spinError}
-            </p>
+            </div>
           ) : null}
         </div>
         {renderedOverlay === "question" ? (
