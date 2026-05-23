@@ -1,7 +1,9 @@
 import { query, withTransaction } from "./db.js";
+import { buildStartParam, parseStartParam } from "./startParam.js";
 
-const FRONTEND_PUBLIC_URL = String(process.env.FRONTEND_PUBLIC_URL || "http://localhost:4173").replace(/\/$/, "");
-const TELEGRAM_BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || "").trim().replace(/^@/, "");
+const MAX_BOT_PUBLIC_URL = String(
+  process.env.MAX_BOT_PUBLIC_URL || "https://max.ru/ozontravel_lenta_bot",
+).trim().replace(/\/$/, "");
 const MSK_TIMEZONE = "Europe/Moscow";
 
 function normalizePlatform(value) {
@@ -41,15 +43,14 @@ function getMoscowDateValue() {
 }
 
 function buildReferralLink(referralCode) {
-  if (!referralCode) {
+  const payload = buildStartParam({ referralCode });
+
+  if (!payload || !MAX_BOT_PUBLIC_URL) {
     return "";
   }
 
-  if (TELEGRAM_BOT_USERNAME) {
-    return `https://t.me/${TELEGRAM_BOT_USERNAME}?startapp=${encodeURIComponent(referralCode)}`;
-  }
-
-  return `${FRONTEND_PUBLIC_URL}?startapp=${encodeURIComponent(referralCode)}`;
+  const separator = MAX_BOT_PUBLIC_URL.includes("?") ? "&" : "?";
+  return `${MAX_BOT_PUBLIC_URL}${separator}startapp=${encodeURIComponent(payload)}`;
 }
 
 async function upsertUser(executor, userInfo = {}) {
@@ -59,6 +60,7 @@ async function upsertUser(executor, userInfo = {}) {
   const lastName = String(userInfo.lastName || "").trim();
   const languageCode = String(userInfo.languageCode || "").trim();
   const startParam = String(userInfo.startParam || "").trim();
+  const parsedStartParam = parseStartParam(startParam);
   const referralCode = buildReferralCode(externalId);
   const result = await executor.query(
     `
@@ -70,10 +72,11 @@ async function upsertUser(executor, userInfo = {}) {
         language_code,
         start_param,
         referral_code,
+        utm_slug,
         updated_at,
         last_seen_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       ON CONFLICT (external_id)
       DO UPDATE SET
         username = EXCLUDED.username,
@@ -84,11 +87,24 @@ async function upsertUser(executor, userInfo = {}) {
           WHEN EXCLUDED.start_param <> '' THEN EXCLUDED.start_param
           ELSE app_users.start_param
         END,
+        utm_slug = CASE
+          WHEN EXCLUDED.utm_slug <> '' THEN EXCLUDED.utm_slug
+          ELSE app_users.utm_slug
+        END,
         updated_at = NOW(),
         last_seen_at = NOW()
-      RETURNING *
+      RETURNING *, (xmax = 0) AS was_inserted
     `,
-    [externalId, username, firstName, lastName, languageCode, startParam, referralCode],
+    [
+      externalId,
+      username,
+      firstName,
+      lastName,
+      languageCode,
+      startParam,
+      referralCode,
+      parsedStartParam.utmSlug,
+    ],
   );
 
   return result.rows[0];
@@ -96,9 +112,11 @@ async function upsertUser(executor, userInfo = {}) {
 
 async function attachReferrer(executor, userRow) {
   const startParam = String(userRow.start_param || "").trim();
+  const parsedStartParam = parseStartParam(startParam);
+  const referralCodeFromStartParam = parsedStartParam.referralCode;
   const ownReferralCode = String(userRow.referral_code || "").trim();
 
-  if (!startParam || startParam === ownReferralCode || userRow.referred_by_user_id) {
+  if (!referralCodeFromStartParam || referralCodeFromStartParam === ownReferralCode || userRow.referred_by_user_id) {
     return userRow;
   }
 
@@ -109,7 +127,7 @@ async function attachReferrer(executor, userRow) {
       WHERE referral_code = $1
       LIMIT 1
     `,
-    [startParam],
+    [referralCodeFromStartParam],
   );
   const referrer = referrerResult.rows[0];
 
@@ -150,12 +168,56 @@ async function attachReferrer(executor, userRow) {
       JSON.stringify({
         invitedUserId: Number(linkedUser.id),
         invitedExternalId: linkedUser.external_id,
-        referralCode: startParam,
+        referralCode: referralCodeFromStartParam,
       }),
     ],
   );
 
   return linkedUser;
+}
+
+async function registerUtmVisitInternal(executor, userId, userInfo = {}, options = {}) {
+  const parsedStartParam = parseStartParam(userInfo.startParam);
+  const utmSlug = parsedStartParam.utmSlug;
+  const sessionId = String(userInfo.sessionId || "").trim();
+
+  if (!utmSlug) {
+    return null;
+  }
+
+  const result = await executor.query(
+    `
+      INSERT INTO utm_visits (
+        user_id,
+        utm_slug,
+        session_id,
+        raw_start_param,
+        referral_code,
+        was_existing_player
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT DO NOTHING
+      RETURNING id, created_at
+    `,
+    [
+      userId,
+      utmSlug,
+      sessionId,
+      parsedStartParam.raw,
+      parsedStartParam.referralCode,
+      Boolean(options.wasExistingPlayer),
+    ],
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return {
+    id: Number(result.rows[0].id),
+    utmSlug,
+    createdAt: result.rows[0].created_at,
+  };
 }
 
 async function ensureDailyAttemptGrantInternal(executor, userId) {
@@ -240,7 +302,10 @@ async function getInvitedReferralIdsInternal(executor, userId) {
 async function runGetOrCreate(executor, userInfo = {}) {
   const upsertedUser = await upsertUser(executor, userInfo);
   const linkedUser = await attachReferrer(executor, upsertedUser);
-  return linkedUser;
+  return {
+    ...linkedUser,
+    was_inserted: Boolean(upsertedUser.was_inserted),
+  };
 }
 
 export async function getOrCreateUser(userInfo = {}, client = null) {
@@ -322,6 +387,16 @@ export async function getReferralData(userId, client = null) {
   };
 }
 
+export async function registerUtmVisit(userId, userInfo = {}, options = {}, client = null) {
+  if (client) {
+    return registerUtmVisitInternal(client, userId, userInfo, options);
+  }
+
+  return withTransaction(async (transactionClient) =>
+    registerUtmVisitInternal(transactionClient, userId, userInfo, options)
+  );
+}
+
 export async function grantUserAttempts(userId, count = 10, client = null) {
   const safeCount = Math.max(1, Math.round(Number(count) || 0));
   const executor = client || { query };
@@ -371,13 +446,21 @@ export async function createUserFromPlatform(payload = {}, client = null) {
     throw error;
   }
 
+  const startParam = String(payload.startParam || payload.invitedByReferralCode || "").trim();
   const user = await getOrCreateUser({
     externalId,
     username: String(payload.platformNickname || payload.username || "").trim(),
     firstName: String(payload.firstName || "").trim(),
     lastName: String(payload.lastName || "").trim(),
     languageCode: String(payload.languageCode || "").trim(),
-    startParam: String(payload.invitedByReferralCode || "").trim(),
+    startParam,
+  }, client);
+
+  await registerUtmVisit(user.id, {
+    startParam,
+    sessionId: String(payload.sessionId || "").trim(),
+  }, {
+    wasExistingPlayer: !user.was_inserted,
   }, client);
 
   return {
@@ -413,7 +496,7 @@ export async function setUserSubscriptionStatus(payload = {}, client = null) {
     firstName: String(payload.firstName || "").trim(),
     lastName: String(payload.lastName || "").trim(),
     languageCode: String(payload.languageCode || "").trim(),
-    startParam: String(payload.invitedByReferralCode || "").trim(),
+    startParam: String(payload.startParam || payload.invitedByReferralCode || "").trim(),
   }, client);
 
   const result = await executor.query(

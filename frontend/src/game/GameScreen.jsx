@@ -18,6 +18,7 @@ const RESULT_REVEAL_DELAY = 72
 const DEBUG_PANEL_UPDATE_INTERVAL = 120
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
+const REFERRAL_SHARE_TITLE = "Приглашаю в игру"
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
@@ -104,6 +105,16 @@ function writeBootstrapCache(value) {
   } catch {
     // Ignore sessionStorage failures.
   }
+}
+
+function buildReferralShareText(referralLink) {
+  const normalizedReferralLink = String(referralLink || "").trim()
+
+  return [REFERRAL_SHARE_TITLE, normalizedReferralLink].filter(Boolean).join("\n\n")
+}
+
+function buildMaxShareLink(text) {
+  return `https://max.ru/:share?text=${encodeURIComponent(String(text || "").trim())}`
 }
 
 function normalizeRouletteItems(items, assetVersion) {
@@ -246,6 +257,7 @@ export default function GameScreen() {
   const [rouletteItems, setRouletteItems] = useState(() => normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0))
   const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(cachedBootstrap?.myPrizes, 0))
   const [availableAttempts, setAvailableAttempts] = useState(() => Number(cachedBootstrap?.attempts?.availableAttempts || 0))
+  const [referralLink, setReferralLink] = useState(() => String(cachedBootstrap?.referral?.referralLink || "").trim())
   const [isSpinActive, setIsSpinActive] = useState(false)
   const [activeOverlay, setActiveOverlay] = useState(null)
   const [renderedOverlay, setRenderedOverlay] = useState(null)
@@ -500,6 +512,40 @@ export default function GameScreen() {
     }
   }
 
+  const handleInviteFriend = async () => {
+    const shareText = buildReferralShareText(referralLink)
+
+    if (!shareText) {
+      setSpinError("Не удалось подготовить реферальную ссылку")
+      return
+    }
+
+    void trackGameEvent("referral_share_clicked", {
+      hasReferralLink: Boolean(referralLink),
+    })
+
+    try {
+      if (typeof window !== "undefined" && typeof window.WebApp?.shareMaxContent === "function") {
+        const result = await window.WebApp.shareMaxContent({
+          text: REFERRAL_SHARE_TITLE,
+          link: referralLink,
+        })
+
+        void trackGameEvent("referral_share_completed", {
+          status: result?.status || "unknown",
+        })
+        return
+      }
+
+      if (typeof window !== "undefined") {
+        window.location.assign(buildMaxShareLink(shareText))
+      }
+    } catch (error) {
+      console.warn("MAX share failed", error)
+      setSpinError("Не удалось открыть отправку в MAX")
+    }
+  }
+
   const handleCloseOverlay = () => {
     const closedOverlayId = renderedOverlay || activeOverlay
     if (closedOverlayId) {
@@ -605,11 +651,13 @@ export default function GameScreen() {
       setRouletteItems(nextRouletteItems)
       setMyPrizes(nextMyPrizes)
       setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
+      setReferralLink(String(response?.referral?.referralLink || "").trim())
       setSpinError(nextRouletteItems.length ? "" : "Сервер не вернул позиции для карусели")
       writeBootstrapCache({
         rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
         myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
         attempts: response?.attempts || {},
+        referral: response?.referral || {},
       })
       void trackGameEvent("bootstrap_loaded", {
         rouletteItemsCount: nextRouletteItems.length,
@@ -959,7 +1007,11 @@ export default function GameScreen() {
                   </span>
                 </div>
                 <div className="game-overlay-actions">
-                  <button type="button" className="game-overlay-action game-overlay-action--primary">
+                  <button
+                    type="button"
+                    className="game-overlay-action game-overlay-action--primary"
+                    onClick={handleInviteFriend}
+                  >
                     Пригласить друга
                   </button>
                   <button

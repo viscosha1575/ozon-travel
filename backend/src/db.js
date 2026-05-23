@@ -107,6 +107,11 @@ async function ensureSchema() {
   `);
 
   await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS utm_slug TEXT NOT NULL DEFAULT ''
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS awarded_prizes (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -179,6 +184,35 @@ async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS user_attempt_transactions_referral_unique_idx
     ON user_attempt_transactions (user_id, reason, related_user_id)
     WHERE related_user_id IS NOT NULL
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS utm_visits (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      utm_slug TEXT NOT NULL,
+      session_id TEXT NOT NULL DEFAULT '',
+      raw_start_param TEXT NOT NULL DEFAULT '',
+      referral_code TEXT NOT NULL DEFAULT '',
+      was_existing_player BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS utm_visits_utm_slug_idx
+    ON utm_visits (utm_slug, created_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS utm_visits_user_id_idx
+    ON utm_visits (user_id, created_at DESC)
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS utm_visits_user_session_slug_unique_idx
+    ON utm_visits (user_id, session_id, utm_slug)
+    WHERE session_id <> ''
   `);
 
   await query(`

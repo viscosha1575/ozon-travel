@@ -20,7 +20,8 @@ async function addUser({
   username,
   firstName,
   lastName,
-  referralCode,
+  startParam,
+  sessionId,
 }) {
   const normalizedMaxUserId = String(maxUserId).trim();
   const normalizedUsername = normalizeString(username);
@@ -35,7 +36,8 @@ async function addUser({
     lastName: normalizedLastName,
     platformUserId: normalizedMaxUserId,
     platformNickname: normalizedUsername,
-    invitedByReferralCode: referralCode || undefined,
+    startParam: startParam || undefined,
+    sessionId: sessionId || undefined,
   };
 
   try {

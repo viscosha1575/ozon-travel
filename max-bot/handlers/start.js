@@ -12,6 +12,7 @@ import {
 } from '../config.js';
 import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
+import { parseStartParam } from '../utils/startParam.js';
 
 const rulesKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.callback('Согласен с правилами', 'agree_rules')],
@@ -188,15 +189,15 @@ async function checkChannelSubscription(userId) {
 async function registerUser(ctx, { logEntry = true } = {}) {
   const { userId, username, firstName, lastName } = extractUser(ctx);
   const rawStartParam = getMessageText(ctx).trim().split(/\s+/)[1] || '';
-  const referralCode = rawStartParam.toUpperCase().startsWith('REF')
-    ? rawStartParam.toUpperCase()
-    : '';
+  const parsedStartParam = parseStartParam(rawStartParam);
 
   if (logEntry) {
     logger.info('MAX user entered start flow', {
       userId,
       username,
-      referralCode,
+      referralCode: parsedStartParam.referralCode,
+      utmSlug: parsedStartParam.utmSlug,
+      startParam: parsedStartParam.raw,
     });
   }
 
@@ -211,7 +212,7 @@ async function registerUser(ctx, { logEntry = true } = {}) {
       username,
       firstName,
       lastName,
-      referralCode,
+      startParam: parsedStartParam.raw,
     });
     await createMaxLog({
       maxUserId: userId,
@@ -219,7 +220,9 @@ async function registerUser(ctx, { logEntry = true } = {}) {
       eventName: 'start',
       metadata: {
         username,
-        referralCode,
+        referralCode: parsedStartParam.referralCode,
+        utmSlug: parsedStartParam.utmSlug,
+        startParam: parsedStartParam.raw,
       },
     });
     return true;

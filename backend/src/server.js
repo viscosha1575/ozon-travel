@@ -10,6 +10,7 @@ import { initDatabase } from "./db.js";
 import { getUploadsDir, initImageStorage } from "./imageStorage.js";
 import {
   deletePlayerAnalytics,
+  getAnalyticsUtm,
   getAnalyticsOverview,
   getPlayerAnalyticsDetails,
   getPlayerLogs,
@@ -284,6 +285,11 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/analytics/overview") {
       res.json(await getAnalyticsOverview(body));
+      return;
+    }
+
+    if (path === "/api/analytics/utm") {
+      res.json(await getAnalyticsUtm(body));
       return;
     }
 

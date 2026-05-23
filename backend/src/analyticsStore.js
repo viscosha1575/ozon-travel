@@ -1,4 +1,5 @@
 import { query } from "./db.js";
+import { parseStartParam } from "./startParam.js";
 import {
   deleteUserById,
   getOrCreateUser,
@@ -416,6 +417,8 @@ function mapPlayerRow(player, sessionStats = {}, logStats = {}, latestPrize = {}
     lastName: player.last_name,
   });
 
+  const parsedStartParam = parseStartParam(player.start_param || "");
+
   return {
     id: Number(player.id),
     telegramUserId: player.external_id,
@@ -424,8 +427,9 @@ function mapPlayerRow(player, sessionStats = {}, logStats = {}, latestPrize = {}
     lastName: player.last_name || "",
     languageCode: player.language_code || "",
     referralCode: player.referral_code || "",
-    referredByCode: player.start_param || "",
-    hasReferral: Boolean(player.start_param),
+    referredByCode: parsedStartParam.referralCode,
+    hasReferral: Boolean(parsedStartParam.referralCode),
+    utmSlug: player.utm_slug || parsedStartParam.utmSlug || "",
     referredByUserId: player.referred_by_user_id ? Number(player.referred_by_user_id) : null,
     subscribedToChannel: false,
     completedGame: finishedSessions > 0 || Boolean(latestPrize.promo_code),
@@ -455,6 +459,7 @@ async function getPlayerBaseMaps() {
         last_name,
         language_code,
         start_param,
+        utm_slug,
         referral_code,
         created_at,
         updated_at,
@@ -834,6 +839,44 @@ export async function getAnalyticsOverview(payload = {}) {
   };
 }
 
+export async function getAnalyticsUtm(payload = {}) {
+  const search = normalizeSearch(payload?.search);
+  const result = await query(
+    `
+      SELECT
+        utm_slug,
+        COUNT(*)::int AS total_clicks_count,
+        COUNT(*) FILTER (WHERE was_existing_player = FALSE)::int AS new_users_count,
+        COUNT(*) FILTER (WHERE was_existing_player = TRUE)::int AS returning_users_count,
+        MAX(created_at) AS last_click_at
+      FROM utm_visits
+      GROUP BY utm_slug
+      ORDER BY COUNT(*) DESC, utm_slug ASC
+    `,
+  );
+
+  let items = result.rows.map((row) => ({
+    utmSlug: row.utm_slug || "",
+    newUsersCount: Number(row.new_users_count || 0),
+    returningUsersCount: Number(row.returning_users_count || 0),
+    totalClicksCount: Number(row.total_clicks_count || 0),
+    lastClickAt: row.last_click_at || null,
+  }));
+
+  if (search) {
+    items = items.filter((item) => item.utmSlug.toLowerCase().includes(search));
+  }
+
+  return {
+    items,
+    summary: {
+      totalUtmsCount: items.length,
+      totalClicksCount: items.reduce((sum, item) => sum + Number(item.totalClicksCount || 0), 0),
+      totalNewUsersCount: items.reduce((sum, item) => sum + Number(item.newUsersCount || 0), 0),
+    },
+  };
+}
+
 export async function listPlayersAnalytics(payload = {}) {
   const page = Math.max(1, Number(payload?.page) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(payload?.pageSize) || 25));
@@ -861,6 +904,7 @@ export async function listPlayersAnalytics(payload = {}) {
         player.lastName,
         player.referralCode,
         player.referredByCode,
+        player.utmSlug,
         player.displayName,
       ].join(" ").toLowerCase();
 
