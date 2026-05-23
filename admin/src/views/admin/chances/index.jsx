@@ -197,8 +197,8 @@ export default function ChancesPage() {
                 <Tbody>
                   {response.items.length > 0 ? response.items.map((item) => (
                     <Tr key={item.id}>
-                      <Td borderColor={borderColor}>
-                        <Flex align="center" gap="12px">
+                      <Td borderColor={borderColor} py="18px">
+                        <Flex align="center" gap="12px" minH="44px">
                           <Flex
                             w="44px"
                             h="44px"
@@ -235,7 +235,7 @@ export default function ChancesPage() {
                           </Stack>
                         </Flex>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         <Tooltip label={item.type} hasArrow placement="top">
                           <Flex
                             w="36px"
@@ -253,7 +253,7 @@ export default function ChancesPage() {
                           </Flex>
                         </Tooltip>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         {item.category ? (
                           <Badge
                             bg={categoryBadgeBg}
@@ -273,12 +273,12 @@ export default function ChancesPage() {
                           </Text>
                         )}
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         <Text color={textColor} fontSize="sm" fontWeight="600">
                           {item.promoCodeType || "—"}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         <Input
                           h="44px"
                           minW="110px"
@@ -291,12 +291,12 @@ export default function ChancesPage() {
                           placeholder="1x"
                         />
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         <Text color={probabilityColor} fontSize="sm" fontWeight="700">
                           {formatProbability(item.probabilityPercent)}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="18px">
                         <Button
                           variant="lightBrand"
                           size="sm"

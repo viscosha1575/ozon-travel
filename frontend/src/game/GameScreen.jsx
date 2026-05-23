@@ -431,11 +431,12 @@ export default function GameScreen() {
     const fullLoops =
       SPIN_MIN_FULL_LOOPS
       + Math.floor(Math.random() * (SPIN_MAX_FULL_LOOPS - SPIN_MIN_FULL_LOOPS + 1))
-    const baseLoopSteps = (fullLoops + 1) * activeRouletteItems.length
-    const loopSteps = Math.max(
-      activeRouletteItems.length,
-      Math.round(baseLoopSteps * getSpinDistanceMultiplier()),
+    const baseLoopCycles = fullLoops + 1
+    const loopCycles = Math.max(
+      1,
+      Math.round(baseLoopCycles * getSpinDistanceMultiplier()),
     )
+    const loopSteps = loopCycles * activeRouletteItems.length
     const totalSteps = loopSteps + alignmentSteps
     const durationMs = getSpinDurationMs(totalSteps, step)
 
