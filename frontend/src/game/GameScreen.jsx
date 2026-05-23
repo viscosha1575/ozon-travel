@@ -12,6 +12,7 @@ const SPIN_MIN_DURATION = 8400
 const SPIN_MAX_DURATION = 12800
 const SPIN_SCREENFULS_PER_SECOND = 0.58
 const MOBILE_SPIN_DISTANCE_MULTIPLIER = 0.5
+const MOBILE_SPIN_DURATION_MULTIPLIER = 0.82
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
@@ -43,9 +44,9 @@ function easeSpinProgress(value) {
   return easedOut * easedOut * (3 - (2 * easedOut))
 }
 
-function getSpinDistanceMultiplier() {
+function isMobileSpinViewport() {
   if (typeof window === "undefined") {
-    return 1
+    return false
   }
 
   const viewportWidth = Math.max(
@@ -55,6 +56,10 @@ function getSpinDistanceMultiplier() {
   )
 
   return viewportWidth > 0 && viewportWidth <= 768
+}
+
+function getSpinDistanceMultiplier() {
+  return isMobileSpinViewport()
     ? MOBILE_SPIN_DISTANCE_MULTIPLIER
     : 1
 }
@@ -73,8 +78,13 @@ function getSpinDurationMs(totalSteps, step) {
   const durationByViewport = distancePx > 0
     ? (distancePx / (viewportHeight * SPIN_SCREENFULS_PER_SECOND)) * 1000
     : SPIN_MIN_DURATION
+  const normalizedDuration = durationByViewport * (
+    isMobileSpinViewport()
+      ? MOBILE_SPIN_DURATION_MULTIPLIER
+      : 1
+  )
 
-  return Math.round(Math.min(SPIN_MAX_DURATION, Math.max(SPIN_MIN_DURATION, durationByViewport)))
+  return Math.round(Math.min(SPIN_MAX_DURATION, Math.max(SPIN_MIN_DURATION, normalizedDuration)))
 }
 
 function formatAttemptsLabel(value) {
