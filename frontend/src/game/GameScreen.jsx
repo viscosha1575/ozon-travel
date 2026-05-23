@@ -8,9 +8,9 @@ const CENTER_PATTERN_PATH = "/game/center.webp"
 const SURFACE_ANIMATION_DURATION = 420
 const SPIN_MIN_FULL_LOOPS = 4
 const SPIN_MAX_FULL_LOOPS = 5
-const SPIN_MIN_DURATION = 6200
-const SPIN_MAX_DURATION = 9200
-const SPIN_SCREENFULS_PER_SECOND = 0.95
+const SPIN_MIN_DURATION = 7600
+const SPIN_MAX_DURATION = 11500
+const SPIN_SCREENFULS_PER_SECOND = 0.72
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
@@ -38,7 +38,7 @@ function roundToDevicePixel(value) {
 
 function easeSpinProgress(value) {
   const progress = Math.min(1, Math.max(0, Number(value) || 0))
-  const easedOut = 1 - ((1 - progress) ** 1.08)
+  const easedOut = 1 - ((1 - progress) ** 1.03)
   return easedOut * easedOut * (3 - (2 * easedOut))
 }
 
