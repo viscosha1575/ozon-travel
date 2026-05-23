@@ -625,12 +625,13 @@ async function listAwardedPrizesForUser(userId) {
     `
       SELECT
         awarded_prizes.id,
-        awarded_prizes.title,
+        awarded_prizes.title AS my_prize_title,
         awarded_prizes.promo_code,
         awarded_prizes.image,
         awarded_prizes.expires_at,
         awarded_prizes.created_at,
         prize_positions.type AS prize_type,
+        prize_positions.title AS prize_title,
         prize_positions.roulette_description AS prize_description
       FROM awarded_prizes
       LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
@@ -643,7 +644,8 @@ async function listAwardedPrizesForUser(userId) {
 
   return result.rows.map((row) => ({
     id: Number(row.id),
-    title: row.title,
+    title: row.prize_title || row.my_prize_title,
+    myPrizeText: row.my_prize_title || row.prize_title || "",
     promoCode: row.promo_code,
     image: normalizeStoredImage(row.image),
     expiresAt: row.expires_at,
@@ -700,6 +702,7 @@ export async function getGameBootstrap(userInfo = {}) {
       id: item.id,
       image: item.image?.previewUrl || "",
       title: item.title,
+      myPrizeText: item.myPrizeText,
       description: item.description,
       expiresAt: item.expiresAt,
       promoCode: item.promoCode,
@@ -780,12 +783,13 @@ export async function spinPrize(userInfo = {}) {
       `
         SELECT
           awarded_prizes.id,
-          awarded_prizes.title,
+          awarded_prizes.title AS my_prize_title,
           awarded_prizes.promo_code,
           awarded_prizes.image,
           awarded_prizes.expires_at,
           awarded_prizes.created_at,
           prize_positions.type AS prize_type,
+          prize_positions.title AS prize_title,
           prize_positions.roulette_description AS prize_description
         FROM awarded_prizes
         LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
@@ -798,7 +802,8 @@ export async function spinPrize(userInfo = {}) {
     const myPrizes = myPrizesResult.rows.map((row) => ({
       id: Number(row.id),
       image: normalizeStoredImage(row.image)?.previewUrl || "",
-      title: row.title,
+      title: row.prize_title || row.my_prize_title,
+      myPrizeText: row.my_prize_title || row.prize_title || "",
       expiresAt: row.expires_at,
       promoCode: row.promo_code,
       type: row.prize_type || "Приз",
@@ -825,7 +830,8 @@ export async function spinPrize(userInfo = {}) {
       result: {
         positionId: selectedPrize.id,
         type: selectedPrize.type,
-        title: selectedPrize.myPrizeText || selectedPrize.title,
+        title: selectedPrize.title,
+        myPrizeText: selectedPrize.myPrizeText || selectedPrize.title,
         fullTitle: selectedPrize.title,
         description: selectedPrize.rouletteDescription || "",
         image: selectedPrize.rouletteImage?.previewUrl || "",

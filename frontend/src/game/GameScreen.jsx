@@ -134,6 +134,7 @@ function normalizeMyPrizes(items, assetVersion) {
 
   return items.map((item) => ({
     ...item,
+    myPrizeText: item.myPrizeText || item.title || "",
     assetVersion,
     image: withAssetVersion(item.image, assetVersion),
   }))
@@ -204,7 +205,7 @@ function buildResultBag(result, rouletteItems) {
     label: result.fullTitle || result.title || matchedItem?.label || `result-${result.positionId ?? "item"}`,
     title: result.fullTitle || result.title || matchedItem?.title || "",
     description: result.description || matchedItem?.description || "",
-    myPrizeText: result.title || matchedItem?.myPrizeText || "",
+    myPrizeText: result.myPrizeText || matchedItem?.myPrizeText || result.title || "",
     expiresAt: result.expiresAt || matchedItem?.expiresAt || "",
     chanceValue: matchedItem?.chanceValue || "1x",
     type: result.type || matchedItem?.type || "Приз",
@@ -553,7 +554,7 @@ export default function GameScreen() {
       label: prize.title || `prize-${prize.id}`,
       title: prize.title || "",
       description: prize.description || "",
-      myPrizeText: prize.title || "",
+      myPrizeText: prize.myPrizeText || prize.title || "",
       expiresAt: prize.expiresAt || "",
       chanceValue: prize.chanceValue || "1x",
       type: prize.type || "Приз",
@@ -561,6 +562,7 @@ export default function GameScreen() {
     setResultPrize({
       type: prize.type || "Приз",
       title: prize.title || "",
+      myPrizeText: prize.myPrizeText || prize.title || "",
       description: prize.description || "",
       image: prize.image || "",
       promoCode: prize.promoCode || "",
@@ -1082,7 +1084,7 @@ export default function GameScreen() {
                     />
                   </div>
                   <div className="game-prize-card-content">
-                    <h3 className="game-prize-card-title">{prize.title}</h3>
+                    <h3 className="game-prize-card-title">{prize.myPrizeText || prize.title}</h3>
                     <p className="game-prize-card-date">{prize.expiresAt}</p>
                   </div>
                 </button>
