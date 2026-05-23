@@ -141,13 +141,14 @@ function normalizeMyPrizes(items, assetVersion) {
 
 function renderResultDescription(description, isNonPrize, toneClassName = "") {
   const text = String(description || "").trim()
+  const className = `game-result-description ${toneClassName}`.trim()
 
   if (!text) {
-    return "Описание позиции появится после настройки в админке."
+    return <p className={className}>Описание позиции появится после настройки в админке.</p>
   }
 
   if (!isNonPrize) {
-    return text
+    return <p className={className}>{text}</p>
   }
 
   const paragraphs = text
@@ -173,7 +174,7 @@ function renderResultDescription(description, isNonPrize, toneClassName = "") {
         return (
         <p
           key={paragraph}
-          className={`game-result-description game-result-description--paragraph ${toneClassName}`.trim()}
+          className={`${className} game-result-description--paragraph`.trim()}
         >
           {lines.map((line) => (
             <span key={line} className="game-result-description-line">{line}</span>

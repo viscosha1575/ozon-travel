@@ -826,7 +826,7 @@ body {
   margin: clamp(4px, 0.948svh, 8px) 0 0;
   color: #6d7d90;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: clamp(12px, 1.659svh, 14px);
+  font-size: clamp(13px, 1.896svh, 16px);
   font-weight: 400;
   line-height: 1.3;
   letter-spacing: 0.12px;
@@ -848,6 +848,10 @@ body {
 
 .game-result-description--dark {
   color: #070707;
+  font-size: clamp(13px, 1.896svh, 16px);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0.12px;
 }
 
 .game-result-actions {
