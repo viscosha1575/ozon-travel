@@ -199,7 +199,7 @@ export default function ChancesPage() {
                       <Td borderColor={borderColor}>
                         <Stack spacing="4px">
                           <Text color={textColor} fontSize="sm" fontWeight="700">
-                            {item.title}
+                            {item.myPrizeText || item.title}
                           </Text>
                           <Text color={textColorSecondary} fontSize="xs">
                             ID: {item.id}
