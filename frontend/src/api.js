@@ -1,3 +1,8 @@
+import {
+  getMiniAppHost,
+  getMiniAppInitData,
+} from "./telegram.js";
+
 const API_URL = String(
   import.meta.env.VITE_API_URL || "http://localhost:3001/api",
 ).replace(/\/$/, "");
@@ -42,10 +47,23 @@ function buildHeaders(headers = {}) {
   const nextHeaders = {
     ...headers,
   };
-  const initData = window.Telegram?.WebApp?.initData;
+  const initData = getMiniAppInitData();
+  const miniAppHost = getMiniAppHost();
 
   if (initData) {
-    nextHeaders["X-Telegram-Init-Data"] = initData;
+    nextHeaders["X-Mini-App-Init-Data"] = initData;
+  }
+
+  if (miniAppHost && miniAppHost !== "browser") {
+    nextHeaders["X-Mini-App-Platform"] = miniAppHost;
+
+    if (miniAppHost === "telegram") {
+      nextHeaders["X-Telegram-Init-Data"] = initData;
+    }
+
+    if (miniAppHost === "max") {
+      nextHeaders["X-Max-Init-Data"] = initData;
+    }
   }
 
   nextHeaders["X-Client-Session-Id"] = getClientSessionId();

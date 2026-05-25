@@ -1,6 +1,11 @@
-import { startTransition, useEffect, useRef, useState } from "react"
+import { startTransition, useCallback, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
+import {
+  getMiniApp,
+  getMiniAppViewportHeight,
+  getMiniAppViewportWidth,
+} from "../telegram.js"
 
 const LEFT_TRIANGLE_PATH = "/game/left-triangle.svg"
 const RIGHT_TRIANGLE_PATH = "/game/rigth-triangle.svg"
@@ -17,9 +22,7 @@ const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
 const TRACK_TAIL_BUFFER = 9
-const SPIN_TOTAL_EASING = "cubic-bezier(0.12, 0.72, 0.2, 1)"
 const RESULT_REVEAL_DELAY = 72
-const DEBUG_PANEL_UPDATE_INTERVAL = 120
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
 const REFERRAL_SHARE_TITLE = "Приглашаю в игру"
@@ -53,11 +56,7 @@ function isMobileSpinViewport() {
     return false
   }
 
-  const viewportWidth = Math.max(
-    Number(window.Telegram?.WebApp?.viewportStableWidth) || 0,
-    Number(window.Telegram?.WebApp?.viewportWidth) || 0,
-    Number(window.innerWidth) || 0,
-  )
+  const viewportWidth = getMiniAppViewportWidth()
 
   return viewportWidth > 0 && viewportWidth <= 768
 }
@@ -72,11 +71,7 @@ function getSpinDurationMs(totalSteps, step) {
   const safeTotalSteps = Math.max(0, Number(totalSteps) || 0)
   const safeStep = Math.max(0, Number(step) || 0)
   const viewportHeight = typeof window !== "undefined"
-    ? Math.max(
-      Number(window.Telegram?.WebApp?.viewportStableHeight) || 0,
-      Number(window.innerHeight) || 0,
-      1,
-    )
+    ? Math.max(getMiniAppViewportHeight(), 1)
     : 1
   const distancePx = safeTotalSteps * safeStep
   const durationByViewport = distancePx > 0
@@ -145,7 +140,7 @@ function getReadableErrorMessage(error, fallback = DEFAULT_ERROR_MESSAGE) {
     return "Не удалось выполнить запрос. Попробуйте еще раз."
   }
 
-  if (/^[\x00-\x7F\s.,!?;:'"()/-]+$/.test(rawMessage)) {
+  if (/^[\n\r\t -~]+$/.test(rawMessage)) {
     return fallback
   }
 
@@ -316,6 +311,14 @@ function getTrackWindowSteps(rouletteItemsLength) {
   return Math.max(rouletteItemsLength + TRACK_TAIL_BUFFER, TRACK_CENTER_OFFSET + TRACK_TAIL_BUFFER + 6)
 }
 
+function getAssetVersion() {
+  return Date.now()
+}
+
+function getRandomLoopCount(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1))
+}
+
 export default function GameScreen() {
   const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
@@ -451,7 +454,7 @@ export default function GameScreen() {
       activeRouletteItems.findIndex((item) => item.id === targetPositionId)
     )
     const matchedRouletteItem = activeRouletteItems[targetBagIndex] || null
-    const assetVersion = matchedRouletteItem?.assetVersion || Date.now()
+    const assetVersion = matchedRouletteItem?.assetVersion || getAssetVersion()
     const nextResult = spinResponse?.result
       ? {
         ...spinResponse.result,
@@ -471,9 +474,7 @@ export default function GameScreen() {
       targetBagIndex - currentCenterBagIndex,
       activeRouletteItems.length
     )
-    const fullLoops =
-      SPIN_MIN_FULL_LOOPS
-      + Math.floor(Math.random() * (SPIN_MAX_FULL_LOOPS - SPIN_MIN_FULL_LOOPS + 1))
+    const fullLoops = getRandomLoopCount(SPIN_MIN_FULL_LOOPS, SPIN_MAX_FULL_LOOPS)
     const baseLoopCycles = fullLoops + 1
     const loopCycles = Math.max(
       1,
@@ -614,8 +615,10 @@ export default function GameScreen() {
     })
 
     try {
-      if (typeof window !== "undefined" && typeof window.WebApp?.shareMaxContent === "function") {
-        const result = await window.WebApp.shareMaxContent({
+      const miniApp = getMiniApp()
+
+      if (typeof miniApp?.shareMaxContent === "function") {
+        const result = await miniApp.shareMaxContent({
           text: REFERRAL_SHARE_TITLE,
           link: referralLink,
         })
@@ -725,10 +728,10 @@ export default function GameScreen() {
     }
   }
 
-  const loadGameBootstrap = async () => {
+  const loadGameBootstrap = useCallback(async () => {
     try {
       const response = await getJson("/game/bootstrap")
-      const assetVersion = Date.now()
+      const assetVersion = getAssetVersion()
 
       if (!isMountedRef.current) {
         return
@@ -744,7 +747,11 @@ export default function GameScreen() {
       if (nextRouletteItems.length) {
         setSpinError("")
       } else {
-        openErrorOverlay("Сервер не вернул позиции для карусели")
+        setSpinError("Сервер не вернул позиции для карусели")
+        clearTimeout(overlayTimeoutRef.current)
+        setIsOverlayClosing(false)
+        setActiveOverlay("error")
+        setRenderedOverlay("error")
       }
       writeBootstrapCache({
         rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
@@ -759,9 +766,13 @@ export default function GameScreen() {
       })
     } catch (error) {
       console.warn("Game bootstrap failed", error)
-      openErrorOverlay(error, "Не удалось загрузить игру")
+      setSpinError(getReadableErrorMessage(error, "Не удалось загрузить игру"))
+      clearTimeout(overlayTimeoutRef.current)
+      setIsOverlayClosing(false)
+      setActiveOverlay("error")
+      setRenderedOverlay("error")
     }
-  }
+  }, [])
 
   const handleDevGrantAttempts = async () => {
     try {
@@ -816,28 +827,29 @@ export default function GameScreen() {
   }
 
   useEffect(() => {
-    if (activeOverlay) {
-      clearTimeout(overlayTimeoutRef.current)
-      setRenderedOverlay(activeOverlay)
-      setIsOverlayClosing(false)
-    }
-  }, [activeOverlay])
-
-  useEffect(() => {
-    void loadGameBootstrap()
+    const frameId = requestAnimationFrame(() => {
+      void loadGameBootstrap()
+    })
 
     return () => {
+      cancelAnimationFrame(frameId)
       isMountedRef.current = false
     }
-  }, [])
+  }, [loadGameBootstrap])
 
   useEffect(() => {
-    centerBagIndexRef.current = 0
-    setCenterBagIndex(0)
-    setTrackItems(createTrackItems(activeRouletteItems, 0, getTrackWindowSteps(activeRouletteItems.length)))
-    setTrackTranslate(0)
-    setLockedSlotHeight(null)
-  }, [rouletteItems])
+    const frameId = requestAnimationFrame(() => {
+      centerBagIndexRef.current = 0
+      setCenterBagIndex(0)
+      setTrackItems(createTrackItems(activeRouletteItems, 0, getTrackWindowSteps(activeRouletteItems.length)))
+      setTrackTranslate(0)
+      setLockedSlotHeight(null)
+    })
+
+    return () => {
+      cancelAnimationFrame(frameId)
+    }
+  }, [activeRouletteItems])
 
   useEffect(() => {
     if (isSpinActiveRef.current) {

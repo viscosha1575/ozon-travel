@@ -35,7 +35,7 @@ import {
   revokePush,
   sendPush,
 } from "./pushStore.js";
-import { resolveTelegramUser } from "./telegramUser.js";
+import { resolveMiniAppUser } from "./miniAppUser.js";
 import {
   createUserFromPlatform,
   deleteUserById,
@@ -64,7 +64,7 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/game/bootstrap", async (req, res, next) => {
   try {
-    const response = await getGameBootstrap(resolveTelegramUser(req));
+    const response = await getGameBootstrap(resolveMiniAppUser(req));
     res.json(response);
   } catch (error) {
     next(error);
@@ -73,7 +73,7 @@ app.get("/api/game/bootstrap", async (req, res, next) => {
 
 app.post("/api/game/spin", async (req, res, next) => {
   try {
-    const response = await spinPrize(resolveTelegramUser(req));
+    const response = await spinPrize(resolveMiniAppUser(req));
     res.json(response);
   } catch (error) {
     next(error);
@@ -82,7 +82,7 @@ app.post("/api/game/spin", async (req, res, next) => {
 
 app.post("/api/game/open", async (req, res, next) => {
   try {
-    const userInfo = resolveTelegramUser(req);
+    const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
     const attempts = await ensureDailyAttemptGrant(user.id);
     const referral = await getReferralData(user.id);
@@ -112,7 +112,7 @@ app.post("/api/game/open", async (req, res, next) => {
 
 app.post("/api/game/event", async (req, res, next) => {
   try {
-    const userInfo = resolveTelegramUser(req);
+    const userInfo = resolveMiniAppUser(req);
     const eventName = String(req.body?.eventName || "").trim();
     const details = req.body?.details && typeof req.body.details === "object" && !Array.isArray(req.body.details)
       ? req.body.details
@@ -134,7 +134,7 @@ app.post("/api/game/event", async (req, res, next) => {
 
 app.post("/api/game/dev/grant-attempts", async (req, res, next) => {
   try {
-    const userInfo = resolveTelegramUser(req);
+    const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
     const attempts = await grantUserAttempts(user.id, req.body?.count || 10);
 
@@ -158,7 +158,7 @@ app.post("/api/game/dev/grant-attempts", async (req, res, next) => {
 
 app.post("/api/game/dev/delete-user", async (req, res, next) => {
   try {
-    const userInfo = resolveTelegramUser(req);
+    const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
     const deleted = await deleteUserById(user.id);
 
