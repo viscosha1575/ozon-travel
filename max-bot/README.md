@@ -30,7 +30,7 @@
 
 - production webhook host: `https://bot.ozon-travel-max.ru`
 - рекомендуемый webhook path: `/max/webhook`
-- кнопка открытия игры ведет на `MAX_BOT_PUBLIC_URL?startapp`, а если ссылка на бота не задана, используется `GAME_WEBAPP_URL`
+- веб-игра открывается по `GAME_WEBAPP_URL`
 
 ## Переменные окружения
 
@@ -45,7 +45,6 @@
 - `MAX_SUBSCRIPTION_CHECK_MODE` - `mock` для мокап-сценария или `api` для реальной проверки подписки;
 - `MAX_CHANNEL_URL` - ссылка на канал проекта в MAX;
 - `MAX_CHANNEL_CHAT_ID` - optional, id канала MAX для ускорения проверки подписки;
-- `MAX_BOT_PUBLIC_URL` - публичная ссылка на бота в MAX, например `https://max.ru/ozontravel_lenta_bot`;
 - `GAME_WEBAPP_URL` - ссылка на веб-игру, например `https://ozon-travel-max.ru`;
 - `SUPPORT_CONTACT` - контакт поддержки;
 - `GAME_API_URL` - адрес backend API;
