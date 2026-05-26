@@ -5,6 +5,7 @@ import {
 } from '../services/userService.js';
 import { createMaxLog } from '../services/logService.js';
 import {
+  MAX_BOT_PUBLIC_URL,
   MAX_CHANNEL_URL,
   MAX_CHANNEL_CHAT_ID,
   GAME_WEBAPP_URL,
@@ -24,8 +25,25 @@ const subscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
 ]);
 
+function buildMiniAppDirectLink(botPublicUrl) {
+  const normalizedBotUrl = String(botPublicUrl || '').trim().replace(/\/$/, '');
+
+  if (!normalizedBotUrl) {
+    return '';
+  }
+
+  if (/[?&]startapp(?:=|&|$)/.test(normalizedBotUrl)) {
+    return normalizedBotUrl;
+  }
+
+  const separator = normalizedBotUrl.includes('?') ? '&' : '?';
+  return `${normalizedBotUrl}${separator}startapp`;
+}
+
+const gameOpenUrl = buildMiniAppDirectLink(MAX_BOT_PUBLIC_URL) || GAME_WEBAPP_URL;
+
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
-  [Keyboard.button.link('Открыть игру', GAME_WEBAPP_URL)],
+  [Keyboard.button.link('Открыть игру', gameOpenUrl)],
   [
     Keyboard.button.callback('Правила', 'show_rules'),
     Keyboard.button.callback('Поддержка', 'show_support'),

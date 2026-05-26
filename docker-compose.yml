@@ -134,6 +134,7 @@ services:
       MAX_SUBSCRIPTION_CHECK_MODE: ${MAX_SUBSCRIPTION_CHECK_MODE:-mock}
       MAX_CHANNEL_URL: ${MAX_CHANNEL_URL}
       MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-https://${DOMAIN}}
       SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
       GAME_API_URL: http://backend:3001
