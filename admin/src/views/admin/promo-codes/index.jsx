@@ -55,8 +55,9 @@ const PRIZE_CATEGORY_OPTIONS = [
 
 const PROMO_CODE_TYPE_OPTIONS = [
   { value: "", label: "Нет типа" },
-  { value: "Промокод на первый заказ", label: "Промокод на первый заказ" },
-  { value: "Промокод на повторный заказ", label: "Промокод на повторный заказ" },
+  { value: "Первый заказ", label: "Первый заказ" },
+  { value: "Повторный заказ", label: "Повторный заказ" },
+  { value: "Заказ на сумму от", label: "Заказ на сумму от" },
 ];
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
