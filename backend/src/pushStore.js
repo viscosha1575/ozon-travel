@@ -58,7 +58,7 @@ function stripHtml(value) {
     .replace(/&#39;/gi, "'")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
     .trim();
 }
 
@@ -99,8 +99,7 @@ function sanitizeInlineHtml(value) {
 function convertNewlinesToMaxBreaks(value) {
   return String(value || "")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/\n\n/g, "<br /><br />")
-    .replace(/\n/g, "<br />");
+    .trim();
 }
 
 function formatInlineForMax(value) {

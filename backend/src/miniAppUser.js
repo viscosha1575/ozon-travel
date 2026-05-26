@@ -15,7 +15,6 @@ function parseInitDataString(initData = "") {
       firstName: String(user.first_name || "").trim(),
       lastName: String(user.last_name || "").trim(),
       languageCode: String(user.language_code || "").trim(),
-      startParam: String(params.get("start_param") || "").trim(),
     };
   } catch {
     return null;
@@ -84,7 +83,8 @@ export function resolveMiniAppUser(req) {
       firstName: parsed.firstName,
       lastName: parsed.lastName,
       languageCode: parsed.languageCode,
-      startParam: parsed.startParam,
+      // Referral binding must happen only in the bot start flow.
+      startParam: "",
       sessionId: String(req.headers["x-client-session-id"] || "").trim(),
     };
   }

@@ -542,7 +542,7 @@ body {
   margin: 0;
   color: #6d7d90;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: var(--app-muted-copy-font-size);
+  font-size: 16px;
   font-weight: 400;
   line-height: 1.3;
   letter-spacing: 0.12px;
@@ -552,6 +552,12 @@ body {
   display: grid;
   justify-items: center;
   gap: 2px;
+  line-height: 1.24;
+}
+
+.game-overlay-description-line-fixed {
+  display: block;
+  white-space: nowrap;
 }
 
 .game-overlay-description-inline {
@@ -559,7 +565,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .game-overlay-badge {
@@ -1007,6 +1014,10 @@ body {
 .game-spin-button:disabled {
   cursor: default;
   opacity: 0.9;
+}
+
+.game-spin-button--single {
+  gap: 0;
 }
 
 .game-spin-button-label {
@@ -1605,7 +1616,7 @@ body {
   color: var(--text-secondary);
   text-align: center;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: var(--app-muted-copy-font-size);
+  font-size: 16px;
   font-style: normal;
   font-weight: 400;
   line-height: 1.3;
@@ -1644,7 +1655,7 @@ body {
   color: var(--text-secondary);
   text-align: center;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: var(--app-muted-copy-font-size);
+  font-size: 16px;
   font-style: normal;
   font-weight: 400;
   line-height: 1.3;
@@ -1741,7 +1752,7 @@ body {
 
   .content-kicker,
   .content-description {
-    font-size: var(--app-muted-copy-font-size);
+    font-size: 16px;
   }
 
   .content-title {

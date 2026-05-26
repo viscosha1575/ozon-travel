@@ -14,11 +14,6 @@ import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
 import { parseStartParam } from '../utils/startParam.js';
 
-const rulesKeyboard = Keyboard.inlineKeyboard([
-  [Keyboard.button.callback('Согласен с правилами', 'agree_rules')],
-  [Keyboard.button.callback('Показать правила', 'show_rules')],
-]);
-
 const subscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.link('Подписаться', MAX_CHANNEL_URL)],
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
@@ -26,38 +21,19 @@ const subscriptionKeyboard = Keyboard.inlineKeyboard([
 
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.link('Открыть игру', GAME_WEBAPP_URL)],
-  [
-    Keyboard.button.callback('Правила', 'show_rules'),
-    Keyboard.button.callback('Поддержка', 'show_support'),
-  ],
+  [Keyboard.button.callback('Поддержка', 'show_support')],
 ]);
 
 const welcomeMessage = [
-  'Добро пожаловать в Ozon Travel MAX.',
-  '',
-  'Это мокап стартового сценария для бота на платформе MAX.',
-  '',
-  'Перед началом нужно подтвердить согласие с правилами игры.',
-].join('\n');
-
-const rulesMessage = [
-  'Правила участия',
-  '',
-  '1. Участник запускает игру через бота в MAX.',
-  '2. Для доступа к игре нужно подтвердить согласие с правилами.',
-  '3. Для участия требуется подписка на официальный канал проекта в MAX.',
-  '4. После успешной проверки подписки бот открывает доступ к игре.',
-  '5. Тексты и механики пока моковые и будут уточняться отдельно.',
+  'Перед стартом подпишитесь на канал Ozon Travel.',
 ].join('\n');
 
 const subscriptionMessage = [
-  'Отлично, правила приняты.',
-  '',
-  'Теперь подпишись на канал проекта в MAX и нажми «Проверить подписку».',
+  'Перед стартом подпишитесь на канал Ozon Travel.',
 ].join('\n');
 
 const subscriptionRetryMessage =
-  'Подписка пока не найдена. Подпишись на канал и повтори проверку.';
+  'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите «Проверить подписку» еще раз.';
 
 const menuMessage = [
   'Подписка подтверждена.',
@@ -65,7 +41,6 @@ const menuMessage = [
   'Это мокап главного меню бота.',
   'Доступные действия:',
   '• открыть игру',
-  '• посмотреть правила',
   '• открыть поддержку',
 ].join('\n');
 
@@ -238,7 +213,7 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 async function sendStartStep(ctx) {
   await registerUser(ctx);
   await safeReply(ctx, welcomeMessage, {
-    attachments: [rulesKeyboard],
+    attachments: [subscriptionKeyboard],
   }, 'sendStartStep');
 }
 
@@ -256,29 +231,11 @@ async function sendGameMenu(ctx) {
 
 bot.on('bot_started', sendStartStep);
 bot.command('start', sendStartStep);
-bot.command('rules', async (ctx) => {
-  await safeReply(ctx, rulesMessage, undefined, 'command:rules');
-});
 bot.command('menu', async (ctx) => {
   await sendGameMenu(ctx);
 });
 bot.command('support', async (ctx) => {
   await safeReply(ctx, supportMessage, undefined, 'command:support');
-});
-
-bot.action('show_rules', async (ctx) => {
-  const { userId } = extractUser(ctx);
-
-  await createMaxLog({
-    maxUserId: userId,
-    eventType: 'click',
-    eventName: 'show_rules',
-  });
-
-  await ctx.answerOnCallback({
-    notification: 'Отправили правила в чат',
-  });
-  await safeReply(ctx, rulesMessage, undefined, 'action:show_rules');
 });
 
 bot.action('show_support', async (ctx) => {
@@ -294,21 +251,6 @@ bot.action('show_support', async (ctx) => {
     notification: 'Отправили контакты поддержки',
   });
   await safeReply(ctx, supportMessage, undefined, 'action:show_support');
-});
-
-bot.action('agree_rules', async (ctx) => {
-  const { userId } = extractUser(ctx);
-
-  await createMaxLog({
-    maxUserId: userId,
-    eventType: 'click',
-    eventName: 'agree_rules',
-  });
-
-  await ctx.answerOnCallback({
-    notification: 'Согласие сохранено',
-  });
-  await sendSubscriptionStep(ctx);
 });
 
 bot.action('check_subscription', async (ctx) => {

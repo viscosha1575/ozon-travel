@@ -33,6 +33,10 @@ function formatProbability(value) {
   }).format(Number(value) || 0)}%`;
 }
 
+function formatCount(value) {
+  return new Intl.NumberFormat("ru-RU").format(Math.max(0, Number(value) || 0));
+}
+
 const EMPTY_RESPONSE = {
   items: [],
   summary: {
@@ -181,30 +185,32 @@ export default function ChancesPage() {
 
         <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
           <Skeleton isLoaded={!loading}>
-            <Box overflowX="auto">
-              <Table variant="simple">
+            <Box overflowX="hidden">
+              <Table variant="simple" size="sm" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary}>Название</Th>
-                    <Th color={textColorSecondary}>Тип</Th>
-                    <Th color={textColorSecondary}>Категория</Th>
-                    <Th color={textColorSecondary}>Тип промокода</Th>
-                    <Th color={textColorSecondary}>Шанс</Th>
-                    <Th color={textColorSecondary}>Вероятность</Th>
-                    <Th color={textColorSecondary}>Действие</Th>
+                    <Th color={textColorSecondary} w="22%" px="6px" fontSize="10px">Название</Th>
+                    <Th color={textColorSecondary} w="6%" px="6px" fontSize="10px">Тип</Th>
+                    <Th color={textColorSecondary} w="12%" px="6px" fontSize="10px">Категория</Th>
+                    <Th color={textColorSecondary} w="14%" px="6px" fontSize="10px">Тип промокода</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Всего</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Остаток</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Шанс</Th>
+                    <Th color={textColorSecondary} w="9%" px="6px" fontSize="10px">Вероятность</Th>
+                    <Th color={textColorSecondary} w="7%" px="6px" fontSize="10px">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {response.items.length > 0 ? response.items.map((item) => (
                     <Tr key={item.id}>
-                      <Td borderColor={borderColor} py="18px">
-                        <Flex align="center" gap="12px" minH="44px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Flex align="center" gap="8px" minH="38px">
                           <Flex
-                            w="44px"
-                            h="44px"
+                            w="32px"
+                            h="32px"
                             align="center"
                             justify="center"
-                            borderRadius="14px"
+                            borderRadius="10px"
                             bg={categoryBadgeBg}
                             overflow="hidden"
                             flexShrink={0}
@@ -226,97 +232,109 @@ export default function ChancesPage() {
                             )}
                           </Flex>
                           <Stack spacing="4px">
-                            <Text color={textColor} fontSize="sm" fontWeight="700">
+                            <Text color={textColor} fontSize="13px" fontWeight="700" lineHeight="1.3" noOfLines={2}>
                               {item.myPrizeText || item.title}
                             </Text>
-                            <Text color={textColorSecondary} fontSize="xs">
+                            <Text color={textColorSecondary} fontSize="11px">
                               ID: {item.id}
                             </Text>
                           </Stack>
                         </Flex>
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Tooltip label={item.type} hasArrow placement="top">
                           <Flex
-                            w="36px"
-                            h="36px"
+                            w="28px"
+                            h="28px"
                             align="center"
                             justify="center"
-                            borderRadius="12px"
+                            borderRadius="9px"
                             bg={item.type === "Приз" ? "brand.50" : categoryBadgeBg}
                             color={item.type === "Приз" ? "brand.500" : textColorSecondary}
                           >
                             <Icon
                               as={item.type === "Приз" ? MdCardGiftcard : MdDoNotDisturbAlt}
-                              boxSize="18px"
+                              boxSize="16px"
                             />
                           </Flex>
                         </Tooltip>
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         {item.category ? (
                           <Badge
                             bg={categoryBadgeBg}
                             color={categoryBadgeColor}
                             borderRadius="999px"
-                            px="10px"
-                            py="6px"
-                            fontSize="xs"
+                            px="7px"
+                            py="4px"
+                            fontSize="11px"
                             fontWeight="700"
                             whiteSpace="normal"
                           >
                             {item.category}
                           </Badge>
                         ) : (
-                          <Text color={textColorSecondary} fontSize="sm" fontWeight="600">
+                          <Text color={textColorSecondary} fontSize="13px" fontWeight="600">
                             —
                           </Text>
                         )}
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
-                        <Text color={textColor} fontSize="sm" fontWeight="600">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={textColor} fontSize="11px" fontWeight="600" whiteSpace="normal" lineHeight="1.3">
                           {item.promoCodeType || "—"}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={textColor} fontSize="13px" fontWeight="600">
+                          {formatCount(item.totalCount)}
+                        </Text>
+                      </Td>
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={textColor} fontSize="13px" fontWeight="600">
+                          {formatCount(item.remainingCount)}
+                        </Text>
+                      </Td>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Input
-                          h="44px"
-                          minW="110px"
-                          borderRadius="16px"
+                          h="36px"
+                          minW="64px"
+                          borderRadius="12px"
                           value={drafts[item.id] ?? ""}
                           onChange={(event) => setDrafts((current) => ({
                             ...current,
                             [item.id]: event.target.value,
                           }))}
                           placeholder="1x"
+                          px="8px"
+                          fontSize="13px"
                         />
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
-                        <Text color={probabilityColor} fontSize="sm" fontWeight="700">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={probabilityColor} fontSize="13px" fontWeight="700">
                           {formatProbability(item.probabilityPercent)}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor} py="18px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Button
                           variant="lightBrand"
                           size="sm"
-                          minW="118px"
-                          h="38px"
-                          leftIcon={<Icon as={MdSave} boxSize="16px" />}
-                          fontSize="sm"
+                          minW="34px"
+                          h="34px"
+                          px="0"
+                          fontSize="11px"
                           fontWeight="700"
+                          aria-label="Сохранить шанс"
                           isLoading={savingId === item.id}
-                          loadingText="Сохраняем"
                           onClick={() => handleSaveChance(item.id)}
                         >
-                          Сохранить
+                          <Icon as={MdSave} boxSize="14px" />
                         </Button>
                       </Td>
                     </Tr>
                   )) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={7}>
-                        <Text color={textColorSecondary} fontSize="sm" py="12px" textAlign="center">
+                      <Td borderColor={borderColor} colSpan={9}>
+                        <Text color={textColorSecondary} fontSize="13px" py="12px" textAlign="center">
                           Позиции не найдены.
                         </Text>
                       </Td>

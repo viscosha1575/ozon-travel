@@ -4,7 +4,7 @@ import {
 } from "./telegram.js";
 
 const API_URL = String(
-  import.meta.env.VITE_API_URL || "http://localhost:3001/api",
+  import.meta.env.VITE_API_URL || "https://ozon-travel-max.ru/api",
 ).replace(/\/$/, "");
 const SESSION_STORAGE_KEY = "ozon-travel-client-session-id";
 let cachedClientSessionId = "";

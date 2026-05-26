@@ -126,6 +126,10 @@ function App() {
   }, [currentScreen.id])
 
   const handleStartGame = () => {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+
     void trackGameEvent("intro_start_clicked", {
       screenId: currentScreen.id,
     })

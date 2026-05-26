@@ -51,6 +51,10 @@ const SEGMENT_OPTIONS = [
   { value: "all_users", label: "Все пользователи" },
   { value: "selected_users", label: "Один или несколько пользователей" },
 ];
+const APP_BUTTON_PRESET = {
+  text: "Играть",
+  url: "https://max.ru/ozontravel_lenta_bot?startapp",
+};
 
 const EMPTY_RESPONSE = {
   items: [],
@@ -445,6 +449,15 @@ export default function PushesPage() {
     };
   }
 
+  function applyAppButtonPreset() {
+    setDraftForm((current) => ({
+      ...current,
+      buttonEnabled: true,
+      buttonText: APP_BUTTON_PRESET.text,
+      buttonUrl: APP_BUTTON_PRESET.url,
+    }));
+  }
+
   function handleAddSelectedUser(player) {
     setDraftForm((current) => {
       if (current.selectedUsers.some((item) => item.id === player.id)) {
@@ -728,14 +741,17 @@ export default function PushesPage() {
                   lineHeight="1.75"
                   sx={{
                     "& p": {
-                      marginBottom: "10px",
-                    },
-                    "& p:last-of-type": {
                       marginBottom: "0",
+                    },
+                    "& p + p": {
+                      marginTop: "8px",
                     },
                     "& ul, & ol": {
                       paddingLeft: "20px",
-                      marginBottom: "10px",
+                      marginBottom: "0",
+                    },
+                    "& ul + p, & ol + p, & p + ul, & p + ol": {
+                      marginTop: "8px",
                     },
                     "& li + li": {
                       marginTop: "6px",
@@ -1059,6 +1075,16 @@ export default function PushesPage() {
                       Кнопка под сообщением
                     </Text>
                   </Checkbox>
+                  <Flex mt="12px" justify="flex-start">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      borderRadius="12px"
+                      onClick={applyAppButtonPreset}
+                    >
+                      Играть в аппку
+                    </Button>
+                  </Flex>
 
                   {draftForm.buttonEnabled ? (
                     <Stack spacing="12px" mt="14px">
@@ -1219,14 +1245,17 @@ export default function PushesPage() {
                               lineHeight="1.75"
                               sx={{
                                 "& p": {
-                                  marginBottom: "10px",
-                                },
-                                "& p:last-of-type": {
                                   marginBottom: "0",
+                                },
+                                "& p + p": {
+                                  marginTop: "8px",
                                 },
                                 "& ul, & ol": {
                                   paddingLeft: "20px",
-                                  marginBottom: "10px",
+                                  marginBottom: "0",
+                                },
+                                "& ul + p, & ol + p, & p + ul, & p + ol": {
+                                  marginTop: "8px",
                                 },
                                 "& li + li": {
                                   marginTop: "6px",

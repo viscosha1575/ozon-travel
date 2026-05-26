@@ -25,7 +25,8 @@ const TRACK_TAIL_BUFFER = 9
 const RESULT_REVEAL_DELAY = 72
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
-const REFERRAL_SHARE_TITLE = "Приглашаю в игру"
+const REFERRAL_SHARE_TITLE = "Присоединяйся и выигрывай призы"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
@@ -364,6 +365,7 @@ export default function GameScreen() {
   }
 
   const activeRouletteItems = rouletteItems
+  const hasAvailableAttempts = availableAttempts > 0
 
   const openOverlay = (overlayId) => {
     clearTimeout(overlayTimeoutRef.current)
@@ -582,7 +584,35 @@ export default function GameScreen() {
     })
   }
 
+  const handlePrimaryActionClick = () => {
+    if (isSpinActive || !activeRouletteItems.length) {
+      return
+    }
+
+    if (!hasAvailableAttempts) {
+      void trackGameEvent("overlay_opened", {
+        overlayId: "exclamation",
+      })
+      openOverlay("exclamation")
+      return
+    }
+
+    void handleSpin()
+  }
+
   const handleBannerAction = (actionId) => {
+    if (actionId === "exclamation") {
+      void trackGameEvent("external_link_opened", {
+        actionId,
+        url: IMPORTANT_INFO_URL,
+      })
+
+      if (typeof window !== "undefined") {
+        window.location.assign(IMPORTANT_INFO_URL)
+      }
+      return
+    }
+
     void trackGameEvent("overlay_opened", {
       overlayId: actionId,
       myPrizesCount: actionId === "gift" ? myPrizes.length : undefined,
@@ -590,10 +620,6 @@ export default function GameScreen() {
     openOverlay(actionId)
 
     if (actionId === "question") {
-      return
-    }
-
-    if (actionId === "exclamation") {
       return
     }
 
@@ -827,6 +853,7 @@ export default function GameScreen() {
   }
 
   useEffect(() => {
+    isMountedRef.current = true
     const frameId = requestAnimationFrame(() => {
       void loadGameBootstrap()
     })
@@ -1042,12 +1069,16 @@ export default function GameScreen() {
         <div className={`game-controls ${isSpinActive || resultBag ? "is-hidden" : ""}`}>
           <button
             type="button"
-            className="game-spin-button"
-            onClick={handleSpin}
-            disabled={isSpinActive || availableAttempts <= 0}
+            className={`game-spin-button ${hasAvailableAttempts ? "" : "game-spin-button--single"}`.trim()}
+            onClick={handlePrimaryActionClick}
+            disabled={isSpinActive || !activeRouletteItems.length}
           >
-            <span className="game-spin-button-label">Крутить</span>
-            <span className="game-spin-button-attempt">{formatAttemptsLabel(availableAttempts)}</span>
+            <span className="game-spin-button-label">
+              {hasAvailableAttempts ? "Крутить" : "Крутить ещё раз"}
+            </span>
+            {hasAvailableAttempts ? (
+              <span className="game-spin-button-attempt">{formatAttemptsLabel(availableAttempts)}</span>
+            ) : null}
           </button>
         </div>
         {renderedOverlay === "error" ? (
@@ -1127,9 +1158,9 @@ export default function GameScreen() {
                   больше подарков?
                 </h2>
                 <div className="game-overlay-description game-overlay-description--rich">
-                  <span>Возвращайтесь каждый день, чтобы крутить</span>
-                  <span>Ленту призов, а также приглашайте друзей</span>
-                  <span>и получайте больше попыток. За каждого</span>
+                  <span className="game-overlay-description-line-fixed">Возвращайтесь каждый день, чтобы крутить</span>
+                  <span className="game-overlay-description-line-fixed">Ленту призов, а также приглашайте друзей</span>
+                  <span className="game-overlay-description-line-fixed">и получайте больше попыток. За каждого</span>
                   <span className="game-overlay-description-inline">
                     приглашенного друга получаете
                     <span className="game-overlay-badge">+1 попытку</span>

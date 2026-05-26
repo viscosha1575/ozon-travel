@@ -50,7 +50,7 @@ function buildReferralLink(referralCode) {
   }
 
   const separator = MAX_BOT_PUBLIC_URL.includes("?") ? "&" : "?";
-  return `${MAX_BOT_PUBLIC_URL}${separator}startapp=${encodeURIComponent(payload)}`;
+  return `${MAX_BOT_PUBLIC_URL}${separator}start=${encodeURIComponent(payload)}`;
 }
 
 async function upsertUser(executor, userInfo = {}) {

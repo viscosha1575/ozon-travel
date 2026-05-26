@@ -70,7 +70,6 @@ export async function startBot() {
     await bot.api.setMyCommands([
       { name: 'start', description: 'Начать игру' },
       { name: 'menu', description: 'Открыть меню' },
-      { name: 'rules', description: 'Правила игры' },
       { name: 'support', description: 'Поддержка' },
     ]);
   } catch (error) {

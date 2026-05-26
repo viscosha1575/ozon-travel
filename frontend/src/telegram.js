@@ -2,11 +2,31 @@ const TELEGRAM_BRAND_COLOR = '#e2e7ec'
 const BROWSER_HOST = 'browser'
 const TELEGRAM_HOST = 'telegram'
 const MAX_HOST = 'max'
+const TELEGRAM_SDK_URL = 'https://telegram.org/js/telegram-web-app.js'
+const TELEGRAM_SDK_SCRIPT_ID = 'telegram-web-app-sdk'
+const MAX_SDK_URL = 'https://st.max.ru/js/max-web-app.js'
+const MAX_SDK_SCRIPT_ID = 'max-web-app-sdk'
 
 let bootstrapPromise
+let telegramSdkPromise
+let maxSdkPromise
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function isLocalBrowserHost() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const { hostname } = window.location
+
+  return (
+    hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '0.0.0.0'
+  )
 }
 
 function getTelegramWebApp() {
@@ -42,6 +62,90 @@ function extractTelegramInitDataFromLocation() {
   }
 
   return ''
+}
+
+function loadExternalScript({ id, src, resolveValue, errorMessage, cacheKey }) {
+  if (resolveValue()) {
+    return Promise.resolve(resolveValue())
+  }
+
+  if (!cacheKey.current) {
+    cacheKey.current = new Promise((resolve, reject) => {
+      const existingScript = document.getElementById(id)
+
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(resolveValue()), { once: true })
+        existingScript.addEventListener('error', () => reject(new Error(errorMessage)), { once: true })
+        return
+      }
+
+      const script = document.createElement('script')
+      script.id = id
+      script.src = src
+      script.async = true
+      script.onload = () => resolve(resolveValue())
+      script.onerror = () => reject(new Error(errorMessage))
+      document.body.appendChild(script)
+    })
+  }
+
+  return cacheKey.current
+}
+
+function loadTelegramSdk() {
+  return loadExternalScript({
+    id: TELEGRAM_SDK_SCRIPT_ID,
+    src: TELEGRAM_SDK_URL,
+    resolveValue: () => getTelegramWebApp(),
+    errorMessage: 'Не удалось загрузить Telegram SDK',
+    cacheKey: {
+      get current() {
+        return telegramSdkPromise
+      },
+      set current(value) {
+        telegramSdkPromise = value
+      },
+    },
+  })
+}
+
+function loadMaxSdk() {
+  return loadExternalScript({
+    id: MAX_SDK_SCRIPT_ID,
+    src: MAX_SDK_URL,
+    resolveValue: () => getMaxWebApp(),
+    errorMessage: 'Не удалось загрузить MAX SDK',
+    cacheKey: {
+      get current() {
+        return maxSdkPromise
+      },
+      set current(value) {
+        maxSdkPromise = value
+      },
+    },
+  })
+}
+
+function shouldAttemptTelegramSdkLoad() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return hasValue(extractTelegramInitDataFromLocation()) || Boolean(getTelegramWebApp())
+}
+
+function shouldAttemptMaxSdkLoad() {
+  if (typeof window === 'undefined' || isLocalBrowserHost()) {
+    return false
+  }
+
+  if (getMaxWebApp()) {
+    return true
+  }
+
+  const referrer = String(document.referrer || '').toLowerCase()
+
+  return referrer.includes('max.ru') || window.self !== window.top
 }
 
 function resolveMiniAppHost() {
@@ -226,6 +330,20 @@ export function bootstrapMiniApp() {
   }
 
   bootstrapPromise = (async () => {
+    const sdkLoaders = []
+
+    if (shouldAttemptTelegramSdkLoad()) {
+      sdkLoaders.push(loadTelegramSdk())
+    }
+
+    if (shouldAttemptMaxSdkLoad()) {
+      sdkLoaders.push(loadMaxSdk())
+    }
+
+    if (sdkLoaders.length) {
+      await Promise.allSettled(sdkLoaders)
+    }
+
     const host = getMiniAppHost()
 
     if (host === BROWSER_HOST) {

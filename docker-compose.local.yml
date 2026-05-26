@@ -30,6 +30,7 @@ services:
       REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET:-local-dev-secret}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:3001}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-http://localhost:4173}
+      MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Belgrade}
       UPLOADS_DIR: /app/uploads
     ports:
@@ -41,7 +42,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: ${FRONTEND_API_URL:-http://localhost:3001/api}
+        VITE_API_URL: ${FRONTEND_API_URL:-https://ozon-travel-max.ru/api}
     restart: unless-stopped
     depends_on:
       - backend
@@ -78,7 +79,7 @@ services:
       MAX_WEBHOOK_RETRY_MS: ${MAX_WEBHOOK_RETRY_MS:-60000}
       MAX_WEBHOOK_UPDATE_TYPES: ${MAX_WEBHOOK_UPDATE_TYPES:-}
       MAX_SUBSCRIPTION_CHECK_MODE: ${MAX_SUBSCRIPTION_CHECK_MODE:-mock}
-      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel}
+      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel_officia}
       MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
       GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-http://localhost:4173}
       SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}

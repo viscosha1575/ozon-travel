@@ -59,6 +59,9 @@ const PROMO_CODE_TYPE_OPTIONS = [
   { value: "Промокод на повторный заказ", label: "Промокод на повторный заказ" },
 ];
 
+const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
+const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
+
 function formatNumber(value) {
   return new Intl.NumberFormat("ru-RU").format(Number(value) || 0);
 }
@@ -214,8 +217,8 @@ function createInitialPrizeForm() {
     chanceValue: "1x",
     hasUserLimit: true,
     userLimitCount: "",
-    activeFrom: "",
-    activeTo: "",
+    activeFrom: DEFAULT_DRAW_ACTIVE_FROM,
+    activeTo: DEFAULT_DRAW_ACTIVE_TO,
     rouletteImage: null,
     myPrizeText: "",
     rouletteDescription: "",
