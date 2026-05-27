@@ -52,7 +52,7 @@ const SEGMENT_OPTIONS = [
   { value: "selected_users", label: "Один или несколько пользователей" },
 ];
 const APP_BUTTON_PRESET = {
-  text: "Играть",
+  text: "Открыть",
   url: "https://max.ru/ozontravel_lenta_bot?startapp",
 };
 
@@ -176,6 +176,22 @@ function normalizeActionUrl(value) {
   }
 }
 
+function isMiniAppUrl(value) {
+  const normalizedUrl = normalizeActionUrl(value);
+
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(normalizedUrl);
+
+    return url.hostname === "max.ru" && url.pathname.replace(/^\/+/, "").length > 0 && url.searchParams.has("startapp");
+  } catch {
+    return false;
+  }
+}
+
 function autolinkPreviewHtml(value) {
   const rawHtml = String(value || "").trim();
 
@@ -242,6 +258,7 @@ export default function PushesPage() {
     selectedUsers: [],
     showLinkPreview: true,
     buttonEnabled: false,
+    miniAppButtonEnabled: false,
     buttonText: "",
     buttonUrl: "",
   });
@@ -398,6 +415,7 @@ export default function PushesPage() {
   const previewHtml = autolinkPreviewHtml(draftForm.html);
   const draftHasLink = hasLinkInText(draftForm.html) || hasLinkInText(draftPreviewText);
   const normalizedButtonUrl = normalizeActionUrl(draftForm.buttonUrl);
+  const isMiniAppButton = draftForm.buttonEnabled && draftForm.miniAppButtonEnabled && isMiniAppUrl(normalizedButtonUrl);
   const hasInlineButton = draftForm.buttonEnabled
     && String(draftForm.buttonText || "").trim()
     && normalizedButtonUrl;
@@ -407,11 +425,12 @@ export default function PushesPage() {
     html: draftForm.html,
     imageUrl: draftForm.image?.previewUrl || null,
     selectedUsers: draftForm.selectedUsers.map((item) => item.id).sort((left, right) => left - right),
-    showLinkPreview: draftHasLink ? draftForm.showLinkPreview : true,
-    button: hasInlineButton
+    showLinkPreview: isMiniAppButton ? false : (draftHasLink ? draftForm.showLinkPreview : true),
+      button: hasInlineButton
       ? {
         text: draftForm.buttonText.trim(),
         url: normalizedButtonUrl,
+        type: isMiniAppButton ? "open_app" : "link",
       }
       : null,
   });
@@ -442,9 +461,10 @@ export default function PushesPage() {
         ? {
           text: draftForm.buttonText.trim(),
           url: normalizedButtonUrl,
+          type: isMiniAppButton ? "open_app" : "link",
         }
         : null,
-      disableLinkPreview: draftHasLink ? !draftForm.showLinkPreview : false,
+      disableLinkPreview: isMiniAppButton ? true : (draftHasLink ? !draftForm.showLinkPreview : false),
       selectedUsers: draftForm.selectedUsers,
     };
   }
@@ -453,8 +473,10 @@ export default function PushesPage() {
     setDraftForm((current) => ({
       ...current,
       buttonEnabled: true,
+      miniAppButtonEnabled: true,
       buttonText: APP_BUTTON_PRESET.text,
       buttonUrl: APP_BUTTON_PRESET.url,
+      showLinkPreview: false,
     }));
   }
 
@@ -1036,6 +1058,7 @@ export default function PushesPage() {
                   >
                     <Checkbox
                       colorScheme="purple"
+                      isDisabled={draftForm.miniAppButtonEnabled}
                       isChecked={draftForm.showLinkPreview}
                       onChange={(event) => {
                         setDraftForm((current) => ({
@@ -1049,7 +1072,9 @@ export default function PushesPage() {
                       </Text>
                     </Checkbox>
                     <Text color={textColorSecondary} fontSize="xs" mt="8px">
-                      Если выключить опцию, отправим сообщение в MAX с disable_link_preview=true.
+                      {draftForm.miniAppButtonEnabled
+                        ? "Для кнопки мини-приложения превью ссылки выключается автоматически."
+                        : "Если выключить опцию, отправим сообщение в MAX с disable_link_preview=true."}
                     </Text>
                   </Box>
                 ) : null}
@@ -1068,6 +1093,7 @@ export default function PushesPage() {
                       setDraftForm((current) => ({
                         ...current,
                         buttonEnabled: event.target.checked,
+                        miniAppButtonEnabled: event.target.checked ? current.miniAppButtonEnabled : false,
                       }));
                     }}
                   >
@@ -1075,16 +1101,31 @@ export default function PushesPage() {
                       Кнопка под сообщением
                     </Text>
                   </Checkbox>
-                  <Flex mt="12px" justify="flex-start">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      borderRadius="12px"
-                      onClick={applyAppButtonPreset}
-                    >
-                      Играть в аппку
-                    </Button>
-                  </Flex>
+                  <Checkbox
+                    colorScheme="purple"
+                    isChecked={draftForm.miniAppButtonEnabled}
+                    mt="12px"
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        applyAppButtonPreset();
+                        return;
+                      }
+
+                      setDraftForm((current) => ({
+                        ...current,
+                        miniAppButtonEnabled: false,
+                      }));
+                    }}
+                  >
+                    <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
+                      Кнопка Открыть с приложением
+                    </Text>
+                  </Checkbox>
+                  {draftForm.miniAppButtonEnabled ? (
+                    <Text color={textColorSecondary} fontSize="xs" mt="8px">
+                      Для этой кнопки отправим mini app как `open_app` и выключим превью ссылки.
+                    </Text>
+                  ) : null}
 
                   {draftForm.buttonEnabled ? (
                     <Stack spacing="12px" mt="14px">
@@ -1101,6 +1142,7 @@ export default function PushesPage() {
                           fontWeight="500"
                           placeholder="Например: Открыть сайт"
                           value={draftForm.buttonText}
+                          isDisabled={draftForm.miniAppButtonEnabled}
                           onChange={(event) => {
                             setDraftForm((current) => ({ ...current, buttonText: event.target.value }));
                           }}
@@ -1120,12 +1162,15 @@ export default function PushesPage() {
                           fontWeight="500"
                           placeholder="https://example.com"
                           value={draftForm.buttonUrl}
+                          isDisabled={draftForm.miniAppButtonEnabled}
                           onChange={(event) => {
                             setDraftForm((current) => ({ ...current, buttonUrl: event.target.value }));
                           }}
                         />
                         <Text color={textColorSecondary} fontSize="xs" mt="8px">
-                          Если заполнить оба поля, отправим сообщение в MAX с инлайн-кнопкой-ссылкой.
+                          {draftForm.miniAppButtonEnabled
+                            ? "Для mini app отправим сообщение в MAX с кнопкой Открыть без превью ссылки."
+                            : "Если заполнить оба поля, отправим сообщение в MAX с инлайн-кнопкой-ссылкой."}
                         </Text>
                         {draftForm.buttonEnabled && !hasInlineButton ? (
                           <Text color="orange.400" fontSize="xs" mt="8px">

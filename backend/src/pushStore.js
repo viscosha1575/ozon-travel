@@ -43,6 +43,22 @@ function normalizeActionUrl(value) {
   }
 }
 
+function isMiniAppUrl(value) {
+  const normalizedUrl = normalizeActionUrl(value);
+
+  if (!normalizedUrl) {
+    return false;
+  }
+
+  try {
+    const url = new URL(normalizedUrl);
+
+    return url.hostname === "max.ru" && url.pathname.replace(/^\/+/, "").length > 0 && url.searchParams.has("startapp");
+  } catch {
+    return false;
+  }
+}
+
 function stripHtml(value) {
   return String(value || "")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -259,6 +275,9 @@ function normalizePushImage(payload = {}) {
 function normalizePushButton(payload = {}) {
   const text = String(payload?.button?.text || payload?.buttonText || "").trim();
   const url = normalizeActionUrl(payload?.button?.url || payload?.buttonUrl || "");
+  const type = String(payload?.button?.type || "").trim().toLowerCase() === "open_app" || isMiniAppUrl(url)
+    ? "open_app"
+    : "link";
 
   if (!text && !url) {
     return null;
@@ -267,6 +286,7 @@ function normalizePushButton(payload = {}) {
   return {
     text,
     url,
+    type,
   };
 }
 

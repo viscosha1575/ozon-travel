@@ -78,7 +78,8 @@ const menuMessage = [
 const supportMessage = [
   'Поддержка проекта',
   '',
-  `По всем вопросам пока используем моковый контакт: ${SUPPORT_CONTACT}.`,
+  'При возникновении вопросов обращайтесь в наш чат поддержки в МАКС:',
+  '@ozon_travel_support_bot',
 ].join('\n');
 
 let cachedChannelChatId = Number(MAX_CHANNEL_CHAT_ID) || null;

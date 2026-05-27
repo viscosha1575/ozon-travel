@@ -16,12 +16,46 @@ function isVideoUrl(url) {
   return VIDEO_EXT_RE.test(String(url || ""));
 }
 
+function buildMiniAppButton(url, text) {
+  const fallbackWebApp = 'ozontravel_lenta_bot';
+
+  try {
+    const parsedUrl = new URL(String(url || "").trim());
+    const webApp = parsedUrl.pathname.replace(/^\/+/, '').split('/')[0] || fallbackWebApp;
+    const payload = String(parsedUrl.searchParams.get('startapp') || '').trim();
+    const button = {
+      type: 'open_app',
+      text,
+      web_app: webApp,
+    };
+
+    if (payload) {
+      button.payload = payload;
+    }
+
+    return button;
+  } catch {
+    return {
+      type: 'open_app',
+      text,
+      web_app: fallbackWebApp,
+    };
+  }
+}
+
 function buildReplyAttachment(button) {
   const text = String(button?.text || "").trim();
   const url = String(button?.url || "").trim();
+  const type = String(button?.type || "").trim().toLowerCase();
 
   if (!text || !url) {
     return null;
+  }
+
+  if (type === 'open_app') {
+    return Keyboard.inlineKeyboard([
+      [buildMiniAppButton(url, text)],
+    ]);
   }
 
   return Keyboard.inlineKeyboard([
