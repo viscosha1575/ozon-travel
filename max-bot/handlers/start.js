@@ -19,8 +19,44 @@ const subscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
 ]);
 
+function buildOpenAppButton(url) {
+  const normalizedUrl = String(url || '').trim();
+  const fallbackWebApp = 'ozontravel_lenta_bot';
+
+  if (!normalizedUrl) {
+    return {
+      type: 'open_app',
+      text: 'Открыть',
+      web_app: fallbackWebApp,
+    };
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    const webApp = parsedUrl.pathname.replace(/^\/+/, '').split('/')[0] || fallbackWebApp;
+    const payload = String(parsedUrl.searchParams.get('startapp') || '').trim();
+    const button = {
+      type: 'open_app',
+      text: 'Открыть',
+      web_app: webApp,
+    };
+
+    if (payload) {
+      button.payload = payload;
+    }
+
+    return button;
+  } catch {
+    return {
+      type: 'open_app',
+      text: 'Открыть',
+      web_app: normalizedUrl.replace(/^@/, '') || fallbackWebApp,
+    };
+  }
+}
+
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
-  [Keyboard.button.link('Открыть', GAME_WEBAPP_URL)],
+  [buildOpenAppButton(GAME_WEBAPP_URL)],
   [Keyboard.button.callback('Поддержка', 'show_support')],
 ]);
 
