@@ -53,7 +53,7 @@ const SEGMENT_OPTIONS = [
 ];
 const APP_BUTTON_PRESET = {
   text: "Играть",
-  url: "https://max.ru/ozontravel_lenta_bot?start",
+  url: "https://max.ru/ozontravel_lenta_bot?startapp",
 };
 
 const EMPTY_RESPONSE = {

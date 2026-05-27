@@ -37,6 +37,14 @@ function formatCount(value) {
   return new Intl.NumberFormat("ru-RU").format(Math.max(0, Number(value) || 0));
 }
 
+function formatPrizeCount(item, value) {
+  if (!item?.hasPrizeLimit) {
+    return "∞";
+  }
+
+  return formatCount(value);
+}
+
 const EMPTY_RESPONSE = {
   items: [],
   summary: {
@@ -286,12 +294,12 @@ export default function ChancesPage() {
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
                         <Text color={textColor} fontSize="13px" fontWeight="600">
-                          {formatCount(item.totalCount)}
+                          {formatPrizeCount(item, item.totalCount)}
                         </Text>
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
                         <Text color={textColor} fontSize="13px" fontWeight="600">
-                          {formatCount(item.remainingCount)}
+                          {formatPrizeCount(item, item.remainingCount)}
                         </Text>
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">

@@ -22,13 +22,13 @@
 1. Пользователь нажимает `/start`.
 2. Бот создает пользователя в backend и показывает стартовое сообщение.
 3. Бот предлагает подписаться на канал и проверить подписку.
-4. После успешной проверки бот показывает мокап меню с кнопками `Открыть игру` и `Поддержка`.
+4. После успешной проверки бот показывает экран с кнопками `Открыть` и `Поддержка`.
 
 ## Размещение
 
 - production webhook host: `https://bot.ozon-travel-max.ru`
 - рекомендуемый webhook path: `/max/webhook`
-- веб-игра открывается по `GAME_WEBAPP_URL`
+- кнопка открытия игры ведет по MAX deep link из `GAME_WEBAPP_URL`
 
 ## Переменные окружения
 
@@ -40,10 +40,10 @@
 - `MAX_AUTO_REGISTER_WEBHOOK` - если `true`, бот регистрирует webhook в MAX API при старте;
 - `MAX_WEBHOOK_RETRY_MS` - интервал повторной регистрации webhook;
 - `MAX_WEBHOOK_UPDATE_TYPES` - optional, список типов событий через запятую;
-- `MAX_SUBSCRIPTION_CHECK_MODE` - `mock` для мокап-сценария или `api` для реальной проверки подписки;
-- `MAX_CHANNEL_URL` - ссылка на канал проекта в MAX;
+- `MAX_SUBSCRIPTION_CHECK_MODE` - `api` для реальной проверки подписки или `mock` для мокап-сценария;
+- `MAX_CHANNEL_URL` - ссылка на канал проекта в MAX, например `https://max.ru/ozontravel_official`;
 - `MAX_CHANNEL_CHAT_ID` - optional, id канала MAX для ускорения проверки подписки;
-- `GAME_WEBAPP_URL` - ссылка на веб-игру, например `https://ozon-travel-max.ru`;
+- `GAME_WEBAPP_URL` - deep link на мини-приложение в MAX, например `https://max.ru/ozontravel_lenta_bot?startapp`;
 - `SUPPORT_CONTACT` - контакт поддержки;
 - `GAME_API_URL` - адрес backend API;
 - `LOG_LEVEL` - уровень логирования сервиса;

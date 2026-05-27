@@ -29,7 +29,9 @@ const screens = [
     titleLines: ["Промокоды", "на путешествия и шоппинг"],
     accentLine: {
       before: "до ",
-      accent: "100 000 ₽",
+      amount: "100 000",
+      iconSrc: "/intro/vectors/b.svg",
+      accessibleText: "100 000 баллов",
       after: " на Ozon",
     },
     description: [
@@ -257,7 +259,15 @@ function App() {
                       {screen.accentLine ? (
                         <span className="content-line">
                           {screen.accentLine.before}
-                          <span className="content-accent">{screen.accentLine.accent}</span>
+                          <span className="content-accent" aria-label={screen.accentLine.accessibleText}>
+                            <span>{screen.accentLine.amount}</span>
+                            <img
+                              src={screen.accentLine.iconSrc}
+                              alt=""
+                              aria-hidden="true"
+                              className="content-accent-icon"
+                            />
+                          </span>
                           {screen.accentLine.after}
                         </span>
                       ) : null}

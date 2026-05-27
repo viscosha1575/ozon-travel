@@ -1644,10 +1644,19 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 2px 8px 2px;
   border-radius: 8px;
   background: var(--graphic-accent-primary);
   color: #fff;
+}
+
+.content-accent-icon {
+  width: 0.72em;
+  height: 0.72em;
+  display: block;
+  flex: 0 0 auto;
+  align-self: center;
 }
 
 .content-description {

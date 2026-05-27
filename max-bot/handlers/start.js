@@ -20,7 +20,7 @@ const subscriptionKeyboard = Keyboard.inlineKeyboard([
 ]);
 
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
-  [Keyboard.button.link('Открыть игру', GAME_WEBAPP_URL)],
+  [Keyboard.button.link('Открыть', GAME_WEBAPP_URL)],
   [Keyboard.button.callback('Поддержка', 'show_support')],
 ]);
 
@@ -36,12 +36,7 @@ const subscriptionRetryMessage =
   'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите «Проверить подписку» еще раз.';
 
 const menuMessage = [
-  'Подписка подтверждена.',
-  '',
-  'Это мокап главного меню бота.',
-  'Доступные действия:',
-  '• открыть игру',
-  '• открыть поддержку',
+  'Все готово для участия!',
 ].join('\n');
 
 const supportMessage = [
