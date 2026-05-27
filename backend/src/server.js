@@ -71,6 +71,24 @@ app.get("/api/game/bootstrap", async (req, res, next) => {
   }
 });
 
+app.get("/api/game/subscription-status", async (req, res, next) => {
+  try {
+    const userInfo = resolveMiniAppUser(req);
+    const user = await getOrCreateUser(userInfo);
+
+    res.json({
+      ok: true,
+      user: {
+        id: Number(user.id),
+        externalId: user.external_id,
+        subscribedToChannel: Boolean(user.subscribed_to_channel),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/game/spin", async (req, res, next) => {
   try {
     const response = await spinPrize(resolveMiniAppUser(req));
@@ -101,6 +119,7 @@ app.post("/api/game/open", async (req, res, next) => {
       user: {
         id: Number(user.id),
         externalId: user.external_id,
+        subscribedToChannel: Boolean(user.subscribed_to_channel),
       },
       attempts,
       referral,

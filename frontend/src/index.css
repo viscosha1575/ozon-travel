@@ -39,6 +39,7 @@
   --game-surface-duration: 420ms;
   --game-result-bag-scale: 1.12;
   --app-sheet-side-padding: 36px;
+  --intro-sheet-side-padding: 20px;
   --app-sheet-actions-side-padding: 36px;
   --app-button-width: 272px;
   --app-button-height: 60px;
@@ -48,7 +49,7 @@
   --intro-screen-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --intro-screen-duration: 460ms;
   --background-vector-scale: 0.36;
-  --content-panel-padding: 37.5px var(--app-sheet-side-padding);
+  --content-panel-padding: 37.5px var(--intro-sheet-side-padding);
   --content-panel-gap: 20px;
   --tg-viewport-height: 100svh;
   --tg-viewport-stable-height: 100svh;
@@ -1552,6 +1553,7 @@ body {
   padding: var(--content-panel-padding);
   grid-template-rows: auto auto;
   align-content: space-between;
+  justify-items: center;
   gap: var(--content-panel-gap);
   box-sizing: border-box;
   opacity: 0;
@@ -1604,6 +1606,7 @@ body {
 
 .content-copy {
   display: grid;
+  width: 100%;
   grid-template-rows: repeat(3, auto);
   align-content: start;
   justify-items: center;
@@ -1652,8 +1655,8 @@ body {
 }
 
 .content-accent-icon {
-  width: 0.72em;
-  height: 0.72em;
+  width: 0.64em;
+  height: 0.64em;
   display: block;
   flex: 0 0 auto;
   align-self: center;
@@ -1751,7 +1754,7 @@ body {
   }
 
   .content-screen {
-    padding: clamp(24px, 4.443svh, 48px) var(--app-sheet-side-padding);
+    padding: clamp(24px, 4.443svh, 48px) var(--intro-sheet-side-padding);
     gap: clamp(12px, 1.896svh, 20px);
   }
 
