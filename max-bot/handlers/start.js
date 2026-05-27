@@ -115,6 +115,8 @@ function getMessageText(ctx) {
 
 function getSender(ctx) {
   return (
+    ctx?.callback?.user ||
+    ctx?.update?.callback?.user ||
     ctx?.message?.sender ||
     ctx?.update?.message?.sender ||
     ctx?.sender ||
@@ -128,14 +130,38 @@ function getStringValue(...values) {
   return value === undefined || value === null ? '' : String(value);
 }
 
+function normalizeMaxChatLink(value) {
+  const normalizedValue = String(value || '').trim();
+
+  if (!normalizedValue) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue);
+
+    if (parsedUrl.hostname !== 'max.ru') {
+      return normalizedValue;
+    }
+
+    return parsedUrl.pathname.replace(/^\/+/, '').split('/')[0] || '';
+  } catch {
+    return normalizedValue
+      .replace(/^https?:\/\/max\.ru\/?/i, '')
+      .replace(/^\/+/, '')
+      .split('/')[0]
+      .trim();
+  }
+}
+
 function extractUser(ctx) {
   const sender = getSender(ctx);
   const userId = getStringValue(
-    ctx?.user?.user_id,
     sender.user_id,
     sender.userId,
     sender.id,
     sender.uid,
+    ctx?.user?.user_id,
   );
   const username = getStringValue(
     sender.username,
@@ -165,7 +191,13 @@ async function resolveChannelChatId() {
     return cachedChannelChatId;
   }
 
-  const chat = await bot.api.getChatByLink(MAX_CHANNEL_URL);
+  const channelLink = normalizeMaxChatLink(MAX_CHANNEL_URL);
+
+  if (!channelLink) {
+    throw new Error(`MAX channel link is empty: ${MAX_CHANNEL_URL}`);
+  }
+
+  const chat = await bot.api.getChatByLink(channelLink);
   cachedChannelChatId = Number(chat?.chat_id) || null;
 
   if (!cachedChannelChatId) {
@@ -210,11 +242,11 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 
   if (!userId) {
     logger.warn('MAX sender id was not found in update');
-    return false;
+    return { ok: false, user: null };
   }
 
   try {
-    await addUser({
+    const addUserResult = await addUser({
       maxUserId: userId,
       username,
       firstName,
@@ -232,18 +264,27 @@ async function registerUser(ctx, { logEntry = true } = {}) {
         startParam: parsedStartParam.raw,
       },
     });
-    return true;
+    return {
+      ok: true,
+      user: addUserResult?.user || null,
+    };
   } catch (error) {
     logger.error('MAX addUser failed', {
       userId,
       error: error.response?.data || error.message,
     });
-    return false;
+    return { ok: false, user: null };
   }
 }
 
 async function sendStartStep(ctx) {
-  await registerUser(ctx);
+  const registrationResult = await registerUser(ctx);
+
+  if (registrationResult?.user?.subscribedToChannel) {
+    await sendGameMenu(ctx);
+    return;
+  }
+
   await safeReply(ctx, welcomeMessage, {
     attachments: [subscriptionKeyboard],
   }, 'sendStartStep');
@@ -291,7 +332,7 @@ bot.action('check_subscription', async (ctx) => {
   try {
     const registered = await registerUser(ctx, { logEntry: false });
 
-    if (!registered) {
+    if (!registered?.ok) {
       await ctx.answerOnCallback({
         notification: 'Не удалось проверить профиль. Нажми /start и попробуй снова.',
       });
