@@ -1086,41 +1086,47 @@ export default function PushesPage() {
                   bg={filterBg}
                   p="14px 16px"
                 >
-                  <Checkbox
-                    colorScheme="purple"
-                    isChecked={draftForm.buttonEnabled}
-                    onChange={(event) => {
-                      setDraftForm((current) => ({
-                        ...current,
-                        buttonEnabled: event.target.checked,
-                        miniAppButtonEnabled: event.target.checked ? current.miniAppButtonEnabled : false,
-                      }));
-                    }}
+                  <Flex
+                    wrap="wrap"
+                    align="center"
+                    columnGap="24px"
+                    rowGap="12px"
                   >
-                    <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
-                      Кнопка под сообщением
-                    </Text>
-                  </Checkbox>
-                  <Checkbox
-                    colorScheme="purple"
-                    isChecked={draftForm.miniAppButtonEnabled}
-                    mt="12px"
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        applyAppButtonPreset();
-                        return;
-                      }
+                    <Checkbox
+                      colorScheme="purple"
+                      isChecked={draftForm.buttonEnabled}
+                      onChange={(event) => {
+                        setDraftForm((current) => ({
+                          ...current,
+                          buttonEnabled: event.target.checked,
+                          miniAppButtonEnabled: event.target.checked ? current.miniAppButtonEnabled : false,
+                        }));
+                      }}
+                    >
+                      <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
+                        Кнопка под сообщением
+                      </Text>
+                    </Checkbox>
+                    <Checkbox
+                      colorScheme="purple"
+                      isChecked={draftForm.miniAppButtonEnabled}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          applyAppButtonPreset();
+                          return;
+                        }
 
-                      setDraftForm((current) => ({
-                        ...current,
-                        miniAppButtonEnabled: false,
-                      }));
-                    }}
-                  >
-                    <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
-                      Кнопка Открыть с приложением
-                    </Text>
-                  </Checkbox>
+                        setDraftForm((current) => ({
+                          ...current,
+                          miniAppButtonEnabled: false,
+                        }));
+                      }}
+                    >
+                      <Text as="span" color={textColor} fontSize="sm" fontWeight="600">
+                        Кнопка Открыть с приложением
+                      </Text>
+                    </Checkbox>
+                  </Flex>
                   {draftForm.miniAppButtonEnabled ? (
                     <Text color={textColorSecondary} fontSize="xs" mt="8px">
                       Для этой кнопки отправим mini app как `open_app` и выключим превью ссылки.
