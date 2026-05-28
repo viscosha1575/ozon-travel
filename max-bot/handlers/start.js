@@ -225,6 +225,27 @@ async function checkChannelSubscription(userId) {
   return members.some((member) => String(member.user_id) === String(userId));
 }
 
+async function refreshSubscriptionStatus(userId, { source = 'unknown' } = {}) {
+  if (!userId) {
+    return false;
+  }
+
+  const isSubscribed = await checkChannelSubscription(userId);
+
+  await setSubscriptionStatus({
+    maxUserId: userId,
+    isSubscribed,
+  });
+
+  logger.info('MAX subscription status refreshed', {
+    userId,
+    isSubscribed,
+    source,
+  });
+
+  return isSubscribed;
+}
+
 async function registerUser(ctx, { logEntry = true } = {}) {
   const { userId, username, firstName, lastName } = extractUser(ctx);
   const rawStartParam = getMessageText(ctx).trim().split(/\s+/)[1] || '';
@@ -279,8 +300,32 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 
 async function sendStartStep(ctx) {
   const registrationResult = await registerUser(ctx);
+  const { userId } = extractUser(ctx);
 
-  if (registrationResult?.user?.subscribedToChannel) {
+  if (!registrationResult?.ok) {
+    await safeReply(ctx, welcomeMessage, {
+      attachments: [subscriptionKeyboard],
+    }, 'sendStartStep:registration-missing');
+    return;
+  }
+
+  try {
+    const isSubscribed = await refreshSubscriptionStatus(userId, {
+      source: 'start',
+    });
+
+    if (isSubscribed) {
+      await sendGameMenu(ctx);
+      return;
+    }
+  } catch (error) {
+    logger.error('MAX start subscription refresh failed', {
+      userId,
+      error: error.response?.data || error.message,
+    });
+  }
+
+  if (registrationResult?.user?.subscribedToChannel && MAX_SUBSCRIPTION_CHECK_MODE === 'mock') {
     await sendGameMenu(ctx);
     return;
   }
@@ -345,16 +390,9 @@ bot.action('check_subscription', async (ctx) => {
       eventName: 'check_subscription',
     });
 
-    const isSubscribed = userId
-      ? await checkChannelSubscription(userId)
-      : false;
-
-    if (userId) {
-      await setSubscriptionStatus({
-        maxUserId: userId,
-        isSubscribed,
-      });
-    }
+    const isSubscribed = await refreshSubscriptionStatus(userId, {
+      source: 'callback',
+    });
 
     await ctx.answerOnCallback({
       notification: isSubscribed

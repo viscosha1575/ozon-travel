@@ -57,9 +57,9 @@ function summarizeUpdate(update = {}) {
   const message = update?.message || null;
   const callback = update?.callback || null;
   const sender =
-    message?.sender
-    || callback?.user
+    callback?.user
     || update?.user
+    || message?.sender
     || null;
 
   return {
