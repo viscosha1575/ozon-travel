@@ -114,7 +114,6 @@ function App() {
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
-  const [isSubscribedToChannel, setIsSubscribedToChannel] = useState(false)
   const currentScreen = screens[activeScreen]
 
   useEffect(() => {
@@ -133,17 +132,6 @@ function App() {
         console.warn("Game open tracking failed", error)
       })
   }, [])
-
-  // Subscription check is temporarily disabled in the mini app.
-  // useEffect(() => {
-  //   if (!isSubscribedToChannel || activeScreen !== 1) {
-  //     return
-  //   }
-  //
-  //   startTransition(() => {
-  //     setActiveScreen(2)
-  //   })
-  // }, [activeScreen, isSubscribedToChannel])
 
   useEffect(() => {
     if (INTRO_DISABLED) {
@@ -217,13 +205,10 @@ function App() {
 
     try {
       const response = await getJson("/game/subscription-status")
-      const isSubscribed = Boolean(response?.user?.subscribedToChannel)
 
-      setIsSubscribedToChannel(isSubscribed)
-
-      if (isSubscribed) {
+      if (Boolean(response?.user?.subscribedToChannel)) {
         startTransition(() => {
-          setActiveScreen(2)
+          handleStartGame()
         })
       }
     } catch (error) {
@@ -293,7 +278,7 @@ function App() {
           </section>
           <section className="spacer-panel" aria-hidden="true" />
           <div
-            className={`content-bag-layer ${activeScreen === 0 || activeScreen === 2 ? "is-visible" : "is-hidden"} ${activeScreen === 2 ? "is-static" : ""}`}
+            className={`content-bag-layer ${activeScreen === 0 ? "is-visible" : "is-hidden"}`}
             aria-hidden="true"
           >
         <img
@@ -368,29 +353,6 @@ function App() {
                           {isSubscriptionCheckPending ? "Проверяем..." : screen.secondaryActionLabel}
                         </button>
                       </div>
-                    </>
-                  ) : screen.variant === "result" ? (
-                    <>
-                      <h1 className="content-title content-title--result">
-                        {screen.titleLines.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
-                      </h1>
-
-                      <p className="content-description content-description--result">
-                        {screen.description.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
-                      </p>
-
-                      <button
-                        type="button"
-                        className="content-action"
-                        onClick={handleStartGame}
-                        disabled={isGameLaunchPending && !isGameSceneReady}
-                      >
-                        {isGameLaunchPending && !isGameSceneReady ? "Открываем..." : screen.actionLabel}
-                      </button>
                     </>
                   ) : (
                     <>
