@@ -51,17 +51,17 @@ const screens = [
     actionLabel: "Подписаться",
     secondaryActionLabel: "Проверить подписку",
   },
-  {
-    id: "result",
-    variant: "result",
-    compact: true,
-    titleLines: ["Ура!"],
-    description: [
-      "Лента призов уже ждёт вас! Заходите в мини-",
-      "приложение и ловите ваш багаж с призами",
-    ],
-    actionLabel: "Играть",
-  },
+  // {
+  //   id: "result",
+  //   variant: "result",
+  //   compact: true,
+  //   titleLines: ["Ура!"],
+  //   description: [
+  //     "Лента призов уже ждёт вас! Заходите в мини-",
+  //     "приложение и ловите ваш багаж с призами",
+  //   ],
+  //   actionLabel: "Играть",
+  // },
 ]
 
 function preloadImage(src) {
@@ -205,10 +205,7 @@ function App() {
   }
 
   const handlePrimaryAction = () => {
-    startTransition(() => {
-      setActiveScreen(2)
-      // setActiveScreen(isSubscribedToChannel ? 2 : 1)
-    })
+    handleStartGame()
   }
 
   const handleSubscriptionAction = () => {
