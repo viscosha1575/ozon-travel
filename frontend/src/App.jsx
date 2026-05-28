@@ -129,23 +129,21 @@ function App() {
     void postJson("/game/open", {
       entryScreen: INTRO_DISABLED ? "game" : "intro",
     })
-      .then((response) => {
-        setIsSubscribedToChannel(Boolean(response?.user?.subscribedToChannel))
-      })
       .catch((error) => {
         console.warn("Game open tracking failed", error)
       })
   }, [])
 
-  useEffect(() => {
-    if (!isSubscribedToChannel || activeScreen !== 1) {
-      return
-    }
-
-    startTransition(() => {
-      setActiveScreen(2)
-    })
-  }, [activeScreen, isSubscribedToChannel])
+  // Subscription check is temporarily disabled in the mini app.
+  // useEffect(() => {
+  //   if (!isSubscribedToChannel || activeScreen !== 1) {
+  //     return
+  //   }
+  //
+  //   startTransition(() => {
+  //     setActiveScreen(2)
+  //   })
+  // }, [activeScreen, isSubscribedToChannel])
 
   useEffect(() => {
     if (INTRO_DISABLED) {
@@ -208,7 +206,8 @@ function App() {
 
   const handlePrimaryAction = () => {
     startTransition(() => {
-      setActiveScreen(isSubscribedToChannel ? 2 : 1)
+      setActiveScreen(2)
+      // setActiveScreen(isSubscribedToChannel ? 2 : 1)
     })
   }
 
