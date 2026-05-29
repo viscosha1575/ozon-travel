@@ -2,6 +2,7 @@ import { memo, startTransition, useEffect, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
 import GameScreen from "./game/GameScreen.jsx"
+import { isTelegramMiniApp } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -137,6 +138,7 @@ function openExternalLink(url) {
 }
 
 function App() {
+  const isTelegramHost = isTelegramMiniApp()
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -265,11 +267,21 @@ function App() {
 
   const handlePrimaryAction = () => {
     if (currentScreen.id === "intro") {
+      if (isTelegramHost) {
+        handleStartGame()
+        return
+      }
+
       setActiveScreen(1)
       return
     }
 
     if (currentScreen.id === "subscription-failed") {
+      if (isTelegramHost) {
+        handleStartGame()
+        return
+      }
+
       setActiveScreen(1)
       handleSubscriptionAction()
       return
@@ -285,6 +297,13 @@ function App() {
   }
 
   const handleSubscriptionCheck = async () => {
+    if (isTelegramHost) {
+      startTransition(() => {
+        setActiveScreen(3)
+      })
+      return
+    }
+
     setIsSubscriptionCheckPending(true)
 
     try {

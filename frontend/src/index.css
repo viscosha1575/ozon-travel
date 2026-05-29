@@ -185,7 +185,7 @@ body {
 .project-finished-hands {
   position: absolute;
   left: 50%;
-  bottom: calc(212px + var(--app-safe-bottom));
+  bottom: calc(160px + var(--app-safe-bottom));
   z-index: 3;
   display: block;
   width: min(78vw, 360px);
