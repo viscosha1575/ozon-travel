@@ -346,17 +346,9 @@ function App() {
     setIsSubscriptionCheckPending(true)
 
     try {
-      const response = await getJson("/game/subscription-status")
-
-      if (Boolean(response?.user?.subscribedToChannel)) {
-        startTransition(() => {
-          setActiveScreen(3)
-        })
-        return
-      }
-
+      await getJson("/game/subscription-status")
       startTransition(() => {
-        setActiveScreen(2)
+        setActiveScreen(3)
       })
     } catch (error) {
       console.warn("Subscription status refresh failed", error)
