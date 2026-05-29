@@ -23,10 +23,22 @@ const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
 const TRACK_TAIL_BUFFER = 9
 const RESULT_REVEAL_DELAY = 72
+const RESULT_BAG_ANIMATION_DURATION = 1400
+const RESULT_BAG_ANIMATION_EASING = "cubic-bezier(0.18, 0.82, 0.22, 1)"
+const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.24
+const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
+const IDLE_SPIN_CYCLE_DURATION = 18000
+const RESULT_COPY_TOAST_DURATION = 2200
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
-const NON_PRIZE_COPY = "Ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним завтра!\n\nА пока держите интересный факт:"
-const REFERRAL_SHARE_TITLE = "Присоединяйся и выигрывай призы"
+const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
+const REFERRAL_SHARE_MESSAGE = [
+  "100 000 баллов Ozon и классные промокоды на путешествия ждут на Ленте призов!",
+  "",
+  "Скорее летим забирать!",
+].join("\n")
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
+const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?__rr=1"
+const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
@@ -34,6 +46,7 @@ const TOP_BANNER_ACTIONS = [
   { id: "gift", icon: "/game/icons/gift.svg", label: "Подарки" },
 ]
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
+const normalizeEntityId = (value) => String(value ?? "").trim()
 
 function roundToDevicePixel(value) {
   const ratio = typeof window !== "undefined" && Number(window.devicePixelRatio) > 0
@@ -41,15 +54,6 @@ function roundToDevicePixel(value) {
     : 1
 
   return Math.round(Number(value || 0) * ratio) / ratio
-}
-
-function easeSpinProgress(value) {
-  const progress = Math.min(1, Math.max(0, Number(value) || 0))
-  if (isMobileSpinViewport()) {
-    return 1 - ((1 - progress) ** 2.2)
-  }
-  const easedOut = 1 - ((1 - progress) ** 1.03)
-  return easedOut * easedOut * (3 - (2 * easedOut))
 }
 
 function isMobileSpinViewport() {
@@ -154,26 +158,21 @@ function readBootstrapCache() {
   }
 
   try {
-    const rawValue = window.sessionStorage.getItem(BOOTSTRAP_CACHE_KEY)
-
-    if (!rawValue) {
-      return null
-    }
-
-    const parsed = JSON.parse(rawValue)
-    return parsed && typeof parsed === "object" ? parsed : null
+    window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
   } catch {
-    return null
+    // Ignore sessionStorage failures.
   }
+
+  return null
 }
 
-function writeBootstrapCache(value) {
+function writeBootstrapCache() {
   if (typeof window === "undefined") {
     return
   }
 
   try {
-    window.sessionStorage.setItem(BOOTSTRAP_CACHE_KEY, JSON.stringify(value))
+    window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
   } catch {
     // Ignore sessionStorage failures.
   }
@@ -182,11 +181,25 @@ function writeBootstrapCache(value) {
 function buildReferralShareText(referralLink) {
   const normalizedReferralLink = String(referralLink || "").trim()
 
-  return [REFERRAL_SHARE_TITLE, normalizedReferralLink].filter(Boolean).join("\n\n")
+  return [REFERRAL_SHARE_MESSAGE, normalizedReferralLink].filter(Boolean).join("\n\n")
 }
 
 function buildMaxShareLink(text) {
   return `https://max.ru/:share?text=${encodeURIComponent(String(text || "").trim())}`
+}
+
+function buildSupportLink(contact) {
+  const value = String(contact || "").trim()
+
+  if (!value) {
+    return ""
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value
+  }
+
+  return `https://max.ru/${value.replace(/^@+/, "")}`
 }
 
 function normalizeRouletteItems(items, assetVersion) {
@@ -231,10 +244,6 @@ function renderResultDescription(description, isNonPrize, toneClassName = "") {
     return <p className={className}>Описание позиции появится после настройки в админке.</p>
   }
 
-  if (!isNonPrize) {
-    return <p className={className}>{text}</p>
-  }
-
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
@@ -242,18 +251,12 @@ function renderResultDescription(description, isNonPrize, toneClassName = "") {
 
   return (
     <div className="game-result-description-stack">
-      {paragraphs.map((paragraph, paragraphIndex) => {
+      {paragraphs.map((paragraph) => {
         const explicitLines = paragraph
           .split("\n")
           .map((line) => line.trim())
           .filter(Boolean)
-        const sentenceLines = paragraphIndex === 0 && explicitLines.length === 1
-          ? paragraph
-            .split(/(?<=[.!?])\s+/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-          : []
-        const lines = sentenceLines.length > 1 ? sentenceLines : explicitLines
+        const lines = explicitLines.length ? explicitLines : [paragraph]
 
         return (
         <p
@@ -275,16 +278,18 @@ function buildResultBag(result, rouletteItems) {
     return null
   }
 
+  const normalizedPositionId = normalizeEntityId(result.positionId)
   const matchedItem = Array.isArray(rouletteItems)
-    ? rouletteItems.find((item) => item.id === result.positionId)
+    ? rouletteItems.find((item) => normalizeEntityId(item.id) === normalizedPositionId)
     : null
+  const visualPath = matchedItem?.path || matchedItem?.slotPath || result.image || ""
 
   return {
     id: result.positionId ?? matchedItem?.id ?? null,
     key: matchedItem?.key || `result-${result.positionId ?? "item"}`,
     assetVersion: matchedItem?.assetVersion || 0,
-    path: result.image || "",
-    slotPath: result.image || "",
+    path: visualPath,
+    slotPath: visualPath,
     label: result.fullTitle || result.title || matchedItem?.label || `result-${result.positionId ?? "item"}`,
     title: result.fullTitle || result.title || matchedItem?.title || "",
     description: result.description || matchedItem?.description || "",
@@ -292,6 +297,23 @@ function buildResultBag(result, rouletteItems) {
     expiresAt: result.expiresAt || matchedItem?.expiresAt || "",
     chanceValue: matchedItem?.chanceValue || "1x",
     type: result.type || matchedItem?.type || "Приз",
+  }
+}
+
+function buildResultPrize(result, fallbackBag) {
+  if (!result && !fallbackBag) {
+    return null
+  }
+
+  return {
+    positionId: result?.positionId ?? fallbackBag?.id ?? null,
+    type: result?.type || fallbackBag?.type || "Приз",
+    title: result?.title || fallbackBag?.title || "",
+    myPrizeText: result?.myPrizeText || fallbackBag?.myPrizeText || result?.title || fallbackBag?.title || "",
+    description: result?.description || fallbackBag?.description || "",
+    image: result?.image || fallbackBag?.path || "",
+    promoCode: result?.promoCode || "",
+    expiresAt: result?.expiresAt || fallbackBag?.expiresAt || "",
   }
 }
 
@@ -320,19 +342,155 @@ function getRandomLoopCount(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1))
 }
 
+function measureRectSnapshot(node) {
+  if (!node) {
+    return null
+  }
+
+  const rect = node.getBoundingClientRect()
+
+  if (!rect.width || !rect.height) {
+    return null
+  }
+
+  return {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    right: rect.right,
+    bottom: rect.bottom,
+  }
+}
+
+function getRectCenterPoint(rect) {
+  if (!rect) {
+    return null
+  }
+
+  return {
+    x: rect.left + (rect.width / 2),
+    y: rect.top + (rect.height / 2),
+  }
+}
+
+function measureContainedImageRect(node) {
+  if (!node) {
+    return null
+  }
+
+  const rect = measureRectSnapshot(node)
+
+  if (!rect) {
+    return null
+  }
+
+  const naturalWidth = Number(node.naturalWidth || 0)
+  const naturalHeight = Number(node.naturalHeight || 0)
+
+  if (!naturalWidth || !naturalHeight) {
+    return rect
+  }
+
+  const imageRatio = naturalWidth / naturalHeight
+  const rectRatio = rect.width / rect.height
+
+  if (!Number.isFinite(imageRatio) || imageRatio <= 0 || !Number.isFinite(rectRatio) || rectRatio <= 0) {
+    return rect
+  }
+
+  if (imageRatio > rectRatio) {
+    const containedHeight = rect.width / imageRatio
+    const offsetY = (rect.height - containedHeight) / 2
+
+    return {
+      ...rect,
+      top: rect.top + offsetY,
+      height: containedHeight,
+      bottom: rect.top + offsetY + containedHeight,
+    }
+  }
+
+  const containedWidth = rect.height * imageRatio
+  const offsetX = (rect.width - containedWidth) / 2
+
+  return {
+    ...rect,
+    left: rect.left + offsetX,
+    width: containedWidth,
+    right: rect.left + offsetX + containedWidth,
+  }
+}
+
+function readTranslateY(node) {
+  if (!node || typeof window === "undefined") {
+    return 0
+  }
+
+  const transformValue = window.getComputedStyle(node).transform
+
+  if (!transformValue || transformValue === "none") {
+    return 0
+  }
+
+  try {
+    return Number(new window.DOMMatrixReadOnly(transformValue).m42 || 0)
+  } catch {
+    const matrixValues = transformValue.match(/matrix(3d)?\(([^)]+)\)/i)?.[2]
+
+    if (!matrixValues) {
+      return 0
+    }
+
+    const values = matrixValues
+      .split(",")
+      .map((value) => Number.parseFloat(value.trim()))
+      .filter((value) => Number.isFinite(value))
+
+    if (transformValue.startsWith("matrix3d(")) {
+      return values[13] || 0
+    }
+
+    return values[5] || 0
+  }
+}
+
+function normalizeLoopProgress(value, length) {
+  if (!length) {
+    return 0
+  }
+
+  const progress = Number(value) || 0
+
+  return ((progress % length) + length) % length
+}
+
 export default function GameScreen() {
   const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
-  const patternRef = useRef(null)
+  const centerSlotMediaRef = useRef(null)
+  const centerSlotImageRef = useRef(null)
+  const trackSlotImageRefs = useRef([])
+  const trackSlotMediaRefs = useRef([])
+  const carouselMotionRef = useRef(null)
   const trackRef = useRef(null)
+  const resultBagImageRef = useRef(null)
+  const resultBagFlightRef = useRef(null)
   const stepRef = useRef(0)
   const animationFrameRef = useRef(0)
+  const idleAnimationFrameRef = useRef(0)
+  const spinCompletionTimeoutRef = useRef(0)
+  const idleSpinTimeoutRef = useRef(0)
   const overlayTimeoutRef = useRef(0)
   const resultRevealTimeoutRef = useRef(0)
+  const resultAnimationFrameRef = useRef(0)
+  const resultAnimationTimeoutRef = useRef(0)
+  const resultCopyToastTimeoutRef = useRef(0)
   const virtualTranslateRef = useRef(0)
   const pendingSpinRef = useRef(null)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
+  const isIdleSpinActiveRef = useRef(false)
   const isMountedRef = useRef(true)
   const [rouletteItems, setRouletteItems] = useState(() => normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0))
   const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(cachedBootstrap?.myPrizes, 0))
@@ -345,6 +503,9 @@ export default function GameScreen() {
   const [resultBag, setResultBag] = useState(null)
   const [resultPrize, setResultPrize] = useState(null)
   const [isResultCopied, setIsResultCopied] = useState(false)
+  const [isResultCopyToastVisible, setIsResultCopyToastVisible] = useState(false)
+  const [resultRevealPhase, setResultRevealPhase] = useState("idle")
+  const [resultBagFlight, setResultBagFlight] = useState(null)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
   const [trackItems, setTrackItems] = useState(() => createTrackItems([], 0, 0))
   const [trackTranslate, setTrackTranslate] = useState(0)
@@ -365,7 +526,23 @@ export default function GameScreen() {
   }
 
   const activeRouletteItems = rouletteItems
+  const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
   const hasAvailableAttempts = availableAttempts > 0
+  const isResultBagAnimating = resultRevealPhase === "bag-enter"
+  const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
+
+  const resetResultState = useCallback(() => {
+    cancelAnimationFrame(resultAnimationFrameRef.current)
+    clearTimeout(resultAnimationTimeoutRef.current)
+    clearTimeout(resultCopyToastTimeoutRef.current)
+    if (resultBagFlightRef.current) {
+      resultBagFlightRef.current.style.transition = ""
+      resultBagFlightRef.current.style.transform = ""
+    }
+    setIsResultCopyToastVisible(false)
+    setResultBagFlight(null)
+    setResultRevealPhase("idle")
+  }, [])
 
   const openOverlay = (overlayId) => {
     clearTimeout(overlayTimeoutRef.current)
@@ -379,17 +556,99 @@ export default function GameScreen() {
     openOverlay("error")
   }
 
-  const applyTrackStyles = (translateY, patternOffsetY = translateY) => {
-    const normalizedTranslateY = roundToDevicePixel(translateY)
-    const normalizedPatternOffsetY = roundToDevicePixel(patternOffsetY)
+  const applyTrackStyles = (translateY) => {
+    const normalizedTranslateY = Number(translateY || 0)
+
+    if (carouselMotionRef.current) {
+      carouselMotionRef.current.style.transform = `translate3d(0, ${normalizedTranslateY}px, 0)`
+    }
 
     if (trackRef.current) {
-      trackRef.current.style.transform = `translate3d(0, ${normalizedTranslateY}px, 0)`
+      trackRef.current.style.transform = "translate3d(0, 0, 0)"
+    }
+  }
+
+  const clearIdleSpin = () => {
+    cancelAnimationFrame(idleAnimationFrameRef.current)
+    clearTimeout(idleSpinTimeoutRef.current)
+    idleSpinTimeoutRef.current = 0
+    isIdleSpinActiveRef.current = false
+  }
+
+  const stopIdleSpin = (preserveCurrentPosition = false) => {
+    clearIdleSpin()
+
+    const currentTranslate = preserveCurrentPosition && carouselMotionRef.current
+      ? readTranslateY(carouselMotionRef.current)
+      : virtualTranslateRef.current
+
+    if (carouselMotionRef.current) {
+      carouselMotionRef.current.style.transition = "none"
     }
 
-    if (patternRef.current) {
-      patternRef.current.style.backgroundPosition = `center ${normalizedPatternOffsetY}px`
+    applyTrackStyles(currentTranslate)
+    virtualTranslateRef.current = currentTranslate
+    setTrackTranslate(currentTranslate)
+
+    return currentTranslate
+  }
+
+  const startIdleSpin = () => {
+    if (isSpinActiveRef.current || resultBag || !activeRouletteItems.length) {
+      return
     }
+
+    const step = measureStep()
+
+    if (!step) {
+      return
+    }
+
+    const idleSteps = activeRouletteItems.length
+    const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
+    const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + idleSteps) * step)
+
+    clearIdleSpin()
+    isIdleSpinActiveRef.current = true
+    setLockedSlotHeight(null)
+    setTrackItems(createTrackItems(
+      activeRouletteItems,
+      centerBagIndexRef.current,
+      idleSteps,
+    ))
+    setTrackTranslate(baseTranslate)
+    virtualTranslateRef.current = baseTranslate
+
+    idleAnimationFrameRef.current = requestAnimationFrame(() => {
+      if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+        return
+      }
+
+      carouselMotionRef.current.style.transition = "none"
+      applyTrackStyles(baseTranslate)
+      void carouselMotionRef.current.offsetWidth
+
+      idleAnimationFrameRef.current = requestAnimationFrame(() => {
+        if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+          return
+        }
+
+        carouselMotionRef.current.style.transition = `transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`
+        applyTrackStyles(finalTranslate)
+        virtualTranslateRef.current = finalTranslate
+
+        idleSpinTimeoutRef.current = window.setTimeout(() => {
+          if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+            return
+          }
+
+          carouselMotionRef.current.style.transition = "none"
+          applyTrackStyles(baseTranslate)
+          virtualTranslateRef.current = baseTranslate
+          startIdleSpin()
+        }, IDLE_SPIN_CYCLE_DURATION)
+      })
+    })
   }
 
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
@@ -413,6 +672,9 @@ export default function GameScreen() {
       setTrackTranslate(baseTranslate)
       virtualTranslateRef.current = baseTranslate
       requestAnimationFrame(() => {
+        if (carouselMotionRef.current) {
+          carouselMotionRef.current.style.transition = ""
+        }
         applyTrackStyles(baseTranslate)
       })
     }
@@ -430,6 +692,11 @@ export default function GameScreen() {
       return
     }
 
+    const currentTranslate = stopIdleSpin(true)
+
+    isSpinActiveRef.current = true
+    setIsSpinActive(true)
+
     let spinResponse
     void trackGameEvent("spin_clicked", {
       activeItemsCount: activeRouletteItems.length,
@@ -439,6 +706,10 @@ export default function GameScreen() {
       spinResponse = await postJson("/game/spin", {})
     } catch (error) {
       console.warn("Spin request failed", error)
+
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+      resetCarousel(currentCenterBagIndex)
 
       if (error?.code === "PROMO_CODES_EXHAUSTED") {
         setSpinError("")
@@ -451,9 +722,10 @@ export default function GameScreen() {
     }
 
     const targetPositionId = spinResponse?.result?.positionId
+    const normalizedTargetPositionId = normalizeEntityId(targetPositionId)
     const targetBagIndex = Math.max(
       0,
-      activeRouletteItems.findIndex((item) => item.id === targetPositionId)
+      activeRouletteItems.findIndex((item) => normalizeEntityId(item.id) === normalizedTargetPositionId)
     )
     const matchedRouletteItem = activeRouletteItems[targetBagIndex] || null
     const assetVersion = matchedRouletteItem?.assetVersion || getAssetVersion()
@@ -472,7 +744,12 @@ export default function GameScreen() {
       }))
       : []
 
-    const alignmentSteps = getLoopedIndex(
+    const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
+    const currentProgressSteps = normalizeLoopProgress(
+      step > 0 ? (baseTranslate - currentTranslate) / step : 0,
+      activeRouletteItems.length,
+    )
+    const targetProgressSteps = getLoopedIndex(
       targetBagIndex - currentCenterBagIndex,
       activeRouletteItems.length
     )
@@ -483,8 +760,14 @@ export default function GameScreen() {
       Math.round(baseLoopCycles * getSpinDistanceMultiplier()),
     )
     const loopSteps = loopCycles * activeRouletteItems.length
-    const totalSteps = loopSteps + alignmentSteps
-    const durationMs = getSpinDurationMs(totalSteps, step)
+    let totalSteps = loopSteps + targetProgressSteps
+
+    while (totalSteps <= currentProgressSteps) {
+      totalSteps += activeRouletteItems.length
+    }
+
+    const additionalSteps = totalSteps - currentProgressSteps
+    const durationMs = getSpinDurationMs(additionalSteps, step)
 
     pendingSpinRef.current = {
       currentCenterBagIndex,
@@ -500,6 +783,7 @@ export default function GameScreen() {
 
     clearTimeout(overlayTimeoutRef.current)
     clearTimeout(resultRevealTimeoutRef.current)
+    resetResultState()
     setSpinError("")
     setActiveOverlay(null)
     setRenderedOverlay(null)
@@ -507,80 +791,86 @@ export default function GameScreen() {
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
-    setIsSpinActive(true)
     setLockedSlotHeight(step - SLOT_GAP)
     setTrackItems(createTrackItems(
       activeRouletteItems,
       currentCenterBagIndex,
-      getTrackWindowSteps(activeRouletteItems.length),
+      totalSteps,
     ))
-    const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
-    setTrackTranslate(baseTranslate)
-    virtualTranslateRef.current = baseTranslate
+    const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + totalSteps) * step)
+    setTrackTranslate(currentTranslate)
+    virtualTranslateRef.current = currentTranslate
 
     cancelAnimationFrame(animationFrameRef.current)
+    clearTimeout(spinCompletionTimeoutRef.current)
     animationFrameRef.current = requestAnimationFrame(() => {
-      const runSpinFrame = (frameAt) => {
-        const spinState = pendingSpinRef.current
+      const spinState = pendingSpinRef.current
 
-        if (!spinState) {
-          return
-        }
-
-        if (!spinState.startedAt) {
-          spinState.startedAt = frameAt
-        }
-
-        const progress = Math.min(1, (frameAt - spinState.startedAt) / Math.max(1, spinState.durationMs || 0))
-        const easedProgress = easeSpinProgress(progress)
-        const traveledSteps = spinState.totalSteps * easedProgress
-        const wholeSteps = Math.floor(traveledSteps)
-        const fractionalStep = traveledSteps - wholeSteps
-        const cycleLength = activeRouletteItems.length
-        const localWholeSteps = wholeSteps % cycleLength
-        const localTraveledSteps = localWholeSteps + fractionalStep
-        virtualTranslateRef.current = -(TRACK_VISIBLE_START_OFFSET + traveledSteps) * spinState.step
-
-        applyTrackStyles(
-          -(TRACK_VISIBLE_START_OFFSET + localTraveledSteps) * spinState.step,
-          -(localTraveledSteps * spinState.step),
-        )
-
-        if (progress < 1) {
-          animationFrameRef.current = requestAnimationFrame(runSpinFrame)
-          return
-        }
-
-        const finalOffsetSteps = spinState.totalSteps % cycleLength
-        virtualTranslateRef.current = -(TRACK_VISIBLE_START_OFFSET + spinState.totalSteps) * spinState.step
-        applyTrackStyles(
-          -(TRACK_VISIBLE_START_OFFSET + finalOffsetSteps) * spinState.step,
-          -(finalOffsetSteps * spinState.step),
-        )
-        pendingSpinRef.current = null
-        centerBagIndexRef.current = spinState.targetBagIndex
-
-        clearTimeout(resultRevealTimeoutRef.current)
-        resultRevealTimeoutRef.current = window.setTimeout(() => {
-          startTransition(() => {
-            setCenterBagIndex(spinState.targetBagIndex)
-            setResultBag(buildResultBag(spinState.result, activeRouletteItems))
-            setResultPrize(spinState.result)
-            setMyPrizes(spinState.myPrizes)
-            setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
-            setIsSpinActive(false)
-          })
-        }, RESULT_REVEAL_DELAY)
-
-        void trackGameEvent("spin_result_shown", {
-          positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
-          type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
-          hasPromoCode: Boolean(spinState.result?.promoCode),
-        })
+      if (!spinState || !carouselMotionRef.current) {
+        return
       }
 
-      applyTrackStyles(baseTranslate, 0)
-      animationFrameRef.current = requestAnimationFrame(runSpinFrame)
+      carouselMotionRef.current.style.transition = "none"
+      applyTrackStyles(currentTranslate)
+      void carouselMotionRef.current.offsetWidth
+
+      animationFrameRef.current = requestAnimationFrame(() => {
+        if (!carouselMotionRef.current) {
+          return
+        }
+
+        carouselMotionRef.current.style.transition = `transform ${durationMs}ms ${SPIN_TRANSITION_EASING}`
+        applyTrackStyles(finalTranslate)
+
+        spinCompletionTimeoutRef.current = window.setTimeout(() => {
+          const settledCenterTrackIndex = TRACK_CENTER_OFFSET + spinState.totalSteps
+
+          if (carouselMotionRef.current) {
+            carouselMotionRef.current.style.transition = ""
+          }
+
+          virtualTranslateRef.current = finalTranslate
+          setTrackTranslate(finalTranslate)
+          pendingSpinRef.current = null
+          centerBagIndexRef.current = spinState.targetBagIndex
+
+          clearTimeout(resultRevealTimeoutRef.current)
+          resultRevealTimeoutRef.current = window.setTimeout(() => {
+            const resultOriginRect = measureContainedImageRect(trackSlotImageRefs.current[settledCenterTrackIndex])
+              || measureRectSnapshot(trackSlotMediaRefs.current[settledCenterTrackIndex])
+              || measureContainedImageRect(centerSlotImageRef.current)
+              || measureRectSnapshot(centerSlotMediaRef.current)
+
+            startTransition(() => {
+              const nextResultBag = buildResultBag(spinState.result, activeRouletteItems)
+              const nextResultPrize = buildResultPrize(spinState.result, nextResultBag)
+              setCenterBagIndex(spinState.targetBagIndex)
+              setResultBag(nextResultBag)
+              setResultPrize(nextResultPrize)
+              setMyPrizes(spinState.myPrizes)
+              setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
+              setResultRevealPhase(resultOriginRect ? "bag-enter" : "sheet-enter")
+              setResultBagFlight(
+                resultOriginRect && nextResultBag
+                  ? {
+                    path: nextResultBag.path,
+                    label: nextResultBag.label,
+                    originRect: resultOriginRect,
+                  }
+                  : null
+              )
+              isSpinActiveRef.current = false
+              setIsSpinActive(false)
+            })
+          }, RESULT_REVEAL_DELAY)
+
+          void trackGameEvent("spin_result_shown", {
+            positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
+            type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
+            hasPromoCode: Boolean(spinState.result?.promoCode),
+          })
+        }, durationMs)
+      })
     })
   }
 
@@ -645,8 +935,9 @@ export default function GameScreen() {
 
       if (typeof miniApp?.shareMaxContent === "function") {
         const result = await miniApp.shareMaxContent({
-          text: REFERRAL_SHARE_TITLE,
+          text: REFERRAL_SHARE_MESSAGE,
           link: referralLink,
+          disableLinkPreview: true,
         })
 
         void trackGameEvent("referral_share_completed", {
@@ -661,6 +952,24 @@ export default function GameScreen() {
     } catch (error) {
       console.warn("MAX share failed", error)
       openErrorOverlay(error, "Не удалось открыть отправку в MAX")
+    }
+  }
+
+  const handleSupportClick = () => {
+    const supportLink = buildSupportLink(SUPPORT_CONTACT)
+
+    if (!supportLink) {
+      openErrorOverlay("Не удалось подготовить ссылку поддержки")
+      return
+    }
+
+    void trackGameEvent("external_link_opened", {
+      actionId: "support",
+      url: supportLink,
+    })
+
+    if (typeof window !== "undefined") {
+      window.location.assign(supportLink)
     }
   }
 
@@ -695,6 +1004,7 @@ export default function GameScreen() {
     setResultPrize(null)
     setIsResultCopied(false)
     clearTimeout(resultRevealTimeoutRef.current)
+    resetResultState()
     resetCarousel(centerBagIndexRef.current)
   }
 
@@ -713,7 +1023,18 @@ export default function GameScreen() {
     setRenderedOverlay(null)
     setIsOverlayClosing(false)
     setIsResultCopied(false)
-    setResultBag({
+    resetResultState()
+    const prizeResult = {
+      positionId: prize.positionId ?? prize.id,
+      type: prize.type || "Приз",
+      title: prize.title || "",
+      myPrizeText: prize.myPrizeText || prize.title || "",
+      description: prize.description || "",
+      image: prize.image || "",
+      promoCode: prize.promoCode || "",
+      expiresAt: prize.expiresAt || "",
+    }
+    const nextResultBag = buildResultBag(prizeResult, activeRouletteItems) || {
       id: prize.id,
       key: `my-prize-${prize.id}`,
       path: prize.image || "",
@@ -725,16 +1046,34 @@ export default function GameScreen() {
       expiresAt: prize.expiresAt || "",
       chanceValue: prize.chanceValue || "1x",
       type: prize.type || "Приз",
+    }
+    const resultOriginRect = measureContainedImageRect(centerSlotImageRef.current)
+      || measureRectSnapshot(centerSlotMediaRef.current)
+
+    setResultBag(nextResultBag)
+    setResultPrize(buildResultPrize(prizeResult, nextResultBag))
+    setResultBagFlight(
+      resultOriginRect && nextResultBag
+        ? {
+          path: nextResultBag.path,
+          label: nextResultBag.label,
+          originRect: resultOriginRect,
+        }
+        : null
+    )
+    setResultRevealPhase(resultOriginRect ? "bag-enter" : "sheet-enter")
+  }
+
+  const handleOpenTravelApp = () => {
+    void trackGameEvent("external_link_opened", {
+      actionId: "travel_app",
+      url: OZON_TRAVEL_APP_URL,
+      source: "result_prize",
     })
-    setResultPrize({
-      type: prize.type || "Приз",
-      title: prize.title || "",
-      myPrizeText: prize.myPrizeText || prize.title || "",
-      description: prize.description || "",
-      image: prize.image || "",
-      promoCode: prize.promoCode || "",
-      expiresAt: prize.expiresAt || "",
-    })
+
+    if (typeof window !== "undefined") {
+      window.location.assign(OZON_TRAVEL_APP_URL)
+    }
   }
 
   const handleCopyResultCode = async () => {
@@ -742,15 +1081,30 @@ export default function GameScreen() {
       return
     }
 
+    if (isResultCopied) {
+      handleOpenTravelApp()
+      return
+    }
+
     try {
       await navigator.clipboard.writeText(resultPrize.promoCode)
       setIsResultCopied(true)
+      clearTimeout(resultCopyToastTimeoutRef.current)
+      setIsResultCopyToastVisible(true)
+      resultCopyToastTimeoutRef.current = window.setTimeout(() => {
+        setIsResultCopyToastVisible(false)
+      }, RESULT_COPY_TOAST_DURATION)
       void trackGameEvent("promo_code_copied", {
         prizeId: resultBag?.id ?? null,
         codeLength: String(resultPrize.promoCode).length,
       })
     } catch {
       setIsResultCopied(true)
+      clearTimeout(resultCopyToastTimeoutRef.current)
+      setIsResultCopyToastVisible(true)
+      resultCopyToastTimeoutRef.current = window.setTimeout(() => {
+        setIsResultCopyToastVisible(false)
+      }, RESULT_COPY_TOAST_DURATION)
     }
   }
 
@@ -819,7 +1173,7 @@ export default function GameScreen() {
     }
 
     setIsDevBootstrapReloading(true)
-    cancelAnimationFrame(animationFrameRef.current)
+    clearIdleSpin()
     pendingSpinRef.current = null
     clearTimeout(overlayTimeoutRef.current)
     clearTimeout(resultRevealTimeoutRef.current)
@@ -829,6 +1183,8 @@ export default function GameScreen() {
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
+    resetResultState()
+    isSpinActiveRef.current = false
     setIsSpinActive(false)
     setLockedSlotHeight(null)
     setSpinError("")
@@ -876,7 +1232,7 @@ export default function GameScreen() {
     return () => {
       cancelAnimationFrame(frameId)
     }
-  }, [activeRouletteItems])
+  }, [activeRouletteItemsKey])
 
   useEffect(() => {
     if (isSpinActiveRef.current) {
@@ -919,11 +1275,36 @@ export default function GameScreen() {
     return () => {
       cancelAnimationFrame(frameId)
       window.removeEventListener("resize", handleResize)
+      clearIdleSpin()
       cancelAnimationFrame(animationFrameRef.current)
+      clearTimeout(spinCompletionTimeoutRef.current)
       clearTimeout(overlayTimeoutRef.current)
       clearTimeout(resultRevealTimeoutRef.current)
     }
-  }, [activeRouletteItems])
+  }, [activeRouletteItemsKey])
+
+  useEffect(() => {
+    if (!activeRouletteItems.length) {
+      clearIdleSpin()
+      return undefined
+    }
+
+    if (resultBag) {
+      stopIdleSpin(true)
+      return undefined
+    }
+
+    if (isSpinActive) {
+      clearIdleSpin()
+      return undefined
+    }
+
+    startIdleSpin()
+
+    return () => {
+      clearIdleSpin()
+    }
+  }, [activeRouletteItemsKey, isSpinActive, resultBag, centerBagIndex, trackItems.length])
 
   useEffect(() => {
     centerBagIndexRef.current = centerBagIndex
@@ -932,6 +1313,77 @@ export default function GameScreen() {
   useEffect(() => {
     isSpinActiveRef.current = isSpinActive
   }, [isSpinActive])
+
+  useEffect(() => {
+    const resultBagElement = resultBagFlightRef.current
+    const resultBagTargetElement = resultBagImageRef.current
+    const flightState = resultBagFlight
+
+    if (!resultBag || resultRevealPhase !== "bag-enter" || !flightState?.originRect || !resultBagElement || !resultBagTargetElement) {
+      return undefined
+    }
+
+    cancelAnimationFrame(resultAnimationFrameRef.current)
+    clearTimeout(resultAnimationTimeoutRef.current)
+
+    resultAnimationFrameRef.current = requestAnimationFrame(() => {
+      const targetRect = measureContainedImageRect(resultBagTargetElement)
+
+      if (!targetRect) {
+        setResultBagFlight(null)
+        setResultRevealPhase("sheet-enter")
+        return
+      }
+
+      const originPoint = getRectCenterPoint(flightState.originRect)
+      const targetPoint = getRectCenterPoint(targetRect)
+
+      if (!originPoint || !targetPoint) {
+        setResultBagFlight(null)
+        setResultRevealPhase("sheet-enter")
+        return
+      }
+
+      const deltaX = roundToDevicePixel(targetPoint.x - originPoint.x)
+      const deltaY = roundToDevicePixel(targetPoint.y - originPoint.y)
+      const uniformScale = targetRect.width / Math.max(flightState.originRect.width, 1)
+      const finalScale = uniformScale * RESULT_BAG_FINAL_SCALE_MULTIPLIER
+
+      resultBagElement.style.transition = "none"
+      resultBagElement.style.top = `${flightState.originRect.top}px`
+      resultBagElement.style.left = `${flightState.originRect.left}px`
+      resultBagElement.style.width = `${flightState.originRect.width}px`
+      resultBagElement.style.height = `${flightState.originRect.height}px`
+      resultBagElement.style.transform = "translate3d(0, 0, 0) scale(1, 1)"
+      void resultBagElement.offsetWidth
+
+      resultAnimationFrameRef.current = requestAnimationFrame(() => {
+        resultBagElement.style.transition = `transform ${RESULT_BAG_ANIMATION_DURATION}ms ${RESULT_BAG_ANIMATION_EASING}`
+        resultBagElement.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${finalScale})`
+
+        resultAnimationTimeoutRef.current = window.setTimeout(() => {
+          resultBagElement.style.transition = ""
+          resultBagElement.style.top = `${targetRect.top}px`
+          resultBagElement.style.left = `${targetRect.left}px`
+          resultBagElement.style.width = `${targetRect.width}px`
+          resultBagElement.style.height = `${targetRect.height}px`
+          resultBagElement.style.transform = `translate3d(0, 0, 0) scale(${RESULT_BAG_FINAL_SCALE_MULTIPLIER})`
+          setResultRevealPhase("sheet-enter")
+        }, RESULT_BAG_ANIMATION_DURATION)
+      })
+      })
+
+    return () => {
+      cancelAnimationFrame(resultAnimationFrameRef.current)
+      clearTimeout(resultAnimationTimeoutRef.current)
+    }
+  }, [resultBag, resultBagFlight, resultRevealPhase])
+
+  useEffect(() => () => {
+    cancelAnimationFrame(resultAnimationFrameRef.current)
+    clearTimeout(resultAnimationTimeoutRef.current)
+    clearTimeout(resultCopyToastTimeoutRef.current)
+  }, [])
 
   return (
     <main className="game-screen" aria-label="Игровой экран">
@@ -985,15 +1437,28 @@ export default function GameScreen() {
       <div className="game-fade-overlay game-fade-overlay-top" aria-hidden="true" />
       <div className="game-fade-overlay game-fade-overlay-bottom" aria-hidden="true" />
       <div className="game-shell">
-        <div className={`game-stage ${resultBag ? "is-result-mode" : ""}`}>
+        <div
+          className={[
+            "game-stage",
+            isResultSheetVisible ? "is-result-mode" : "",
+            isResultBagAnimating ? "is-result-entering" : "",
+          ].filter(Boolean).join(" ")}
+        >
           <div className={`game-carousel-scene ${isSpinActive ? "is-spinning" : ""}`}>
             <div className="game-carousel-backdrop">
               <div
-                ref={patternRef}
-                className="game-carousel-pattern"
+                className="game-carousel-pattern-underlay"
                 aria-hidden="true"
               />
-              <div className="game-carousel-viewport">
+              <div
+                ref={carouselMotionRef}
+                className="game-carousel-motion-layer"
+                aria-hidden="true"
+              >
+                <div
+                  className="game-carousel-pattern"
+                  aria-hidden="true"
+                />
                 <div
                   ref={trackRef}
                   className="game-carousel-track"
@@ -1005,8 +1470,22 @@ export default function GameScreen() {
                       className="game-carousel-slot"
                       style={lockedSlotHeight ? { height: `${lockedSlotHeight}px` } : undefined}
                     >
-                      <div className="game-carousel-slot-media">
+                      <div
+                        ref={(node) => {
+                          trackSlotMediaRefs.current[index] = node
+                          if (index === TRACK_CENTER_OFFSET) {
+                            centerSlotMediaRef.current = node
+                          }
+                        }}
+                        className="game-carousel-slot-media"
+                      >
                         <img
+                          ref={(node) => {
+                            trackSlotImageRefs.current[index] = node
+                            if (index === TRACK_CENTER_OFFSET) {
+                              centerSlotImageRef.current = node
+                            }
+                          }}
                           src={bag.slotPath}
                           alt=""
                           className="game-carousel-slot-image"
@@ -1127,7 +1606,11 @@ export default function GameScreen() {
                   Обратитесь в наш чат поддержки в МАКС
                 </p>
                 <div className="game-overlay-actions">
-                  <button type="button" className="game-overlay-action game-overlay-action--primary">
+                  <button
+                    type="button"
+                    className="game-overlay-action game-overlay-action--primary"
+                    onClick={handleSupportClick}
+                  >
                     Написать в поддержку
                   </button>
                   <button
@@ -1215,13 +1698,23 @@ export default function GameScreen() {
           </div>
         ) : null}
         {resultBag ? (
-          <section className="game-result" aria-label="Результат приза">
-            <div className="game-result-bag-frame">
-              <img
-                src={resultBag.path}
-                alt={resultBag.label}
-                className="game-result-bag"
-              />
+          <section
+            className={`game-result ${isResultSheetVisible ? "is-sheet-visible" : "is-bag-entering"}`}
+            aria-label="Результат приза"
+          >
+            <div className="game-result-hero">
+              <div className="game-result-bag-frame">
+              <div
+                className={`game-result-bag-visual ${resultBagFlight ? "is-hidden" : ""}`.trim()}
+              >
+                <img
+                  ref={resultBagImageRef}
+                    src={resultBag.path}
+                    alt={resultBag.label}
+                    className="game-result-bag"
+                  />
+                </div>
+              </div>
             </div>
             <div className="game-result-sheet">
               <div className="game-result-sheet-inner">
@@ -1230,15 +1723,19 @@ export default function GameScreen() {
                     Ваш приз
                   </p>
                 ) : null}
-                <h2 className="game-result-title">{resultPrize?.title || resultBag?.title || "Позиция"}</h2>
+                {resultPrize?.type !== "Не приз" ? (
+                  <h2 className="game-result-title">
+                    {resultPrize?.title || resultBag?.title || "Позиция"}
+                  </h2>
+                ) : null}
                 {resultPrize?.type === "Не приз" ? (
                   <>
-                    {renderResultDescription(NON_PRIZE_COPY, true)}
                     {renderResultDescription(
                       resultPrize?.description || resultBag?.description,
                       true,
                       "game-result-description--dark",
                     )}
+                    {renderResultDescription(NON_PRIZE_COPY, true)}
                   </>
                 ) : renderResultDescription(
                   resultPrize?.description || resultBag?.description,
@@ -1246,12 +1743,16 @@ export default function GameScreen() {
                 )}
                 <div className="game-result-actions">
                   {resultPrize?.promoCode ? (
-                    <button type="button" className="game-result-code" onClick={handleCopyResultCode}>
+                    <button
+                      type="button"
+                      className={`game-result-code ${isResultCopied ? "is-copied" : ""}`.trim()}
+                      onClick={handleCopyResultCode}
+                    >
                       <span className="game-result-code-text">
-                        {isResultCopied ? "Скопировано" : resultPrize.promoCode}
+                        {isResultCopied ? "Перейти в приложение" : resultPrize.promoCode}
                       </span>
                       <img
-                        src={isResultCopied ? "/game/icons/check.svg" : "/game/icons/copy.svg"}
+                        src={isResultCopied ? "/intro/subscribe.webp" : "/game/icons/copy.svg"}
                         alt=""
                         className="game-result-code-icon"
                         aria-hidden="true"
@@ -1269,6 +1770,28 @@ export default function GameScreen() {
               </div>
             </div>
           </section>
+        ) : null}
+        {resultBagFlight ? (
+          <div className="game-result-flight-layer" aria-hidden="true">
+            <img
+              ref={resultBagFlightRef}
+              src={resultBagFlight.path}
+              alt=""
+              className="game-result-flight-bag"
+              style={{
+                top: `${resultBagFlight.originRect.top}px`,
+                left: `${resultBagFlight.originRect.left}px`,
+                width: `${resultBagFlight.originRect.width}px`,
+                height: `${resultBagFlight.originRect.height}px`,
+              }}
+            />
+          </div>
+        ) : null}
+        {isResultCopyToastVisible ? (
+          <div className="game-result-copy-toast" role="status" aria-live="polite">
+            <span className="game-result-copy-toast-text">Скопировано</span>
+            <span className="game-result-copy-toast-check" aria-hidden="true">✓</span>
+          </div>
         ) : null}
       </div>
       {renderedOverlay === "gift" ? (

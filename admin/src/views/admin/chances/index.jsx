@@ -45,6 +45,14 @@ function formatPrizeCount(item, value) {
   return formatCount(value);
 }
 
+function formatAvailableCount(item) {
+  if (!item?.hasPrizeLimit) {
+    return "Без лимита";
+  }
+
+  return formatCount(item?.availablePromoCodesCount || 0);
+}
+
 const EMPTY_RESPONSE = {
   items: [],
   summary: {
@@ -197,15 +205,16 @@ export default function ChancesPage() {
               <Table variant="simple" size="sm" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} w="22%" px="6px" fontSize="10px">Название</Th>
+                    <Th color={textColorSecondary} w="20%" px="6px" fontSize="10px">Название</Th>
                     <Th color={textColorSecondary} w="6%" px="6px" fontSize="10px">Тип</Th>
                     <Th color={textColorSecondary} w="12%" px="6px" fontSize="10px">Категория</Th>
-                    <Th color={textColorSecondary} w="14%" px="6px" fontSize="10px">Тип промокода</Th>
+                    <Th color={textColorSecondary} w="13%" px="6px" fontSize="10px">Тип промокода</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Всего</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Остаток</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Доступно</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Шанс</Th>
                     <Th color={textColorSecondary} w="9%" px="6px" fontSize="10px">Вероятность</Th>
-                    <Th color={textColorSecondary} w="7%" px="6px" fontSize="10px">Действие</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -303,6 +312,11 @@ export default function ChancesPage() {
                         </Text>
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={probabilityColor} fontSize="13px" fontWeight="700">
+                          {formatAvailableCount(item)}
+                        </Text>
+                      </Td>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Input
                           h="36px"
                           minW="64px"
@@ -341,7 +355,7 @@ export default function ChancesPage() {
                     </Tr>
                   )) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={9}>
+                      <Td borderColor={borderColor} colSpan={10}>
                         <Text color={textColorSecondary} fontSize="13px" py="12px" textAlign="center">
                           Позиции не найдены.
                         </Text>

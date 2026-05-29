@@ -8,6 +8,8 @@ const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
 const SUBSCRIPTION_CHANNEL_URL = String(
   import.meta.env.VITE_MAX_CHANNEL_URL || "https://max.ru/ozontravel_official",
 ).trim()
+const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
 const GAME_SCENE_ASSETS = [
   "/game/center.webp",
   "/game/left-triangle.svg",
@@ -23,6 +25,7 @@ const GAME_SCENE_ASSETS = [
   "/game/bags/case3.webp",
   "/game/bags/case4.webp",
   "/game/bags/case5.webp",
+  "/intro/hands.webp",
 ]
 
 const screens = [
@@ -51,17 +54,28 @@ const screens = [
     actionLabel: "Подписаться",
     secondaryActionLabel: "Проверить подписку",
   },
-  // {
-  //   id: "result",
-  //   variant: "result",
-  //   compact: true,
-  //   titleLines: ["Ура!"],
-  //   description: [
-  //     "Лента призов уже ждёт вас! Заходите в мини-",
-  //     "приложение и ловите ваш багаж с призами",
-  //   ],
-  //   actionLabel: "Играть",
-  // },
+  {
+    id: "subscription-failed",
+    variant: "subscription-failed",
+    compact: true,
+    titleLines: ["Упс!"],
+    description: [
+      "Вы не подписаны на канал Ozon Travel.",
+      "Самое время это исправить!",
+    ],
+    actionLabel: "Подписаться",
+  },
+  {
+    id: "result",
+    variant: "result",
+    compact: true,
+    titleLines: ["Ура!"],
+    description: [
+      "Лента призов уже ждёт вас! Заходите в мини-",
+      "приложение и ловите ваш багаж с призами",
+    ],
+    actionLabel: "Играть",
+  },
 ]
 
 function preloadImage(src) {
@@ -83,6 +97,20 @@ function preloadImage(src) {
       finalize()
     }
   })
+}
+
+function buildSupportLink(contact) {
+  const value = String(contact || "").trim()
+
+  if (!value) {
+    return ""
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value
+  }
+
+  return `https://max.ru/${value.replace(/^@+/, "")}`
 }
 
 const PersistentGameScreen = memo(GameScreen)
@@ -113,28 +141,46 @@ function App() {
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
+  const [isSubscribedAutostartPending, setIsSubscribedAutostartPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
+  const [isProjectFinished, setIsProjectFinished] = useState(null)
+  const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
+  const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const currentScreen = screens[activeScreen]
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(APP_OPEN_STORAGE_KEY) === "1") {
-      return
-    }
+    const shouldTrackOpen = typeof window === "undefined"
+      ? true
+      : window.sessionStorage.getItem(APP_OPEN_STORAGE_KEY) !== "1"
 
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && shouldTrackOpen) {
       window.sessionStorage.setItem(APP_OPEN_STORAGE_KEY, "1")
     }
 
     void postJson("/game/open", {
       entryScreen: INTRO_DISABLED ? "game" : "intro",
+      trackOpen: shouldTrackOpen,
     })
+      .then((response) => {
+        const projectFinished = Boolean(response?.projectFinished)
+        const subscribedToChannel = Boolean(response?.user?.subscribedToChannel)
+
+        setIsProjectFinished(projectFinished)
+
+        if (!projectFinished && subscribedToChannel) {
+          setIsSubscribedAutostartPending(true)
+          setIsGameLaunchPending(true)
+        }
+      })
       .catch((error) => {
         console.warn("Game open tracking failed", error)
+        setIsSubscribedAutostartPending(false)
+        setIsProjectFinished(false)
       })
   }, [])
 
   useEffect(() => {
-    if (INTRO_DISABLED) {
+    if (INTRO_DISABLED || isProjectFinished) {
       return
     }
 
@@ -151,7 +197,31 @@ function App() {
       isCancelled = true
       window.clearTimeout(startPreload)
     }
-  }, [])
+  }, [isProjectFinished])
+
+  useEffect(() => {
+    if (!isProjectFinished) {
+      setProjectFinishedMyPrizes([])
+      setIsProjectFinishedPrizesOpen(false)
+      return
+    }
+
+    let cancelled = false
+
+    void getJson("/game/bootstrap")
+      .then((response) => {
+        if (!cancelled) {
+          setProjectFinishedMyPrizes(Array.isArray(response?.myPrizes) ? response.myPrizes : [])
+        }
+      })
+      .catch((error) => {
+        console.warn("Project finished prizes bootstrap failed", error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isProjectFinished])
 
   useEffect(() => {
     if (!isGameLaunchPending || !isGameSceneReady) {
@@ -160,18 +230,19 @@ function App() {
 
     startTransition(() => {
       setIsGameActive(true)
+      setIsSubscribedAutostartPending(false)
     })
   }, [isGameLaunchPending, isGameSceneReady])
 
   useEffect(() => {
-    if (INTRO_DISABLED) {
+    if (INTRO_DISABLED || isProjectFinished === true || isProjectFinished === null) {
       return
     }
 
     void trackGameEvent("intro_screen_viewed", {
       screenId: currentScreen.id,
     })
-  }, [currentScreen.id])
+  }, [currentScreen.id, isProjectFinished])
 
   const handleStartGame = () => {
     if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
@@ -193,7 +264,20 @@ function App() {
   }
 
   const handlePrimaryAction = () => {
-    handleStartGame()
+    if (currentScreen.id === "intro") {
+      setActiveScreen(1)
+      return
+    }
+
+    if (currentScreen.id === "subscription-failed") {
+      setActiveScreen(1)
+      handleSubscriptionAction()
+      return
+    }
+
+    if (currentScreen.id === "result") {
+      handleStartGame()
+    }
   }
 
   const handleSubscriptionAction = () => {
@@ -208,9 +292,14 @@ function App() {
 
       if (Boolean(response?.user?.subscribedToChannel)) {
         startTransition(() => {
-          handleStartGame()
+          setActiveScreen(3)
         })
+        return
       }
+
+      startTransition(() => {
+        setActiveScreen(2)
+      })
     } catch (error) {
       console.warn("Subscription status refresh failed", error)
     } finally {
@@ -218,12 +307,180 @@ function App() {
     }
   }
 
+  const handleProjectFinishedAction = () => {
+    openExternalLink(SUBSCRIPTION_CHANNEL_URL)
+  }
+
+  const handleCloseProjectFinishedPrizes = () => {
+    setIsProjectFinishedPrizesOpen(false)
+  }
+
+  const handleProjectFinishedBannerAction = (actionId) => {
+    if (actionId === "question") {
+      const supportLink = buildSupportLink(SUPPORT_CONTACT)
+      if (!supportLink) {
+        return
+      }
+
+      void trackGameEvent("external_link_opened", {
+        actionId,
+        url: supportLink,
+        source: "project_finished",
+      })
+      openExternalLink(supportLink)
+      return
+    }
+
+    if (actionId === "exclamation") {
+      void trackGameEvent("external_link_opened", {
+        actionId,
+        url: IMPORTANT_INFO_URL,
+        source: "project_finished",
+      })
+      openExternalLink(IMPORTANT_INFO_URL)
+      return
+    }
+
+    if (actionId === "gift") {
+      void trackGameEvent("overlay_opened", {
+        overlayId: actionId,
+        source: "project_finished",
+        myPrizesCount: projectFinishedMyPrizes.length,
+      })
+      setIsProjectFinishedPrizesOpen(true)
+      return
+    }
+
+    void trackGameEvent("external_link_opened", {
+      actionId,
+      url: SUBSCRIPTION_CHANNEL_URL,
+      source: "project_finished",
+    })
+    openExternalLink(SUBSCRIPTION_CHANNEL_URL)
+  }
+
+  const isProjectStateResolved = INTRO_DISABLED || isProjectFinished !== null
+
   return (
     <main className="app-shell" aria-label="Application shell">
       <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
         <PersistentGameScreen />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
+        {!isProjectStateResolved || (isSubscribedAutostartPending && !isGameActive) ? (
+          <div className="project-finished-loading" aria-hidden="true" />
+        ) : isProjectFinished ? (
+          <section className="project-finished-screen" aria-label="Проект завершен">
+            <div className="project-finished-stage">
+              <div className="game-carousel-scene project-finished-scene" aria-hidden="true">
+                <div className="game-carousel-backdrop">
+                  <div className="game-carousel-pattern-underlay" />
+                  <div className="game-carousel-pattern project-finished-pattern" />
+                </div>
+              </div>
+              <section className="game-top-banner project-finished-banner" aria-hidden="true">
+                <div className="game-top-banner-section game-top-banner-section--primary">
+                  <div className="game-top-banner-actions">
+                    <button
+                      type="button"
+                      className="game-top-banner-action"
+                      aria-label="Вопрос"
+                      onClick={() => handleProjectFinishedBannerAction("question")}
+                    >
+                      <img src="/game/icons/question.svg" alt="" className="game-top-banner-action-icon" />
+                    </button>
+                    <button
+                      type="button"
+                      className="game-top-banner-action"
+                      aria-label="Важно"
+                      onClick={() => handleProjectFinishedBannerAction("exclamation")}
+                    >
+                      <img src="/game/icons/exclamation.svg" alt="" className="game-top-banner-action-icon" />
+                    </button>
+                    <button
+                      type="button"
+                      className="game-top-banner-action"
+                      aria-label="Подарки"
+                      onClick={() => handleProjectFinishedBannerAction("gift")}
+                    >
+                      <img src="/game/icons/gift.svg" alt="" className="game-top-banner-action-icon" />
+                    </button>
+                  </div>
+                </div>
+                <div className="game-top-banner-section game-top-banner-section--secondary">
+                  <img src="/game/icons/logo.webp" alt="" className="game-top-banner-logo" />
+                </div>
+              </section>
+              <img
+                src="/intro/hands.webp"
+                alt=""
+                className="project-finished-hands"
+                aria-hidden="true"
+              />
+              <section className="project-finished-sheet">
+                <div className="project-finished-sheet-inner">
+                  <h1 className="project-finished-title">Выдача багажа завершена</h1>
+                  <p className="project-finished-description">
+                    <span className="content-line">Благодарим, что были с нами.</span>
+                    <span className="content-line">До встречи на новых рейсах!</span>
+                  </p>
+                  <button
+                    type="button"
+                    className="content-action project-finished-action"
+                    onClick={handleProjectFinishedAction}
+                  >
+                    Вернуться в канал
+                  </button>
+                </div>
+              </section>
+            </div>
+            {isProjectFinishedPrizesOpen ? (
+              <div
+                className="game-prizes-page is-opening"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="project-finished-prizes-title"
+              >
+                <section className="game-prizes-page-inner">
+                  <h2 id="project-finished-prizes-title" className="game-prizes-title">
+                    Мои призы
+                  </h2>
+                  <div className="game-prizes-list" aria-label="Список призов">
+                    {projectFinishedMyPrizes.length ? projectFinishedMyPrizes.map((prize) => (
+                      <div
+                        key={prize.id}
+                        className="game-prize-card"
+                      >
+                        <div className="game-prize-card-media">
+                          <img
+                            src={prize.image || ""}
+                            alt=""
+                            className="game-prize-card-image"
+                          />
+                        </div>
+                        <div className="game-prize-card-content">
+                          <h3 className="game-prize-card-title">{prize.myPrizeText || prize.title}</h3>
+                          <p className="game-prize-card-date">{prize.expiresAt}</p>
+                        </div>
+                      </div>
+                    )) : (
+                      <p className="game-overlay-description">Пока призов нет. Спасибо, что были с нами.</p>
+                    )}
+                  </div>
+                  <div className="game-prizes-footer">
+                    <button
+                      type="button"
+                      className="game-prizes-close"
+                      onClick={handleCloseProjectFinishedPrizes}
+                    >
+                      Закрыть
+                    </button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+          </section>
+        ) : (
         <div className="split-screen" aria-label="Three-row expanded layout">
           <div className="background-vectors" aria-hidden="true">
         <svg
@@ -278,7 +535,7 @@ function App() {
           </section>
           <section className="spacer-panel" aria-hidden="true" />
           <div
-            className={`content-bag-layer ${activeScreen === 0 ? "is-visible" : "is-hidden"}`}
+            className={`content-bag-layer ${activeScreen === 0 ? "is-visible" : activeScreen === 3 ? "is-visible is-static" : "is-hidden"}`}
             aria-hidden="true"
           >
         <img
@@ -298,7 +555,7 @@ function App() {
         />
           </div>
           <div
-            className={`content-subscribe-layer ${activeScreen === 1 ? "is-visible" : "is-hidden"}`}
+            className={`content-subscribe-layer ${activeScreen === 1 || activeScreen === 2 ? "is-visible" : "is-hidden"}`}
             aria-hidden="true"
           >
         <img
@@ -354,15 +611,40 @@ function App() {
                         </button>
                       </div>
                     </>
-                  ) : (
+                  ) : screen.variant === "subscription-failed" ? (
                     <>
                       <div className="content-copy">
-                        <p className="content-kicker">
-                          {screen.kicker.map((line) => (
+                        <h1 className="content-title">
+                          {screen.titleLines.map((line) => (
+                            <span key={line} className="content-line">{line}</span>
+                          ))}
+                        </h1>
+                        <p className="content-description">
+                          {screen.description.map((line) => (
                             <span key={line} className="content-line">{line}</span>
                           ))}
                         </p>
-                        <h1 className="content-title">
+                      </div>
+
+                      <button
+                        type="button"
+                        className="content-action"
+                        onClick={handlePrimaryAction}
+                      >
+                        {screen.actionLabel}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="content-copy">
+                        {screen.kicker?.length ? (
+                          <p className="content-kicker">
+                            {screen.kicker.map((line) => (
+                              <span key={line} className="content-line">{line}</span>
+                            ))}
+                          </p>
+                        ) : null}
+                        <h1 className={`content-title ${screen.variant === "result" ? "content-title--result" : ""}`}>
                           {screen.titleLines.map((line) => (
                             <span key={line} className="content-line">{line}</span>
                           ))}
@@ -382,7 +664,7 @@ function App() {
                             </span>
                           ) : null}
                         </h1>
-                        <p className="content-description">
+                        <p className={`content-description ${screen.variant === "result" ? "content-description--result" : ""}`}>
                           {screen.description.map((line) => (
                             <span key={line} className="content-line">{line}</span>
                           ))}
@@ -405,6 +687,7 @@ function App() {
             </div>
           </section>
         </div>
+        )}
       </div>
     </main>
   )

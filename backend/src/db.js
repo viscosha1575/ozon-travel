@@ -125,6 +125,39 @@ async function ensureSchema() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS prize_promo_codes (
+      id BIGSERIAL PRIMARY KEY,
+      prize_id BIGINT NOT NULL REFERENCES prize_positions(id) ON DELETE CASCADE,
+      code TEXT NOT NULL,
+      available_from TIMESTAMPTZ NULL,
+      awarded_prize_id BIGINT NULL REFERENCES awarded_prizes(id) ON DELETE SET NULL,
+      claimed_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS prize_promo_codes_prize_id_code_unique_idx
+    ON prize_promo_codes (prize_id, code)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS prize_promo_codes_prize_id_available_idx
+    ON prize_promo_codes (prize_id, available_from, claimed_at)
+  `);
+
+  await query(`
+    ALTER TABLE prize_positions
+    ADD COLUMN IF NOT EXISTS code_release_start TIMESTAMPTZ NULL
+  `);
+
+  await query(`
+    ALTER TABLE prize_positions
+    ADD COLUMN IF NOT EXISTS code_release_end TIMESTAMPTZ NULL
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS game_event_logs (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -282,6 +315,25 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS push_deliveries_message_id_idx
     ON push_deliveries (message_id)
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_runtime_settings (
+      settings_key TEXT PRIMARY KEY,
+      project_finished BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(
+    `
+      INSERT INTO app_runtime_settings (
+        settings_key,
+        project_finished
+      )
+      VALUES ('global', FALSE)
+      ON CONFLICT (settings_key) DO NOTHING
+    `,
+  );
 }
 
 async function seedPrizesIfEmpty() {
@@ -311,12 +363,14 @@ async function seedPrizesIfEmpty() {
           user_limit_count,
           active_from,
           active_to,
+          code_release_start,
+          code_release_end,
           roulette_image,
           my_prize_text,
           roulette_description
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19
+          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21
         )
       `,
       [
@@ -336,6 +390,8 @@ async function seedPrizesIfEmpty() {
         item.userLimitCount,
         item.activeFrom || null,
         item.activeTo || null,
+        item.codeReleaseStart || null,
+        item.codeReleaseEnd || null,
         item.rouletteImage ? JSON.stringify(item.rouletteImage) : null,
         item.myPrizeText,
         item.rouletteDescription,
@@ -344,7 +400,58 @@ async function seedPrizesIfEmpty() {
   }
 }
 
+async function seedPromoCodePoolFromExistingPrizes() {
+  const prizesResult = await query(`
+    SELECT
+      id,
+      promo_codes,
+      code_release_start
+    FROM prize_positions
+    WHERE jsonb_array_length(promo_codes) > 0
+  `);
+
+  for (const row of prizesResult.rows) {
+    const prizeId = Number(row.id);
+    const existingPoolResult = await query(
+      "SELECT COUNT(*)::int AS count FROM prize_promo_codes WHERE prize_id = $1",
+      [prizeId],
+    );
+
+    if (Number(existingPoolResult.rows[0]?.count || 0) > 0) {
+      continue;
+    }
+
+    const promoCodes = Array.isArray(row.promo_codes)
+      ? row.promo_codes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+
+    if (!promoCodes.length) {
+      continue;
+    }
+
+    const releaseAt = row.code_release_start || new Date().toISOString();
+
+    await query(
+      `
+        INSERT INTO prize_promo_codes (
+          prize_id,
+          code,
+          available_from
+        )
+        SELECT
+          $1,
+          item.code,
+          $3::timestamptz
+        FROM UNNEST($2::text[]) AS item(code)
+        ON CONFLICT (prize_id, code) DO NOTHING
+      `,
+      [prizeId, promoCodes, releaseAt],
+    );
+  }
+}
+
 export async function initDatabase() {
   await ensureSchema();
   await seedPrizesIfEmpty();
+  await seedPromoCodePoolFromExistingPrizes();
 }

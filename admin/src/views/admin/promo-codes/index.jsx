@@ -132,6 +132,51 @@ function parseWorkbookPromoCodes(fileName, rows = []) {
   return Array.from(new Set(codes));
 }
 
+function formatPromoReleaseIntervalHint(codesCount, startValue, endValue) {
+  const safeCodesCount = Math.max(0, Number(codesCount) || 0);
+
+  if (!safeCodesCount || !startValue || !endValue) {
+    return "";
+  }
+
+  const startDate = new Date(startValue);
+  const endDate = new Date(endValue);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return "";
+  }
+
+  const durationMs = endDate.getTime() - startDate.getTime();
+
+  if (durationMs < 0) {
+    return "Конец периода должен быть позже старта, чтобы распределить коды по времени.";
+  }
+
+  if (safeCodesCount === 1 || durationMs === 0) {
+    return "Единственный промокод будет доступен сразу в момент старта окна.";
+  }
+
+  const intervalMs = durationMs / (safeCodesCount - 1);
+  const totalMinutes = Math.max(1, Math.round(intervalMs / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+
+  if (hours > 0) {
+    parts.push(`${hours} ч`);
+  }
+
+  if (minutes > 0) {
+    parts.push(`${minutes} мин`);
+  }
+
+  if (!parts.length) {
+    parts.push("1 мин");
+  }
+
+  return `Каждый следующий промокод будет доступен каждые ${parts.join(" ")}.`;
+}
+
 function ToggleButtonGroup({
   value,
   onChange,
@@ -220,10 +265,76 @@ function createInitialPrizeForm() {
     userLimitCount: "",
     activeFrom: DEFAULT_DRAW_ACTIVE_FROM,
     activeTo: DEFAULT_DRAW_ACTIVE_TO,
+    codeReleaseStart: "",
+    codeReleaseEnd: "",
+    availablePromoCodesCount: 0,
+    unavailablePromoCodesCount: 0,
+    claimedPromoCodesCount: 0,
     rouletteImage: null,
     myPrizeText: "",
     rouletteDescription: "",
   };
+}
+
+function buildPrizeForm(item = {}) {
+  return {
+    title: item.title || "",
+    category: item.category || "",
+    promoCodeType: item.promoCodeType || "",
+    type: item.type || PRIZE_TYPE_OPTIONS[0].value,
+    hasPrizeLimit: item.hasPrizeLimit ?? true,
+    promoCodesFile: item.promoCodesFileName ? { name: item.promoCodesFileName } : null,
+    promoCodes: Array.isArray(item.promoCodes) ? item.promoCodes : [],
+    promoCodeValue: item.promoCodeValue || "",
+    totalCount: String(item.totalCount || ""),
+    chanceValue: item.chanceValue || "1x",
+    hasUserLimit: item.hasUserLimit ?? true,
+    userLimitCount: item.userLimitCount ? String(item.userLimitCount) : "",
+    activeFrom: item.activeFrom || "",
+    activeTo: item.activeTo || "",
+    codeReleaseStart: item.codeReleaseStart || "",
+    codeReleaseEnd: item.codeReleaseEnd || "",
+    availablePromoCodesCount: Number(item.availablePromoCodesCount || 0),
+    unavailablePromoCodesCount: Number(item.unavailablePromoCodesCount || 0),
+    claimedPromoCodesCount: Number(item.claimedPromoCodesCount || 0),
+    rouletteImage: item.rouletteImage || null,
+    myPrizeText: item.myPrizeText || "",
+    rouletteDescription: item.rouletteDescription || "",
+  };
+}
+
+async function parsePromoCodesFromFile(file) {
+  if (!file) {
+    return [];
+  }
+
+  let parsedCodes = [];
+  const isPlainTextFile = file.type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name);
+  const isExcelFile = /\.(xls|xlsx)$/i.test(file.name);
+
+  if (isPlainTextFile) {
+    const rawValue = await file.text();
+    parsedCodes = splitPromoCodes(rawValue);
+  }
+
+  if (isExcelFile) {
+    const fileBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(fileBuffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : null;
+
+    if (!firstSheet) {
+      throw new Error("Не удалось прочитать лист с промокодами");
+    }
+
+    const rows = XLSX.utils.sheet_to_json(firstSheet, {
+      defval: "",
+    });
+
+    parsedCodes = parseWorkbookPromoCodes(file.name, rows);
+  }
+
+  return parsedCodes;
 }
 
 export default function PromoCodesPage() {
@@ -243,9 +354,13 @@ export default function PromoCodesPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [editingPrizeId, setEditingPrizeId] = useState(null);
+  const [projectFinished, setProjectFinished] = useState(false);
+  const [projectToggleLoading, setProjectToggleLoading] = useState(false);
   const [form, setForm] = useState(createInitialPrizeForm);
   const [promoCodesUploadError, setPromoCodesUploadError] = useState("");
+  const [promoCodesPoolAction, setPromoCodesPoolAction] = useState("");
   const promoCodesInputRef = useRef(null);
+  const promoCodesAppendInputRef = useRef(null);
 
   const textColor = useColorModeValue("navy.700", "white");
   const textColorSecondary = useColorModeValue("secondaryGray.600", "secondaryGray.500");
@@ -261,6 +376,14 @@ export default function PromoCodesPage() {
   const totalValueColor = useColorModeValue("navy.700", "white");
   const remainingValueColor = useColorModeValue("green.500", "green.300");
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
+  const promoReleaseIntervalCodesCount = editingPrizeId && form.hasPrizeLimit && !form.promoCodesFile?.size
+    ? Number(form.unavailablePromoCodesCount || 0)
+    : form.promoCodes.length;
+  const promoReleaseIntervalHint = formatPromoReleaseIntervalHint(
+    promoReleaseIntervalCodesCount,
+    form.codeReleaseStart,
+    form.codeReleaseEnd,
+  );
 
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
@@ -268,6 +391,14 @@ export default function PromoCodesPage() {
     }
 
     return formatNumber(value);
+  }
+
+  function formatAvailableCount(item) {
+    if (!item?.hasPrizeLimit) {
+      return "Без лимита";
+    }
+
+    return formatNumber(item?.availablePromoCodesCount || 0);
   }
 
   useEffect(() => {
@@ -289,6 +420,7 @@ export default function PromoCodesPage() {
             items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
           });
+          setProjectFinished(Boolean(nextResponse?.projectFinished));
         }
       } catch (requestError) {
         if (!cancelled) {
@@ -324,6 +456,39 @@ export default function PromoCodesPage() {
       items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
     });
+    setProjectFinished(Boolean(nextResponse?.projectFinished));
+  }
+
+  async function handleToggleProjectFinished() {
+    const nextProjectFinishedState = !projectFinished;
+    const confirmed = window.confirm(
+      nextProjectFinishedState
+        ? "Точно закончить проект? Пользователи перестанут видеть обычное интро и попадут на финальный экран."
+        : "Точно продолжить проект? Пользователи снова увидят обычное интро и смогут играть.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProjectToggleLoading(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const nextState = await postJson("/api/project/toggle", {});
+      setProjectFinished(Boolean(nextState?.projectFinished));
+      await reloadPrizes();
+      setSuccessMessage(
+        Boolean(nextState?.projectFinished)
+          ? "Проект завершен. Пользователи увидят финальный экран."
+          : "Проект снова активен. Пользователи увидят обычное интро.",
+      );
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось изменить статус проекта");
+    } finally {
+      setProjectToggleLoading(false);
+    }
   }
 
   async function handleCreatePrize() {
@@ -350,6 +515,8 @@ export default function PromoCodesPage() {
         userLimitCount: isNonPrize ? "" : form.userLimitCount,
         activeFrom: form.activeFrom,
         activeTo: form.activeTo,
+        codeReleaseStart: isNonPrize ? "" : form.codeReleaseStart,
+        codeReleaseEnd: isNonPrize ? "" : form.codeReleaseEnd,
         rouletteImage: form.rouletteImage,
         myPrizeText: isNonPrize ? form.title : form.myPrizeText,
         rouletteDescription: form.rouletteDescription,
@@ -403,26 +570,9 @@ export default function PromoCodesPage() {
 
   function handleOpenEditModal(item) {
     setEditingPrizeId(item.id);
-    setForm({
-      title: item.title || "",
-      category: item.category || "",
-      promoCodeType: item.promoCodeType || "",
-      type: item.type || PRIZE_TYPE_OPTIONS[0].value,
-      hasPrizeLimit: item.hasPrizeLimit ?? true,
-      promoCodesFile: item.promoCodesFileName ? { name: item.promoCodesFileName } : null,
-      promoCodes: Array.isArray(item.promoCodes) ? item.promoCodes : [],
-      promoCodeValue: item.promoCodeValue || "",
-      totalCount: String(item.totalCount || ""),
-      chanceValue: item.chanceValue || "1x",
-      hasUserLimit: item.hasUserLimit ?? true,
-      userLimitCount: item.userLimitCount ? String(item.userLimitCount) : "",
-      activeFrom: item.activeFrom || "",
-      activeTo: item.activeTo || "",
-      rouletteImage: item.rouletteImage || null,
-      myPrizeText: item.myPrizeText || "",
-      rouletteDescription: item.rouletteDescription || "",
-    });
+    setForm(buildPrizeForm(item));
     setPromoCodesUploadError("");
+    setPromoCodesPoolAction("");
 
     if (item.type === "Не приз") {
       nonPrizeModal.onOpen();
@@ -440,31 +590,7 @@ export default function PromoCodesPage() {
     }
 
     try {
-      let parsedCodes = [];
-      const isPlainTextFile = nextFile.type.startsWith("text/") || /\.(txt|csv)$/i.test(nextFile.name);
-      const isExcelFile = /\.(xls|xlsx)$/i.test(nextFile.name);
-
-      if (isPlainTextFile) {
-        const rawValue = await nextFile.text();
-        parsedCodes = splitPromoCodes(rawValue);
-      }
-
-      if (isExcelFile) {
-        const fileBuffer = await nextFile.arrayBuffer();
-        const workbook = XLSX.read(fileBuffer, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : null;
-
-        if (!firstSheet) {
-          throw new Error("Не удалось прочитать лист с промокодами");
-        }
-
-        const rows = XLSX.utils.sheet_to_json(firstSheet, {
-          defval: "",
-        });
-
-        parsedCodes = parseWorkbookPromoCodes(nextFile.name, rows);
-      }
+      const parsedCodes = await parsePromoCodesFromFile(nextFile);
 
       setPromoCodesUploadError("");
       setForm((current) => ({
@@ -475,9 +601,89 @@ export default function PromoCodesPage() {
           type: nextFile.type,
         },
         promoCodes: parsedCodes,
+        totalCount: current.hasPrizeLimit ? String(parsedCodes.length) : current.totalCount,
+        availablePromoCodesCount: 0,
+        unavailablePromoCodesCount: parsedCodes.length,
+        claimedPromoCodesCount: 0,
       }));
     } catch (uploadError) {
       setPromoCodesUploadError(uploadError.message || "Не удалось загрузить список промокодов");
+    }
+  }
+
+  async function handleClearPrizePromoCodes() {
+    if (!editingPrizeId) {
+      return;
+    }
+
+    const confirmed = window.confirm("Очистить весь пул промокодов у этого приза, включая выданные и невыданные?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setPromoCodesPoolAction("clear");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/prizes/promo-codes/clear", {
+        id: editingPrizeId,
+      });
+
+      await reloadPrizes();
+
+      if (result?.prize) {
+        setForm(buildPrizeForm(result.prize));
+      }
+
+      setPromoCodesUploadError("");
+      setSuccessMessage("Все промокоды у приза очищены.");
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось очистить промокоды");
+    } finally {
+      setPromoCodesPoolAction("");
+    }
+  }
+
+  async function handleAppendPromoCodesFileChange(filesList) {
+    const nextFile = Array.from(filesList || [])[0];
+
+    if (!nextFile || !editingPrizeId) {
+      return;
+    }
+
+    setPromoCodesPoolAction("append");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const parsedCodes = await parsePromoCodesFromFile(nextFile);
+
+      const result = await postJson("/api/prizes/promo-codes/append", {
+        id: editingPrizeId,
+        promoCodesFileName: nextFile.name,
+        promoCodes: parsedCodes,
+        codeReleaseStart: form.codeReleaseStart,
+        codeReleaseEnd: form.codeReleaseEnd,
+      });
+
+      await reloadPrizes();
+
+      if (result?.prize) {
+        setForm(buildPrizeForm(result.prize));
+      }
+
+      setPromoCodesUploadError("");
+      setSuccessMessage(`Промокоды из файла «${nextFile.name}» догружены и пересчитаны по текущему периоду.`);
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось догрузить промокоды");
+    } finally {
+      if (promoCodesAppendInputRef.current) {
+        promoCodesAppendInputRef.current.value = "";
+      }
+
+      setPromoCodesPoolAction("");
     }
   }
 
@@ -673,6 +879,22 @@ export default function PromoCodesPage() {
               <Button
                 h="56px"
                 flex={{ base: "1 1 100%", lg: "0 0 220px" }}
+                variant={projectFinished ? "light" : "solid"}
+                color={projectFinished ? "brand.500" : "white"}
+                bg={projectFinished ? undefined : "red.500"}
+                borderRadius="20px"
+                fontSize="sm"
+                fontWeight="700"
+                isLoading={projectToggleLoading}
+                loadingText={projectFinished ? "Продолжаем" : "Завершаем"}
+                onClick={() => void handleToggleProjectFinished()}
+                _hover={projectFinished ? undefined : { bg: "red.600" }}
+              >
+                {projectFinished ? "Продолжить проект" : "Закончить проект"}
+              </Button>
+              <Button
+                h="56px"
+                flex={{ base: "1 1 100%", lg: "0 0 220px" }}
                 bg="brand.500"
                 color="white"
                 borderRadius="20px"
@@ -740,6 +962,7 @@ export default function PromoCodesPage() {
                     <Th color={textColorSecondary}>Тип промокода</Th>
                     <Th color={textColorSecondary}>Всего призов</Th>
                     <Th color={textColorSecondary}>Остаток</Th>
+                    <Th color={textColorSecondary}>Доступно</Th>
                     <Th color={textColorSecondary}>Действие</Th>
                   </Tr>
                 </Thead>
@@ -788,6 +1011,11 @@ export default function PromoCodesPage() {
                             <Text color={textColorSecondary} fontSize="xs">
                               ID: {item.id}
                             </Text>
+                            {item.type === "Приз" && item.hasPrizeLimit ? (
+                              <Text color={textColorSecondary} fontSize="xs">
+                                В пуле: {formatNumber(item.availablePromoCodesCount || 0)} | Ждут: {formatNumber(item.unavailablePromoCodesCount || 0)}
+                              </Text>
+                            ) : null}
                           </Stack>
                         </Flex>
                       </Td>
@@ -845,6 +1073,11 @@ export default function PromoCodesPage() {
                         </Text>
                       </Td>
                       <Td borderColor={borderColor}>
+                        <Text color={remainingValueColor} fontSize="sm" fontWeight="700">
+                          {formatAvailableCount(item)}
+                        </Text>
+                      </Td>
+                      <Td borderColor={borderColor}>
                         <Flex gap="10px" wrap="wrap">
                           <Button
                             variant="lightBrand"
@@ -878,7 +1111,7 @@ export default function PromoCodesPage() {
                     </Tr>
                   )) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={8}>
+                      <Td borderColor={borderColor} colSpan={9}>
                         <Text color={textColorSecondary} fontSize="sm" py="12px" textAlign="center">
                           Призов пока нет.
                         </Text>
@@ -1020,15 +1253,51 @@ export default function PromoCodesPage() {
                           display="none"
                           onChange={(event) => void handlePromoCodesFileChange(event.target.files)}
                         />
+                        <Input
+                          ref={promoCodesAppendInputRef}
+                          type="file"
+                          accept=".txt,.csv,.xls,.xlsx"
+                          display="none"
+                          onChange={(event) => void handleAppendPromoCodesFileChange(event.target.files)}
+                        />
                         <Flex direction={{ base: "column", md: "row" }} gap="12px" align={{ base: "stretch", md: "center" }}>
                           <Button type="button" variant="brand" h="48px" onClick={() => promoCodesInputRef.current?.click()}>
                             Загрузить
                           </Button>
+                          {editingPrizeId ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="light"
+                                h="48px"
+                                isLoading={promoCodesPoolAction === "append"}
+                                loadingText="Догружаем"
+                                onClick={() => promoCodesAppendInputRef.current?.click()}
+                              >
+                                Догрузить промокоды
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                colorScheme="red"
+                                h="48px"
+                                isLoading={promoCodesPoolAction === "clear"}
+                                loadingText="Очищаем"
+                                onClick={() => void handleClearPrizePromoCodes()}
+                              >
+                                Очистить все промокоды
+                              </Button>
+                            </>
+                          ) : null}
                           {form.promoCodesFile?.name ? (
-                            <Text color={textColorSecondary} fontSize="sm">
-                              {form.promoCodesFile.name}
-                              {form.promoCodes.length > 0 ? `, кодов: ${form.promoCodes.length}` : ""}
-                            </Text>
+                            <Stack spacing="2px">
+                              <Text color={textColorSecondary} fontSize="sm">
+                                {form.promoCodesFile.name}
+                              </Text>
+                              <Text color={textColorSecondary} fontSize="sm">
+                                В Excel файле обнаружено: {formatNumber(form.promoCodes.length)}
+                              </Text>
+                            </Stack>
                           ) : (
                             <Text color={textColorSecondary} fontSize="sm">
                               Можно загрузить список кодов файлом.
@@ -1042,20 +1311,41 @@ export default function PromoCodesPage() {
                         ) : null}
                       </FormControl>
 
-                      <FormControl>
-                        <FormLabel color={textColor} fontSize="sm" fontWeight="700">
-                          Всего призов
-                        </FormLabel>
-                        <Input
-                          h="52px"
-                          borderRadius="16px"
-                          type="number"
-                          min="1"
-                          value={form.totalCount}
-                          onChange={(event) => setForm((current) => ({ ...current, totalCount: event.target.value }))}
-                          placeholder="Например: 1000"
-                        />
-                      </FormControl>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+                        <FormControl>
+                          <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                            Старт выхода кодов в пул
+                          </FormLabel>
+                          <Input
+                            h="52px"
+                            borderRadius="16px"
+                            type="datetime-local"
+                            value={form.codeReleaseStart}
+                            onChange={(event) => setForm((current) => ({ ...current, codeReleaseStart: event.target.value }))}
+                          />
+                        </FormControl>
+
+                        <FormControl>
+                          <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                            Конец выхода кодов в пул
+                          </FormLabel>
+                          <Input
+                            h="52px"
+                            borderRadius="16px"
+                            type="datetime-local"
+                            value={form.codeReleaseEnd}
+                            onChange={(event) => setForm((current) => ({ ...current, codeReleaseEnd: event.target.value }))}
+                          />
+                        </FormControl>
+                      </SimpleGrid>
+                      <Text color={textColorSecondary} fontSize="sm">
+                        Если окно указано, загруженные коды будут равномерно распределены по этому промежутку. Если оставить пустым, все коды сразу попадут в доступный пул.
+                      </Text>
+                      {promoReleaseIntervalHint ? (
+                        <Text color={textColorSecondary} fontSize="sm">
+                          {promoReleaseIntervalHint}
+                        </Text>
+                      ) : null}
                     </>
                   ) : (
                     <FormControl>
@@ -1187,6 +1477,9 @@ export default function PromoCodesPage() {
                       onChange={(event) => setForm((current) => ({ ...current, rouletteDescription: event.target.value }))}
                       placeholder="Описание приза для интерфейса рулетки"
                     />
+                    <Text mt="8px" color={textColorSecondary} fontSize="xs">
+                      Переносы строки сохраняются. Используйте Enter, чтобы разбить описание на несколько строк.
+                    </Text>
                   </FormControl>
                 </Stack>
               </FormSection>
@@ -1298,6 +1591,9 @@ export default function PromoCodesPage() {
                     onChange={(event) => setForm((current) => ({ ...current, rouletteDescription: event.target.value }))}
                     placeholder="Описание позиции"
                   />
+                  <Text mt="8px" color={textColorSecondary} fontSize="xs">
+                    Переносы строки сохраняются. Используйте Enter, чтобы разбить описание на несколько строк.
+                  </Text>
                 </FormControl>
 
                 <Flex justify="flex-end" gap="12px" wrap="wrap">

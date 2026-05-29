@@ -5,9 +5,11 @@ import express from "express";
 import morgan from "morgan";
 
 import { resolveMockAdminResponse } from "./adminMockBridge.js";
+import { getProjectState, toggleProjectFinished } from "./appStateStore.js";
 import { decodeRequestBody } from "./adminCipher.js";
 import { initDatabase } from "./db.js";
 import { getUploadsDir, initImageStorage } from "./imageStorage.js";
+import { refreshMiniAppSubscriptionStatus } from "./maxSubscriptionService.js";
 import {
   deletePlayerAnalytics,
   getAnalyticsUtm,
@@ -21,6 +23,8 @@ import {
   createPrize,
   deleteManyPrizes,
   deletePrize,
+  appendPrizePromoCodes,
+  clearPrizePromoCodes,
   getGameBootstrap,
   listChances,
   listPrizes,
@@ -75,13 +79,17 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
   try {
     const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
+    const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
+      userInfo,
+      Boolean(user.subscribed_to_channel),
+    );
 
     res.json({
       ok: true,
       user: {
         id: Number(user.id),
         externalId: user.external_id,
-        subscribedToChannel: Boolean(user.subscribed_to_channel),
+        subscribedToChannel,
       },
     });
   } catch (error) {
@@ -91,6 +99,15 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
 
 app.post("/api/game/spin", async (req, res, next) => {
   try {
+    const projectState = await getProjectState();
+
+    if (projectState.projectFinished) {
+      const error = new Error("Проект завершен");
+      error.statusCode = 409;
+      error.code = "PROJECT_FINISHED";
+      throw error;
+    }
+
     const response = await spinPrize(resolveMiniAppUser(req));
     res.json(response);
   } catch (error) {
@@ -102,24 +119,32 @@ app.post("/api/game/open", async (req, res, next) => {
   try {
     const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
+    const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
+      userInfo,
+      Boolean(user.subscribed_to_channel),
+    );
     const attempts = await ensureDailyAttemptGrant(user.id);
     const referral = await getReferralData(user.id);
+    const projectState = await getProjectState();
 
-    await logGameEvent(userInfo, "app_open", {
-      source: "frontend",
-      sessionId: userInfo.sessionId,
-      details: {
-        entryScreen: String(req.body?.entryScreen || "").trim() || "game",
-        availableAttempts: attempts.availableAttempts,
-      },
-    });
+    if (req.body?.trackOpen !== false) {
+      await logGameEvent(userInfo, "app_open", {
+        source: "frontend",
+        sessionId: userInfo.sessionId,
+        details: {
+          entryScreen: String(req.body?.entryScreen || "").trim() || "game",
+          availableAttempts: attempts.availableAttempts,
+        },
+      });
+    }
 
     res.json({
       ok: true,
+      projectFinished: projectState.projectFinished,
       user: {
         id: Number(user.id),
         externalId: user.external_id,
-        subscribedToChannel: Boolean(user.subscribed_to_channel),
+        subscribedToChannel,
       },
       attempts,
       referral,
@@ -282,6 +307,16 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
       return;
     }
 
+    if (path === "/api/prizes/promo-codes/clear") {
+      res.json(await clearPrizePromoCodes(body));
+      return;
+    }
+
+    if (path === "/api/prizes/promo-codes/append") {
+      res.json(await appendPrizePromoCodes(body));
+      return;
+    }
+
     if (path === "/api/prizes/delete") {
       res.json(await deletePrize(body));
       return;
@@ -289,6 +324,11 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/prizes/delete-many") {
       res.json(await deleteManyPrizes(body));
+      return;
+    }
+
+    if (path === "/api/project/toggle") {
+      res.json(await toggleProjectFinished());
       return;
     }
 

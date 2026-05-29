@@ -132,6 +132,11 @@ function createMockPrize({
   userLimitCount = 1,
   activeFrom = "",
   activeTo = "",
+  codeReleaseStart = "",
+  codeReleaseEnd = "",
+  availablePromoCodesCount = 0,
+  unavailablePromoCodesCount = 0,
+  claimedPromoCodesCount = 0,
   rouletteImage = null,
   myPrizeText = "",
   rouletteDescription = "",
@@ -153,11 +158,97 @@ function createMockPrize({
     userLimitCount,
     activeFrom,
     activeTo,
+    codeReleaseStart,
+    codeReleaseEnd,
+    availablePromoCodesCount,
+    unavailablePromoCodesCount,
+    claimedPromoCodesCount,
     rouletteImage,
     myPrizeText,
     rouletteDescription,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildMockPromoCodePoolMeta({
+  hasPrizeLimit,
+  promoCodes,
+  codeReleaseStart,
+  codeReleaseEnd,
+  claimedPromoCodesCount = 0,
+}) {
+  if (!hasPrizeLimit) {
+    return {
+      totalCount: 0,
+      remainingCount: 0,
+      availablePromoCodesCount: 0,
+      unavailablePromoCodesCount: 0,
+      claimedPromoCodesCount: 0,
+    };
+  }
+
+  const totalCount = Array.isArray(promoCodes) ? promoCodes.length : 0;
+  const safeClaimedCount = Math.max(0, Math.min(totalCount, Number(claimedPromoCodesCount) || 0));
+  const distributableCount = Math.max(0, totalCount - safeClaimedCount);
+
+  if (!codeReleaseStart || !codeReleaseEnd || !distributableCount) {
+    return {
+      totalCount,
+      remainingCount: distributableCount,
+      availablePromoCodesCount: distributableCount,
+      unavailablePromoCodesCount: 0,
+      claimedPromoCodesCount: safeClaimedCount,
+    };
+  }
+
+  const now = Date.now();
+  const startTime = new Date(codeReleaseStart).getTime();
+  const endTime = new Date(codeReleaseEnd).getTime();
+
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    return {
+      totalCount,
+      remainingCount: distributableCount,
+      availablePromoCodesCount: distributableCount,
+      unavailablePromoCodesCount: 0,
+      claimedPromoCodesCount: safeClaimedCount,
+    };
+  }
+
+  if (now <= startTime) {
+    return {
+      totalCount,
+      remainingCount: distributableCount,
+      availablePromoCodesCount: 0,
+      unavailablePromoCodesCount: distributableCount,
+      claimedPromoCodesCount: safeClaimedCount,
+    };
+  }
+
+  if (now >= endTime) {
+    return {
+      totalCount,
+      remainingCount: distributableCount,
+      availablePromoCodesCount: distributableCount,
+      unavailablePromoCodesCount: 0,
+      claimedPromoCodesCount: safeClaimedCount,
+    };
+  }
+
+  const progress = Math.min(1, Math.max(0, (now - startTime) / (endTime - startTime)));
+  const availablePromoCodesCount = Math.min(
+    distributableCount,
+    Math.max(1, Math.floor(distributableCount * progress)),
+  );
+  const unavailablePromoCodesCount = Math.max(0, distributableCount - availablePromoCodesCount);
+
+  return {
+    totalCount,
+    remainingCount: distributableCount,
+    availablePromoCodesCount,
+    unavailablePromoCodesCount,
+    claimedPromoCodesCount: safeClaimedCount,
   };
 }
 
@@ -212,6 +303,7 @@ function createMockPush({
 }
 
 const mockState = {
+  projectFinished: false,
   players: [
     createMockPlayer({ id: 1, username: "mila.design", firstName: "Мила", lastName: "Иванова", daysCreatedAgo: 1, hoursSeenAgo: 0.15, subscribedToChannel: true, gameCompletionState: "completed", raffleWon: true, codeId: "12345678", promoCode: "TEST-OZONTRAVEL-0001" }),
     createMockPlayer({ id: 2, username: "roma.runner", firstName: "Роман", lastName: "Петров", daysCreatedAgo: 2, hoursSeenAgo: 1.2, gameCompletionState: "time-ended", raffleWon: false }),
@@ -761,11 +853,21 @@ function buildPrizesResponse(payload = {}) {
 
   return {
     items,
+    projectFinished: mockState.projectFinished,
     summary: {
       totalPrizesCount: items.length,
       totalUnitsCount: items.reduce((sum, item) => sum + Number(item.totalCount || 0), 0),
       totalRemainingCount: items.reduce((sum, item) => sum + Number(item.remainingCount || 0), 0),
     },
+  };
+}
+
+function toggleProjectFinished() {
+  mockState.projectFinished = !mockState.projectFinished;
+
+  return {
+    projectFinished: mockState.projectFinished,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -852,6 +954,8 @@ function createPrize(payload = {}) {
   const userLimitCount = hasUserLimit ? Math.max(0, Number(payload?.userLimitCount) || 0) : 0;
   const activeFrom = String(payload?.activeFrom || "").trim();
   const activeTo = String(payload?.activeTo || "").trim();
+  const codeReleaseStart = String(payload?.codeReleaseStart || "").trim();
+  const codeReleaseEnd = String(payload?.codeReleaseEnd || "").trim();
   const rouletteImage = payload?.rouletteImage ?? null;
   const myPrizeText = String(payload?.myPrizeText || "").trim();
   const rouletteDescription = String(payload?.rouletteDescription || "").trim();
@@ -876,6 +980,13 @@ function createPrize(payload = {}) {
     throw new Error("Prize user limit count is required");
   }
 
+  const poolMeta = buildMockPromoCodePoolMeta({
+    hasPrizeLimit,
+    promoCodes,
+    codeReleaseStart,
+    codeReleaseEnd,
+  });
+
   const nextPrize = createMockPrize({
     id: Math.max(0, ...mockState.prizes.map((item) => item.id)) + 1,
     title,
@@ -886,13 +997,18 @@ function createPrize(payload = {}) {
     promoCodesFileName,
     promoCodes,
     promoCodeValue,
-    totalCount,
-    remainingCount: hasPrizeLimit ? totalCount : 0,
+    totalCount: hasPrizeLimit ? poolMeta.totalCount : totalCount,
+    remainingCount: hasPrizeLimit ? poolMeta.remainingCount : 0,
     chanceValue,
     hasUserLimit,
     userLimitCount,
     activeFrom,
     activeTo,
+    codeReleaseStart,
+    codeReleaseEnd,
+    availablePromoCodesCount: poolMeta.availablePromoCodesCount,
+    unavailablePromoCodesCount: poolMeta.unavailablePromoCodesCount,
+    claimedPromoCodesCount: poolMeta.claimedPromoCodesCount,
     rouletteImage,
     myPrizeText,
     rouletteDescription,
@@ -951,6 +1067,8 @@ function updatePrize(payload = {}) {
   const userLimitCount = hasUserLimit ? Math.max(0, Number(payload?.userLimitCount) || 0) : 0;
   const activeFrom = String(payload?.activeFrom || "").trim();
   const activeTo = String(payload?.activeTo || "").trim();
+  const codeReleaseStart = String(payload?.codeReleaseStart || "").trim();
+  const codeReleaseEnd = String(payload?.codeReleaseEnd || "").trim();
   const rouletteImage = payload?.rouletteImage ?? null;
   const myPrizeText = String(payload?.myPrizeText || "").trim();
   const rouletteDescription = String(payload?.rouletteDescription || "").trim();
@@ -986,7 +1104,13 @@ function updatePrize(payload = {}) {
   }
 
   const currentPrize = mockState.prizes[prizeIndex];
-  const usedCount = Math.max(0, Number(currentPrize.totalCount || 0) - Number(currentPrize.remainingCount || 0));
+  const poolMeta = buildMockPromoCodePoolMeta({
+    hasPrizeLimit,
+    promoCodes,
+    codeReleaseStart,
+    codeReleaseEnd,
+    claimedPromoCodesCount: currentPrize.claimedPromoCodesCount || 0,
+  });
   const nextPrize = {
     ...currentPrize,
     title,
@@ -997,16 +1121,115 @@ function updatePrize(payload = {}) {
     promoCodesFileName,
     promoCodes,
     promoCodeValue,
-    totalCount,
-    remainingCount: hasPrizeLimit ? Math.max(0, totalCount - usedCount) : 0,
+    totalCount: hasPrizeLimit ? poolMeta.totalCount : totalCount,
+    remainingCount: hasPrizeLimit ? poolMeta.remainingCount : 0,
     chanceValue,
     hasUserLimit,
     userLimitCount,
     activeFrom,
     activeTo,
+    codeReleaseStart,
+    codeReleaseEnd,
+    availablePromoCodesCount: poolMeta.availablePromoCodesCount,
+    unavailablePromoCodesCount: poolMeta.unavailablePromoCodesCount,
+    claimedPromoCodesCount: poolMeta.claimedPromoCodesCount,
     rouletteImage,
     myPrizeText,
     rouletteDescription,
+    updatedAt: new Date().toISOString(),
+  };
+
+  mockState.prizes[prizeIndex] = nextPrize;
+
+  return {
+    updated: true,
+    prize: nextPrize,
+  };
+}
+
+function clearPrizePromoCodes(payload = {}) {
+  const id = Number(payload?.id);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const prizeIndex = mockState.prizes.findIndex((item) => item.id === id);
+
+  if (prizeIndex === -1) {
+    throw new Error("Prize not found");
+  }
+
+  const currentPrize = mockState.prizes[prizeIndex];
+  const nextPrize = {
+    ...currentPrize,
+    promoCodesFileName: "",
+    promoCodes: [],
+    totalCount: 0,
+    remainingCount: 0,
+    codeReleaseStart: "",
+    codeReleaseEnd: "",
+    availablePromoCodesCount: 0,
+    unavailablePromoCodesCount: 0,
+    claimedPromoCodesCount: 0,
+    updatedAt: new Date().toISOString(),
+  };
+
+  mockState.prizes[prizeIndex] = nextPrize;
+
+  return {
+    updated: true,
+    prize: nextPrize,
+  };
+}
+
+function appendPrizePromoCodes(payload = {}) {
+  const id = Number(payload?.id);
+  const promoCodesFileName = String(payload?.promoCodesFileName || "").trim();
+  const incomingPromoCodes = Array.isArray(payload?.promoCodes)
+    ? payload.promoCodes.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const codeReleaseStart = String(payload?.codeReleaseStart || "").trim();
+  const codeReleaseEnd = String(payload?.codeReleaseEnd || "").trim();
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const prizeIndex = mockState.prizes.findIndex((item) => item.id === id);
+
+  if (prizeIndex === -1) {
+    throw new Error("Prize not found");
+  }
+
+  const currentPrize = mockState.prizes[prizeIndex];
+
+  if (!currentPrize.hasPrizeLimit) {
+    throw new Error("Дополнительные промокоды можно загружать только для ограниченных призов");
+  }
+
+  const mergedPromoCodes = Array.from(new Set([
+    ...(Array.isArray(currentPrize.promoCodes) ? currentPrize.promoCodes : []),
+    ...incomingPromoCodes,
+  ]));
+  const poolMeta = buildMockPromoCodePoolMeta({
+    hasPrizeLimit: true,
+    promoCodes: mergedPromoCodes,
+    codeReleaseStart,
+    codeReleaseEnd,
+    claimedPromoCodesCount: currentPrize.claimedPromoCodesCount || 0,
+  });
+  const nextPrize = {
+    ...currentPrize,
+    promoCodesFileName: promoCodesFileName || currentPrize.promoCodesFileName,
+    promoCodes: mergedPromoCodes,
+    totalCount: poolMeta.totalCount,
+    remainingCount: poolMeta.remainingCount,
+    codeReleaseStart,
+    codeReleaseEnd,
+    availablePromoCodesCount: poolMeta.availablePromoCodesCount,
+    unavailablePromoCodesCount: poolMeta.unavailablePromoCodesCount,
+    claimedPromoCodesCount: poolMeta.claimedPromoCodesCount,
     updatedAt: new Date().toISOString(),
   };
 
@@ -1732,6 +1955,25 @@ function buildPlayerDetails(payload = {}) {
     throw new Error("Player not found");
   }
 
+  const awardedPrizes = player.promoCode
+    ? [player.promoCode]
+      .map((promoCode) => {
+        const matchedPrize = mockState.prizes.find((prize) =>
+          Array.isArray(prize.promoCodes) && prize.promoCodes.includes(promoCode)
+        ) || mockState.prizes.find((prize) => prize.promoCodeValue === promoCode);
+
+        return {
+          id: Number(player.codeId || player.id),
+          prizeId: matchedPrize?.id || 0,
+          title: matchedPrize?.myPrizeText || matchedPrize?.title || "Выданный приз",
+          image: matchedPrize?.rouletteImage || null,
+          promoCode,
+          availableFrom: matchedPrize?.codeReleaseStart || player.createdAt,
+          awardedAt: player.lastSeenAt || player.createdAt,
+        };
+      })
+    : [];
+
   return {
     player: buildPlayerView(player),
     stats: getPlayerStats(playerId),
@@ -1739,6 +1981,7 @@ function buildPlayerDetails(payload = {}) {
       .filter((session) => session.playerId === playerId)
       .slice()
       .sort((left, right) => new Date(right.startedAt) - new Date(left.startedAt)),
+    awardedPrizes,
   };
 }
 
@@ -1829,6 +2072,18 @@ export function resolveMockAdminResponse(path, body = {}) {
 
   if (path === "/api/prizes/delete-many") {
     return deleteManyPrizes(body);
+  }
+
+  if (path === "/api/prizes/promo-codes/clear") {
+    return clearPrizePromoCodes(body);
+  }
+
+  if (path === "/api/prizes/promo-codes/append") {
+    return appendPrizePromoCodes(body);
+  }
+
+  if (path === "/api/project/toggle") {
+    return toggleProjectFinished();
   }
 
   if (path === "/api/chances/list") {

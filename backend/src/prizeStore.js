@@ -11,6 +11,7 @@ import {
   getOrCreateUser,
   getReferralData,
 } from "./userStore.js";
+import { getProjectState } from "./appStateStore.js";
 
 const APP_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Belgrade").trim() || "Europe/Belgrade";
 
@@ -56,6 +57,82 @@ function getTodayValue() {
   }).format(new Date());
 }
 
+function formatDateTimeInputValue(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseOptionalDateTime(value, fieldName) {
+  const normalizedValue = String(value || "").trim();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const parsedDate = new Date(normalizedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error(`${fieldName} has invalid datetime value`);
+  }
+
+  return parsedDate.toISOString();
+}
+
+function buildPromoCodeSchedule(codes, releaseStart, releaseEnd) {
+  const normalizedCodes = Array.from(
+    new Set(
+      Array.isArray(codes)
+        ? codes.map((item) => String(item || "").trim()).filter(Boolean)
+        : [],
+    ),
+  );
+
+  if (!normalizedCodes.length) {
+    return [];
+  }
+
+  const now = new Date();
+  const startDate = releaseStart ? new Date(releaseStart) : now;
+  const safeStartDate = Number.isNaN(startDate.getTime()) ? now : startDate;
+  const endCandidate = releaseEnd ? new Date(releaseEnd) : safeStartDate;
+  const safeEndDate = Number.isNaN(endCandidate.getTime()) || endCandidate.getTime() < safeStartDate.getTime()
+    ? safeStartDate
+    : endCandidate;
+
+  if (normalizedCodes.length === 1 || safeStartDate.getTime() === safeEndDate.getTime()) {
+    return normalizedCodes.map((code) => ({
+      code,
+      availableFrom: safeStartDate.toISOString(),
+    }));
+  }
+
+  const stepMs = (safeEndDate.getTime() - safeStartDate.getTime()) / (normalizedCodes.length - 1);
+
+  return normalizedCodes.map((code, index) => ({
+    code,
+    availableFrom: new Date(safeStartDate.getTime() + stepMs * index).toISOString(),
+  }));
+}
+
+function requiresPromoCodePool(prize) {
+  return prize.type === "Приз" && prize.hasPrizeLimit && Array.isArray(prize.promoCodes) && prize.promoCodes.length > 0;
+}
+
 function mapPrizeRow(row) {
   return {
     id: Number(row.id),
@@ -78,9 +155,14 @@ function mapPrizeRow(row) {
     activeTo: row.active_to
       ? new Date(row.active_to).toISOString().slice(0, 10)
       : "",
+    codeReleaseStart: formatDateTimeInputValue(row.code_release_start),
+    codeReleaseEnd: formatDateTimeInputValue(row.code_release_end),
     rouletteImage: normalizeStoredImage(row.roulette_image),
     myPrizeText: row.my_prize_text,
     rouletteDescription: row.roulette_description,
+    availablePromoCodesCount: Number(row.available_promo_codes_count || 0),
+    unavailablePromoCodesCount: Number(row.unavailable_promo_codes_count || 0),
+    claimedPromoCodesCount: Number(row.claimed_promo_codes_count || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -106,12 +188,33 @@ async function getAllPrizes(client = null) {
       user_limit_count,
       active_from,
       active_to,
+      code_release_start,
+      code_release_end,
       roulette_image,
       my_prize_text,
       roulette_description,
+      COALESCE(pool.available_promo_codes_count, 0) AS available_promo_codes_count,
+      COALESCE(pool.unavailable_promo_codes_count, 0) AS unavailable_promo_codes_count,
+      COALESCE(pool.claimed_promo_codes_count, 0) AS claimed_promo_codes_count,
       created_at,
       updated_at
     FROM prize_positions
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*) FILTER (
+          WHERE claimed_at IS NULL
+            AND COALESCE(available_from, NOW()) <= NOW()
+        )::int AS available_promo_codes_count,
+        COUNT(*) FILTER (
+          WHERE claimed_at IS NULL
+            AND COALESCE(available_from, NOW()) > NOW()
+        )::int AS unavailable_promo_codes_count,
+        COUNT(*) FILTER (
+          WHERE claimed_at IS NOT NULL
+        )::int AS claimed_promo_codes_count
+      FROM prize_promo_codes
+      WHERE prize_id = prize_positions.id
+    ) AS pool ON TRUE
   `);
 
   return result.rows.map(mapPrizeRow);
@@ -122,6 +225,7 @@ export async function listPrizes(payload = {}) {
   const categoryFilter = String(payload.category || "").trim();
   const promoCodeTypeFilter = String(payload.promoCodeType || "").trim();
   let items = await getAllPrizes();
+  const projectState = await getProjectState();
 
   if (search) {
     items = items.filter((item) => {
@@ -151,6 +255,7 @@ export async function listPrizes(payload = {}) {
 
   return {
     items,
+    projectFinished: projectState.projectFinished,
     summary: {
       totalPrizesCount: items.length,
       totalUnitsCount: items.reduce((sum, item) => sum + Number(item.totalCount || 0), 0),
@@ -176,6 +281,8 @@ function validatePrizePayload(payload = {}) {
   const userLimitCount = hasUserLimit ? Math.max(0, Number(payload.userLimitCount) || 0) : 0;
   const activeFrom = String(payload.activeFrom || "").trim() || null;
   const activeTo = String(payload.activeTo || "").trim() || null;
+  const codeReleaseStart = parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
+  const codeReleaseEnd = parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
   const rouletteImage = payload.rouletteImage ?? null;
   const myPrizeText = String(payload.myPrizeText || "").trim();
   const rouletteDescription = String(payload.rouletteDescription || "").trim();
@@ -215,9 +322,87 @@ function validatePrizePayload(payload = {}) {
     userLimitCount: type === "Не приз" ? 0 : userLimitCount,
     activeFrom,
     activeTo,
+    codeReleaseStart: type === "Не приз" ? null : codeReleaseStart,
+    codeReleaseEnd: type === "Не приз" ? null : codeReleaseEnd,
     rouletteImage,
     myPrizeText: type === "Не приз" ? title : myPrizeText,
     rouletteDescription,
+  };
+}
+
+async function syncPrizePromoCodePool(client, prizeId, prize) {
+  const claimedResult = await client.query(
+    `
+      SELECT code
+      FROM prize_promo_codes
+      WHERE prize_id = $1
+        AND claimed_at IS NOT NULL
+    `,
+    [prizeId],
+  );
+  const claimedCodes = new Set(
+    claimedResult.rows.map((row) => String(row.code || "").trim()).filter(Boolean),
+  );
+
+  await client.query(
+    `
+      DELETE FROM prize_promo_codes
+      WHERE prize_id = $1
+        AND claimed_at IS NULL
+    `,
+    [prizeId],
+  );
+
+  const scheduledPromoCodes = buildPromoCodeSchedule(
+    (prize.promoCodes || []).filter((code) => !claimedCodes.has(String(code || "").trim())),
+    prize.codeReleaseStart,
+    prize.codeReleaseEnd,
+  );
+
+  if (scheduledPromoCodes.length) {
+    await client.query(
+      `
+        INSERT INTO prize_promo_codes (
+          prize_id,
+          code,
+          available_from
+        )
+        SELECT
+          $1,
+          item.code,
+          item.available_from::timestamptz
+        FROM UNNEST($2::text[], $3::text[]) AS item(code, available_from)
+        ON CONFLICT (prize_id, code) DO NOTHING
+      `,
+      [
+        prizeId,
+        scheduledPromoCodes.map((item) => item.code),
+        scheduledPromoCodes.map((item) => item.availableFrom),
+      ],
+    );
+  }
+
+  return {
+    totalCount: claimedCodes.size + scheduledPromoCodes.length,
+    remainingCount: scheduledPromoCodes.length,
+  };
+}
+
+async function recalculatePromoPoolCounts(client, prizeId) {
+  const countResult = await client.query(
+    `
+      SELECT
+        COUNT(*)::int AS total_count,
+        COUNT(*) FILTER (WHERE claimed_at IS NULL)::int AS remaining_count
+      FROM prize_promo_codes
+      WHERE prize_id = $1
+    `,
+    [prizeId],
+  );
+
+  return {
+    totalCount: Number(countResult.rows[0]?.total_count || 0),
+    remainingCount: Number(countResult.rows[0]?.remaining_count || 0),
   };
 }
 
@@ -232,56 +417,78 @@ export async function createPrize(payload = {}) {
     nextPrize.rouletteImage = imageResult.image;
     uploadedImage = imageResult.uploadedImage;
 
-    await query(
-      `
-        INSERT INTO prize_positions (
+    await withTransaction(async (client) => {
+      await client.query(
+        `
+          INSERT INTO prize_positions (
+            id,
+            title,
+            category,
+            promo_code_type,
+            type,
+            has_prize_limit,
+            promo_codes_file_name,
+            promo_codes,
+            promo_code_value,
+            total_count,
+            remaining_count,
+            chance_value,
+            has_user_limit,
+            user_limit_count,
+            active_from,
+            active_to,
+            code_release_start,
+            code_release_end,
+            roulette_image,
+            my_prize_text,
+            roulette_description,
+            updated_at
+          )
+          VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, NOW()
+          )
+        `,
+        [
           id,
-          title,
-          category,
-          promo_code_type,
-          type,
-          has_prize_limit,
-          promo_codes_file_name,
-          promo_codes,
-          promo_code_value,
-          total_count,
-          remaining_count,
-          chance_value,
-          has_user_limit,
-          user_limit_count,
-          active_from,
-          active_to,
-          roulette_image,
-          my_prize_text,
-          roulette_description,
-          updated_at
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, NOW()
-        )
-      `,
-      [
-        id,
-        nextPrize.title,
-        nextPrize.category,
-        nextPrize.promoCodeType,
-        nextPrize.type,
-        nextPrize.hasPrizeLimit,
-        nextPrize.promoCodesFileName,
-        JSON.stringify(nextPrize.promoCodes),
-        nextPrize.promoCodeValue,
-        nextPrize.totalCount,
-        nextPrize.hasPrizeLimit ? nextPrize.totalCount : 0,
-        nextPrize.chanceValue,
-        nextPrize.hasUserLimit,
-        nextPrize.userLimitCount,
-        nextPrize.activeFrom,
-        nextPrize.activeTo,
-        nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
-        nextPrize.myPrizeText,
-        nextPrize.rouletteDescription,
-      ],
-    );
+          nextPrize.title,
+          nextPrize.category,
+          nextPrize.promoCodeType,
+          nextPrize.type,
+          nextPrize.hasPrizeLimit,
+          nextPrize.promoCodesFileName,
+          JSON.stringify(nextPrize.promoCodes),
+          nextPrize.promoCodeValue,
+          0,
+          0,
+          nextPrize.chanceValue,
+          nextPrize.hasUserLimit,
+          nextPrize.userLimitCount,
+          nextPrize.activeFrom,
+          nextPrize.activeTo,
+          nextPrize.codeReleaseStart,
+          nextPrize.codeReleaseEnd,
+          nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
+          nextPrize.myPrizeText,
+          nextPrize.rouletteDescription,
+        ],
+      );
+
+      const syncedPromoPool = requiresPromoCodePool(nextPrize)
+        ? await syncPrizePromoCodePool(client, id, nextPrize)
+        : { totalCount: nextPrize.totalCount, remainingCount: nextPrize.hasPrizeLimit ? nextPrize.totalCount : 0 };
+
+      await client.query(
+        `
+          UPDATE prize_positions
+          SET
+            total_count = $2,
+            remaining_count = $3,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [id, syncedPromoPool.totalCount, syncedPromoPool.remainingCount],
+      );
+    });
 
     const items = await getAllPrizes();
     const prize = items.find((item) => item.id === id);
@@ -323,14 +530,20 @@ export async function updatePrize(payload = {}) {
 
       const currentPrize = currentRows.rows[0];
       const usedCount = Math.max(0, Number(currentPrize.total_count || 0) - Number(currentPrize.remaining_count || 0));
-      const remainingCount = nextPrize.hasPrizeLimit
-        ? Math.max(0, nextPrize.totalCount - usedCount)
-        : 0;
       const imageResult = await storeRouletteImage(nextPrize.rouletteImage, currentPrize.roulette_image || null);
 
       nextPrize.rouletteImage = imageResult.image;
       uploadedImage = imageResult.uploadedImage;
       previousImageToCleanup = imageResult.cleanupImage;
+
+      const syncedPromoPool = requiresPromoCodePool(nextPrize)
+        ? await syncPrizePromoCodePool(client, id, nextPrize)
+        : {
+          totalCount: nextPrize.totalCount,
+          remainingCount: nextPrize.hasPrizeLimit
+            ? Math.max(0, nextPrize.totalCount - usedCount)
+            : 0,
+        };
 
       await client.query(
         `
@@ -351,9 +564,11 @@ export async function updatePrize(payload = {}) {
             user_limit_count = $14,
             active_from = $15,
             active_to = $16,
-            roulette_image = $17::jsonb,
-            my_prize_text = $18,
-            roulette_description = $19,
+            code_release_start = $17,
+            code_release_end = $18,
+            roulette_image = $19::jsonb,
+            my_prize_text = $20,
+            roulette_description = $21,
             updated_at = NOW()
           WHERE id = $1
         `,
@@ -367,13 +582,15 @@ export async function updatePrize(payload = {}) {
           nextPrize.promoCodesFileName,
           JSON.stringify(nextPrize.promoCodes),
           nextPrize.promoCodeValue,
-          nextPrize.totalCount,
-          remainingCount,
+          syncedPromoPool.totalCount,
+          syncedPromoPool.remainingCount,
           nextPrize.chanceValue,
           nextPrize.hasUserLimit,
           nextPrize.userLimitCount,
           nextPrize.activeFrom,
           nextPrize.activeTo,
+          nextPrize.codeReleaseStart,
+          nextPrize.codeReleaseEnd,
           nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
           nextPrize.myPrizeText,
           nextPrize.rouletteDescription,
@@ -393,6 +610,219 @@ export async function updatePrize(payload = {}) {
       console.error("Failed to delete stale image", error);
     });
   }
+
+  const items = await getAllPrizes();
+  const prize = items.find((item) => item.id === id);
+
+  return {
+    updated: true,
+    prize,
+  };
+}
+
+export async function clearPrizePromoCodes(payload = {}) {
+  const id = Number(payload.id);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  await withTransaction(async (client) => {
+    const prizeResult = await client.query(
+      "SELECT id FROM prize_positions WHERE id = $1 FOR UPDATE",
+      [id],
+    );
+
+    if (!prizeResult.rowCount) {
+      throw new Error("Prize not found");
+    }
+
+    await client.query(
+      "DELETE FROM prize_promo_codes WHERE prize_id = $1",
+      [id],
+    );
+
+    await client.query(
+      `
+        UPDATE prize_positions
+        SET
+          promo_codes_file_name = '',
+          promo_codes = '[]'::jsonb,
+          total_count = 0,
+          remaining_count = 0,
+          code_release_start = NULL,
+          code_release_end = NULL,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [id],
+    );
+  });
+
+  const items = await getAllPrizes();
+  const prize = items.find((item) => item.id === id);
+
+  return {
+    updated: true,
+    prize,
+  };
+}
+
+export async function appendPrizePromoCodes(payload = {}) {
+  const id = Number(payload.id);
+  const promoCodesFileName = String(payload.promoCodesFileName || "").trim();
+  const incomingPromoCodes = Array.isArray(payload.promoCodes)
+    ? payload.promoCodes.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const codeReleaseStart = parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
+  const codeReleaseEnd = parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  if (!incomingPromoCodes.length) {
+    throw new Error("Promo codes are required");
+  }
+
+  await withTransaction(async (client) => {
+    const prizeResult = await client.query(
+      `
+        SELECT
+          id,
+          type,
+          has_prize_limit,
+          promo_codes,
+          promo_codes_file_name
+        FROM prize_positions
+        WHERE id = $1
+        FOR UPDATE
+      `,
+      [id],
+    );
+    const prizeRow = prizeResult.rows[0];
+
+    if (!prizeRow) {
+      throw new Error("Prize not found");
+    }
+
+    if (String(prizeRow.type || "").trim() !== "Приз" || !Boolean(prizeRow.has_prize_limit)) {
+      throw new Error("Promo code pool is available only for limited prize positions");
+    }
+
+    const poolRowsResult = await client.query(
+      `
+        SELECT id, code, available_from, claimed_at
+        FROM prize_promo_codes
+        WHERE prize_id = $1
+        ORDER BY available_from ASC NULLS FIRST, id ASC
+      `,
+      [id],
+    );
+
+    const now = Date.now();
+    const claimedRows = [];
+    const availableRows = [];
+    const futureRows = [];
+
+    for (const row of poolRowsResult.rows) {
+      const code = String(row.code || "").trim();
+
+      if (!code) {
+        continue;
+      }
+
+      if (row.claimed_at) {
+        claimedRows.push(code);
+        continue;
+      }
+
+      const availableFromMs = row.available_from ? new Date(row.available_from).getTime() : now;
+
+      if (!Number.isNaN(availableFromMs) && availableFromMs <= now) {
+        availableRows.push(code);
+      } else {
+        futureRows.push({
+          id: Number(row.id),
+          code,
+        });
+      }
+    }
+
+    const blockedCodes = new Set([...claimedRows, ...availableRows]);
+    const nextFutureCodes = [];
+
+    for (const code of futureRows.map((item) => item.code).concat(incomingPromoCodes)) {
+      if (!code || blockedCodes.has(code) || nextFutureCodes.includes(code)) {
+        continue;
+      }
+
+      nextFutureCodes.push(code);
+    }
+
+    if (futureRows.length) {
+      await client.query(
+        "DELETE FROM prize_promo_codes WHERE id = ANY($1::bigint[])",
+        [futureRows.map((item) => item.id)],
+      );
+    }
+
+    const scheduledPromoCodes = buildPromoCodeSchedule(
+      nextFutureCodes,
+      codeReleaseStart,
+      codeReleaseEnd,
+    );
+
+    if (scheduledPromoCodes.length) {
+      await client.query(
+        `
+          INSERT INTO prize_promo_codes (
+            prize_id,
+            code,
+            available_from
+          )
+          SELECT
+            $1,
+            item.code,
+            item.available_from::timestamptz
+          FROM UNNEST($2::text[], $3::text[]) AS item(code, available_from)
+          ON CONFLICT (prize_id, code) DO NOTHING
+        `,
+        [
+          id,
+          scheduledPromoCodes.map((item) => item.code),
+          scheduledPromoCodes.map((item) => item.availableFrom),
+        ],
+      );
+    }
+
+    const allPromoCodes = [...claimedRows, ...availableRows, ...scheduledPromoCodes.map((item) => item.code)];
+    const poolCounts = await recalculatePromoPoolCounts(client, id);
+
+    await client.query(
+      `
+        UPDATE prize_positions
+        SET
+          promo_codes_file_name = $2,
+          promo_codes = $3::jsonb,
+          total_count = $4,
+          remaining_count = $5,
+          code_release_start = $6,
+          code_release_end = $7,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [
+        id,
+        promoCodesFileName || String(prizeRow.promo_codes_file_name || "").trim(),
+        JSON.stringify(allPromoCodes),
+        poolCounts.totalCount,
+        poolCounts.remainingCount,
+        codeReleaseStart,
+        codeReleaseEnd,
+      ],
+    );
+  });
 
   const items = await getAllPrizes();
   const prize = items.find((item) => item.id === id);
@@ -630,6 +1060,50 @@ function isPrizeEligibleForUser(prize, awardedPrizeCountsByPrizeId) {
   return (awardedPrizeCountsByPrizeId.get(Number(prize.id)) || 0) < prize.userLimitCount;
 }
 
+function isPrizeAvailableByPromoPool(prize) {
+  if (!requiresPromoCodePool(prize)) {
+    return true;
+  }
+
+  return Number(prize.availablePromoCodesCount || 0) > 0;
+}
+
+async function claimAvailablePromoCode(client, prizeId) {
+  const promoCodeResult = await client.query(
+    `
+      SELECT id, code
+      FROM prize_promo_codes
+      WHERE prize_id = $1
+        AND claimed_at IS NULL
+        AND COALESCE(available_from, NOW()) <= NOW()
+      ORDER BY available_from ASC NULLS FIRST, id ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    `,
+    [prizeId],
+  );
+
+  const promoCodeRow = promoCodeResult.rows[0];
+
+  if (!promoCodeRow) {
+    return null;
+  }
+
+  await client.query(
+    `
+      UPDATE prize_promo_codes
+      SET claimed_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+    `,
+    [Number(promoCodeRow.id)],
+  );
+
+  return {
+    id: Number(promoCodeRow.id),
+    code: String(promoCodeRow.code || "").trim(),
+  };
+}
+
 async function listAwardedPrizesForUser(userId) {
   const result = await query(
     `
@@ -678,6 +1152,65 @@ function buildFrontendPrize(prize) {
   };
 }
 
+function getRouletteTypeKey(prize) {
+  return [
+    String(prize?.type || "").trim(),
+    String(prize?.category || "").trim(),
+    String(prize?.promoCodeType || "").trim(),
+  ].join("::");
+}
+
+function arrangeRoulettePrizes(prizes = []) {
+  if (!Array.isArray(prizes) || prizes.length <= 2) {
+    return Array.isArray(prizes) ? prizes.slice() : [];
+  }
+
+  const groups = new Map();
+
+  prizes.forEach((prize, index) => {
+    const key = getRouletteTypeKey(prize);
+    const currentGroup = groups.get(key) || {
+      key,
+      items: [],
+      originalIndex: index,
+    };
+
+    currentGroup.items.push(prize);
+    groups.set(key, currentGroup);
+  });
+
+  const result = [];
+  let previousKey = "";
+
+  while (result.length < prizes.length) {
+    const candidates = [...groups.values()]
+      .filter((group) => group.items.length > 0)
+      .sort((left, right) => {
+        if (right.items.length !== left.items.length) {
+          return right.items.length - left.items.length;
+        }
+
+        return left.originalIndex - right.originalIndex;
+      });
+
+    if (!candidates.length) {
+      break;
+    }
+
+    const nextGroup = candidates.find((group) => group.key !== previousKey) || candidates[0];
+    const nextPrize = nextGroup.items.shift();
+
+    if (!nextPrize) {
+      break;
+    }
+
+    result.push(nextPrize);
+    previousKey = nextGroup.key;
+  }
+
+  return result.length === prizes.length ? result : prizes.slice();
+}
+
 function buildFallbackPromoCode(prize, usedCount = 0) {
   const base = String(prize.category || prize.type || "PRIZE")
     .toUpperCase()
@@ -691,8 +1224,10 @@ export async function getGameBootstrap(userInfo = {}) {
   const user = await getOrCreateUser(userInfo);
   const attempts = await ensureDailyAttemptGrant(user.id);
   const prizes = await getAllPrizes();
+  const projectState = await getProjectState();
   const todayValue = getTodayValue();
   const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
+  const orderedRoulettePrizes = arrangeRoulettePrizes(activePrizes.length ? activePrizes : prizes);
   const myPrizes = await listAwardedPrizesForUser(user.id);
   const referral = await getReferralData(user.id);
 
@@ -707,7 +1242,8 @@ export async function getGameBootstrap(userInfo = {}) {
   });
 
   return {
-    rouletteItems: (activePrizes.length ? activePrizes : prizes).map(buildFrontendPrize),
+    projectFinished: projectState.projectFinished,
+    rouletteItems: orderedRoulettePrizes.map(buildFrontendPrize),
     myPrizes: myPrizes.map((item) => ({
       id: item.id,
       image: item.image?.previewUrl || "",
@@ -732,7 +1268,9 @@ export async function spinPrize(userInfo = {}) {
     const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
     const prizePool = activePrizes.length ? activePrizes : prizes;
     const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);
-    const eligiblePrizes = prizePool.filter((item) => isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId));
+    const eligiblePrizes = prizePool.filter((item) =>
+      isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId) && isPrizeAvailableByPromoPool(item)
+    );
 
     if (!eligiblePrizes.length) {
       const error = new Error("Упс, все доступные промокоды закончились");
@@ -744,16 +1282,59 @@ export async function spinPrize(userInfo = {}) {
     const attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
       sessionId: userInfo.sessionId || "",
     }, client);
-    const selectedPrize = chooseWeightedPrize(eligiblePrizes);
+    const selectablePrizes = [...eligiblePrizes];
+    let selectedPrize = null;
+    let claimedPromoCodeEntry = null;
+
+    while (selectablePrizes.length > 0) {
+      const nextPrize = chooseWeightedPrize(selectablePrizes);
+
+      if (!nextPrize) {
+        break;
+      }
+
+      if (requiresPromoCodePool(nextPrize)) {
+        const claimedEntry = await claimAvailablePromoCode(client, nextPrize.id);
+
+        if (!claimedEntry) {
+          const staleIndex = selectablePrizes.findIndex((item) => Number(item.id) === Number(nextPrize.id));
+
+          if (staleIndex >= 0) {
+            selectablePrizes.splice(staleIndex, 1);
+          }
+
+          continue;
+        }
+
+        claimedPromoCodeEntry = claimedEntry;
+      }
+
+      selectedPrize = nextPrize;
+      break;
+    }
 
     if (!selectedPrize) {
-      throw new Error("No prize positions available");
+      const error = new Error("No prize positions available");
+      error.statusCode = 409;
+      error.code = "PROMO_CODES_EXHAUSTED";
+      throw error;
     }
 
     let promoCode = "";
+    let awardedPrizeId = null;
 
     if (selectedPrize.type === "Приз") {
-      if (selectedPrize.hasPrizeLimit) {
+      if (requiresPromoCodePool(selectedPrize)) {
+        promoCode = claimedPromoCodeEntry?.code || "";
+        await client.query(
+          `
+            UPDATE prize_positions
+            SET remaining_count = GREATEST(0, remaining_count - 1), updated_at = NOW()
+            WHERE id = $1
+          `,
+          [selectedPrize.id],
+        );
+      } else if (selectedPrize.hasPrizeLimit) {
         const usedCount = Math.max(0, selectedPrize.totalCount - selectedPrize.remainingCount);
         promoCode =
           selectedPrize.promoCodes[usedCount]
@@ -772,10 +1353,11 @@ export async function spinPrize(userInfo = {}) {
         promoCode = selectedPrize.promoCodeValue || "";
       }
 
-      await client.query(
+      const awardedPrizeResult = await client.query(
         `
           INSERT INTO awarded_prizes (user_id, prize_id, title, promo_code, image, expires_at)
           VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+          RETURNING id
         `,
         [
           rawUser.id,
@@ -786,6 +1368,18 @@ export async function spinPrize(userInfo = {}) {
           formatDateLabel(selectedPrize.activeTo),
         ],
       );
+      awardedPrizeId = Number(awardedPrizeResult.rows[0]?.id || 0) || null;
+
+      if (claimedPromoCodeEntry?.id && awardedPrizeId) {
+        await client.query(
+          `
+            UPDATE prize_promo_codes
+            SET awarded_prize_id = $2, updated_at = NOW()
+            WHERE id = $1
+          `,
+          [claimedPromoCodeEntry.id, awardedPrizeId],
+        );
+      }
     }
 
     const myPrizesResult = await client.query(

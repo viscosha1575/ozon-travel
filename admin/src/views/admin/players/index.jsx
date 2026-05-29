@@ -5,6 +5,7 @@ import {
   Flex,
   HStack,
   Icon,
+  Image,
   Input,
   InputGroup,
   InputLeftElement,
@@ -29,7 +30,7 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { SearchIcon } from "@chakra-ui/icons";
+import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from "@chakra-ui/icons";
 import Card from "components/card/Card";
 import { postJson } from "api";
 
@@ -49,6 +50,7 @@ const EMPTY_PLAYER_DETAILS = {
     lastSessionAt: null,
   },
   recentSessions: [],
+  awardedPrizes: [],
 };
 
 function formatNumber(value) {
@@ -164,6 +166,8 @@ export default function PlayersPage() {
   const [selectedPlayerLogs, setSelectedPlayerLogs] = useState([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [sessionsExpanded, setSessionsExpanded] = useState(false);
+  const [logsExpanded, setLogsExpanded] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -254,6 +258,8 @@ export default function PlayersPage() {
     if (!selectedPlayerId) {
       setSelectedPlayerDetails(EMPTY_PLAYER_DETAILS);
       setSelectedPlayerLogs([]);
+      setSessionsExpanded(false);
+      setLogsExpanded(false);
       return;
     }
 
@@ -286,6 +292,9 @@ export default function PlayersPage() {
           },
           recentSessions: Array.isArray(detailsResponse?.recentSessions)
             ? detailsResponse.recentSessions
+            : [],
+          awardedPrizes: Array.isArray(detailsResponse?.awardedPrizes)
+            ? detailsResponse.awardedPrizes
             : [],
         });
         setSelectedPlayerLogs(Array.isArray(logsResponse?.logs) ? logsResponse.logs : []);
@@ -390,6 +399,8 @@ export default function PlayersPage() {
       setSelectedPlayerId(null);
       setSelectedPlayerDetails(EMPTY_PLAYER_DETAILS);
       setSelectedPlayerLogs([]);
+      setSessionsExpanded(false);
+      setLogsExpanded(false);
       setPage(1);
     } catch (requestError) {
       setError(requestError.message || "Не удалось удалить игрока");
@@ -399,6 +410,8 @@ export default function PlayersPage() {
   function handleOpenPlayer(playerId) {
     setSelectedPlayerId(playerId);
     setSuccessMessage("");
+    setSessionsExpanded(false);
+    setLogsExpanded(false);
     playerModal.onOpen();
   }
 
@@ -785,86 +798,166 @@ export default function PlayersPage() {
                   </Card>
 
                   <Card p="20px">
-                    <Text color={textColor} fontSize="lg" fontWeight="700" mb="14px">
-                      Последние сессии
-                    </Text>
-                    <Box overflowX="auto">
-                      <Table variant="simple" minW="620px">
-                        <Thead>
-                          <Tr>
-                            <Th borderColor={borderColor}>ID</Th>
-                            <Th borderColor={borderColor}>Статус</Th>
-                            <Th borderColor={borderColor}>Найдено пар</Th>
-                            <Th borderColor={borderColor}>Осталось времени</Th>
-                            <Th borderColor={borderColor}>Старт</Th>
-                          </Tr>
-                        </Thead>
-                        <Tbody>
-                          {selectedPlayerDetails.recentSessions.length > 0 ? selectedPlayerDetails.recentSessions.map((session) => (
-                            <Tr key={session.id}>
-                              <Td borderColor="transparent">{session.id}</Td>
-                              <Td borderColor="transparent">
-                                <Badge
-                                  colorScheme={session.status === "finished" ? "green" : session.status === "paused" ? "orange" : "blue"}
-                                  borderRadius="999px"
-                                  px="10px"
-                                  py="6px"
-                                >
-                                  {getSessionStatusLabel(session.status)}
-                                </Badge>
-                              </Td>
-                              <Td borderColor="transparent">{formatNumber(session.foundSneakersCount)}</Td>
-                              <Td borderColor="transparent">{formatDuration(session.remainingSeconds)}</Td>
-                              <Td borderColor="transparent">{formatDateTime(session.startedAt)}</Td>
-                            </Tr>
-                          )) : (
+                    <Button
+                      variant="unstyled"
+                      display="block"
+                      w="100%"
+                      onClick={() => setSessionsExpanded((current) => !current)}
+                    >
+                      <Flex align="center" justify="space-between" gap="12px" mb={sessionsExpanded ? "14px" : "0"}>
+                        <Text color={textColor} fontSize="lg" fontWeight="700">
+                          Последние сессии
+                        </Text>
+                        <Icon as={sessionsExpanded ? ChevronUpIcon : ChevronDownIcon} color={textColorSecondary} boxSize="24px" />
+                      </Flex>
+                    </Button>
+                    {sessionsExpanded ? (
+                      <Box overflowX="auto">
+                        <Table variant="simple" minW="620px">
+                          <Thead>
                             <Tr>
-                              <Td borderColor="transparent" colSpan={5} color={textColorSecondary}>
-                                Сессий пока нет
-                              </Td>
+                              <Th borderColor={borderColor}>ID</Th>
+                              <Th borderColor={borderColor}>Статус</Th>
+                              <Th borderColor={borderColor}>Найдено пар</Th>
+                              <Th borderColor={borderColor}>Осталось времени</Th>
+                              <Th borderColor={borderColor}>Старт</Th>
                             </Tr>
-                          )}
-                        </Tbody>
-                      </Table>
-                    </Box>
+                          </Thead>
+                          <Tbody>
+                            {selectedPlayerDetails.recentSessions.length > 0 ? selectedPlayerDetails.recentSessions.map((session) => (
+                              <Tr key={session.id}>
+                                <Td borderColor="transparent">{session.id}</Td>
+                                <Td borderColor="transparent">
+                                  <Badge
+                                    colorScheme={session.status === "finished" ? "green" : session.status === "paused" ? "orange" : "blue"}
+                                    borderRadius="999px"
+                                    px="10px"
+                                    py="6px"
+                                  >
+                                    {getSessionStatusLabel(session.status)}
+                                  </Badge>
+                                </Td>
+                                <Td borderColor="transparent">{formatNumber(session.foundSneakersCount)}</Td>
+                                <Td borderColor="transparent">{formatDuration(session.remainingSeconds)}</Td>
+                                <Td borderColor="transparent">{formatDateTime(session.startedAt)}</Td>
+                              </Tr>
+                            )) : (
+                              <Tr>
+                                <Td borderColor="transparent" colSpan={5} color={textColorSecondary}>
+                                  Сессий пока нет
+                                </Td>
+                              </Tr>
+                            )}
+                          </Tbody>
+                        </Table>
+                      </Box>
+                    ) : null}
+                  </Card>
+
+                  <Card p="20px">
+                    <Button
+                      variant="unstyled"
+                      display="block"
+                      w="100%"
+                      onClick={() => setLogsExpanded((current) => !current)}
+                    >
+                      <Flex align="center" justify="space-between" gap="12px" mb={logsExpanded ? "14px" : "0"}>
+                        <Text color={textColor} fontSize="lg" fontWeight="700">
+                          Игровые логи
+                        </Text>
+                        <Icon as={logsExpanded ? ChevronUpIcon : ChevronDownIcon} color={textColorSecondary} boxSize="24px" />
+                      </Flex>
+                    </Button>
+                    {logsExpanded ? (
+                      <Box overflowX="auto">
+                        <Table variant="simple" minW="640px">
+                          <Thead>
+                            <Tr>
+                              <Th borderColor={borderColor}>Время</Th>
+                              <Th borderColor={borderColor}>Источник</Th>
+                              <Th borderColor={borderColor}>Событие</Th>
+                              <Th borderColor={borderColor}>Детали</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {selectedPlayerLogs.length > 0 ? selectedPlayerLogs.map((log) => (
+                              <Tr key={log.id}>
+                                <Td borderColor="transparent">{formatDateTime(log.createdAt)}</Td>
+                                <Td borderColor="transparent">{log.source || "—"}</Td>
+                                <Td borderColor="transparent">{log.action || "—"}</Td>
+                                <Td borderColor="transparent">
+                                  <Text color={textColorSecondary} fontSize="xs" whiteSpace="pre-wrap">
+                                    {JSON.stringify(log.details || {}, null, 2)}
+                                  </Text>
+                                </Td>
+                              </Tr>
+                            )) : (
+                              <Tr>
+                                <Td borderColor="transparent" colSpan={4} color={textColorSecondary}>
+                                  Игровых логов пока нет
+                                </Td>
+                              </Tr>
+                            )}
+                          </Tbody>
+                        </Table>
+                      </Box>
+                    ) : null}
                   </Card>
 
                   <Card p="20px">
                     <Text color={textColor} fontSize="lg" fontWeight="700" mb="14px">
-                      Игровые логи
+                      Выданные призы
                     </Text>
-                    <Box overflowX="auto">
-                      <Table variant="simple" minW="640px">
-                        <Thead>
-                          <Tr>
-                            <Th borderColor={borderColor}>Время</Th>
-                            <Th borderColor={borderColor}>Источник</Th>
-                            <Th borderColor={borderColor}>Событие</Th>
-                            <Th borderColor={borderColor}>Детали</Th>
-                          </Tr>
-                        </Thead>
-                        <Tbody>
-                          {selectedPlayerLogs.length > 0 ? selectedPlayerLogs.map((log) => (
-                            <Tr key={log.id}>
-                              <Td borderColor="transparent">{formatDateTime(log.createdAt)}</Td>
-                              <Td borderColor="transparent">{log.source || "—"}</Td>
-                              <Td borderColor="transparent">{log.action || "—"}</Td>
-                              <Td borderColor="transparent">
-                                <Text color={textColorSecondary} fontSize="xs" whiteSpace="pre-wrap">
-                                  {JSON.stringify(log.details || {}, null, 2)}
+                    <Stack spacing="12px">
+                      {selectedPlayerDetails.awardedPrizes.length > 0 ? selectedPlayerDetails.awardedPrizes.map((prize) => (
+                        <Card key={prize.id} p="14px" bg={modalSubtleBg}>
+                          <Flex align={{ base: "start", md: "center" }} gap="14px" direction={{ base: "column", md: "row" }}>
+                            <Flex
+                              w="64px"
+                              h="64px"
+                              align="center"
+                              justify="center"
+                              borderRadius="18px"
+                              bg="white"
+                              overflow="hidden"
+                              flexShrink={0}
+                            >
+                              {prize.image?.previewUrl ? (
+                                <Image
+                                  src={prize.image.previewUrl}
+                                  alt={prize.title || "Выданный приз"}
+                                  w="100%"
+                                  h="100%"
+                                  objectFit="contain"
+                                />
+                              ) : (
+                                <Text color={textColorSecondary} fontSize="xs">
+                                  Нет фото
                                 </Text>
-                              </Td>
-                            </Tr>
-                          )) : (
-                            <Tr>
-                              <Td borderColor="transparent" colSpan={4} color={textColorSecondary}>
-                                Игровых логов пока нет
-                              </Td>
-                            </Tr>
-                          )}
-                        </Tbody>
-                      </Table>
-                    </Box>
+                              )}
+                            </Flex>
+                            <Stack spacing="4px" flex="1" minW="0">
+                              <Text color={textColor} fontSize="md" fontWeight="700" noOfLines={2}>
+                                {prize.title || "Выданный приз"}
+                              </Text>
+                              <Text color={textColorSecondary} fontSize="sm">
+                                В пуле с: {formatDateTime(prize.availableFrom)}
+                              </Text>
+                              <Text color={textColorSecondary} fontSize="sm">
+                                Получен: {formatDateTime(prize.awardedAt)}
+                              </Text>
+                              <Text color={textColor} fontSize="sm" fontWeight="700" wordBreak="break-all">
+                                {prize.promoCode || "—"}
+                              </Text>
+                            </Stack>
+                          </Flex>
+                        </Card>
+                      )) : (
+                        <Text color={textColorSecondary} fontSize="sm">
+                          Выданных призов пока нет
+                        </Text>
+                      )}
+                    </Stack>
                   </Card>
                 </Stack>
               )}

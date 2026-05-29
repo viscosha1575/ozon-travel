@@ -72,7 +72,7 @@ const subscriptionRetryMessage =
   'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите «Проверить подписку» еще раз.';
 
 const menuMessage = [
-  'Все готово для участия!',
+  'Пора ловить призы!',
 ].join('\n');
 
 const supportMessage = [

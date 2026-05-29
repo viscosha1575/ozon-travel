@@ -448,6 +448,18 @@ function mapPlayerRow(player, sessionStats = {}, logStats = {}, latestPrize = {}
   };
 }
 
+function mapAwardedPrizeRow(row = {}) {
+  return {
+    id: Number(row.id || 0),
+    prizeId: Number(row.prize_id || 0),
+    title: String(row.awarded_title || row.position_title || "").trim(),
+    image: row.image && typeof row.image === "object" ? row.image : null,
+    promoCode: String(row.promo_code || "").trim(),
+    availableFrom: row.available_from || null,
+    awardedAt: row.created_at || null,
+  };
+}
+
 async function getPlayerBaseMaps() {
   const [usersResult, sessionStatsResult, logStatsResult, latestPrizeResult, attemptsResult] = await Promise.all([
     query(`
@@ -989,6 +1001,27 @@ export async function getPlayerAnalyticsDetails(payload = {}) {
     `,
     [playerId],
   );
+  const awardedPrizesResult = await query(
+    `
+      SELECT
+        awarded_prizes.id,
+        awarded_prizes.prize_id,
+        awarded_prizes.title AS awarded_title,
+        awarded_prizes.promo_code,
+        awarded_prizes.image,
+        awarded_prizes.created_at,
+        prize_positions.title AS position_title,
+        prize_promo_codes.available_from
+      FROM awarded_prizes
+      LEFT JOIN prize_positions
+        ON prize_positions.id = awarded_prizes.prize_id
+      LEFT JOIN prize_promo_codes
+        ON prize_promo_codes.awarded_prize_id = awarded_prizes.id
+      WHERE awarded_prizes.user_id = $1
+      ORDER BY awarded_prizes.created_at DESC, awarded_prizes.id DESC
+    `,
+    [playerId],
+  );
 
   return {
     player: {
@@ -1016,6 +1049,7 @@ export async function getPlayerAnalyticsDetails(payload = {}) {
       finishedAt: row.finished_at,
       durationSeconds: Number(row.duration_seconds || 0),
     })),
+    awardedPrizes: awardedPrizesResult.rows.map(mapAwardedPrizeRow),
   };
 }
 
