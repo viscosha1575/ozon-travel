@@ -2066,7 +2066,7 @@ body {
 @media (max-height: 760px) {
   .content-subscribe-image {
     width: 200px;
-    transform: translate(-50%, -55%);
+    transform: translate(-50%, -62%);
   }
 
   .content-bag-layer.is-static {
