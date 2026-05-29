@@ -303,6 +303,7 @@ function createInitialPrizeForm() {
     userLimitCount: "",
     activeFrom: DEFAULT_DRAW_ACTIVE_FROM,
     activeTo: DEFAULT_DRAW_ACTIVE_TO,
+    disablePromoCodeReleaseSchedule: false,
     codeReleaseStart: "",
     codeReleaseEnd: "",
     availablePromoCodesCount: 0,
@@ -330,6 +331,7 @@ function buildPrizeForm(item = {}) {
     userLimitCount: item.userLimitCount ? String(item.userLimitCount) : "",
     activeFrom: item.activeFrom || "",
     activeTo: item.activeTo || "",
+    disablePromoCodeReleaseSchedule: !item.codeReleaseStart && !item.codeReleaseEnd,
     codeReleaseStart: item.codeReleaseStart || "",
     codeReleaseEnd: item.codeReleaseEnd || "",
     availablePromoCodesCount: Number(item.availablePromoCodesCount || 0),
@@ -427,6 +429,7 @@ export default function PromoCodesPage() {
     form.codeReleaseStart,
     form.codeReleaseEnd,
   );
+  const isPromoCodeReleaseScheduleDisabled = Boolean(form.disablePromoCodeReleaseSchedule);
   const hasStoredPromoCodeScheduleWindow = Boolean(form.codeReleaseStart) && Boolean(form.codeReleaseEnd);
   const hasAnyPromoCodesLoaded = (
     Number(form.availablePromoCodesCount || 0)
@@ -572,8 +575,8 @@ export default function PromoCodesPage() {
         userLimitCount: isNonPrize ? "" : form.userLimitCount,
         activeFrom: form.activeFrom,
         activeTo: form.activeTo,
-        codeReleaseStart: isNonPrize ? "" : form.codeReleaseStart,
-        codeReleaseEnd: isNonPrize ? "" : form.codeReleaseEnd,
+        codeReleaseStart: isNonPrize || form.disablePromoCodeReleaseSchedule ? "" : form.codeReleaseStart,
+        codeReleaseEnd: isNonPrize || form.disablePromoCodeReleaseSchedule ? "" : form.codeReleaseEnd,
         rouletteImage: form.rouletteImage,
         myPrizeText: isNonPrize ? form.title : form.myPrizeText,
         rouletteDescription: form.rouletteDescription,
@@ -1509,6 +1512,7 @@ export default function PromoCodesPage() {
                             borderRadius="16px"
                             type="datetime-local"
                             value={form.codeReleaseStart}
+                            isDisabled={isPromoCodeReleaseScheduleDisabled}
                             onChange={(event) => setForm((current) => ({ ...current, codeReleaseStart: event.target.value }))}
                           />
                         </FormControl>
@@ -1522,10 +1526,25 @@ export default function PromoCodesPage() {
                             borderRadius="16px"
                             type="datetime-local"
                             value={form.codeReleaseEnd}
+                            isDisabled={isPromoCodeReleaseScheduleDisabled}
                             onChange={(event) => setForm((current) => ({ ...current, codeReleaseEnd: event.target.value }))}
                           />
                         </FormControl>
                       </SimpleGrid>
+                      {editingPrizeId ? (
+                        <Checkbox
+                          colorScheme="brandScheme"
+                          isChecked={isPromoCodeReleaseScheduleDisabled}
+                          onChange={(event) => setForm((current) => ({
+                            ...current,
+                            disablePromoCodeReleaseSchedule: event.target.checked,
+                            codeReleaseStart: event.target.checked ? "" : current.codeReleaseStart,
+                            codeReleaseEnd: event.target.checked ? "" : current.codeReleaseEnd,
+                          }))}
+                        >
+                          Отключить окно выхода в пул
+                        </Checkbox>
+                      ) : null}
                       <Text color={textColorSecondary} fontSize="sm">
                         Если окно указано, загруженные коды будут равномерно распределены по этому промежутку. Если оставить пустым, все коды сразу попадут в доступный пул.
                       </Text>
