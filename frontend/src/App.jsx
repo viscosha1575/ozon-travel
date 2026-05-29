@@ -144,6 +144,7 @@ function App() {
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
   const [isSubscribedAutostartPending, setIsSubscribedAutostartPending] = useState(false)
+  const [isInitialSubscriptionStatusPending, setIsInitialSubscriptionStatusPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
   const [isProjectFinished, setIsProjectFinished] = useState(null)
   const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
@@ -151,6 +152,7 @@ function App() {
   const currentScreen = screens[activeScreen]
 
   useEffect(() => {
+    let isCancelled = false
     const shouldTrackOpen = typeof window === "undefined"
       ? true
       : window.sessionStorage.getItem(APP_OPEN_STORAGE_KEY) !== "1"
@@ -159,27 +161,64 @@ function App() {
       window.sessionStorage.setItem(APP_OPEN_STORAGE_KEY, "1")
     }
 
-    void postJson("/game/open", {
-      entryScreen: INTRO_DISABLED ? "game" : "intro",
-      trackOpen: shouldTrackOpen,
-    })
-      .then((response) => {
+    const initApp = async () => {
+      try {
+        const response = await postJson("/game/open", {
+          entryScreen: INTRO_DISABLED ? "game" : "intro",
+          trackOpen: shouldTrackOpen,
+        })
         const projectFinished = Boolean(response?.projectFinished)
-        const subscribedToChannel = Boolean(response?.user?.subscribedToChannel)
+
+        if (isCancelled) {
+          return
+        }
 
         setIsProjectFinished(projectFinished)
 
-        if (!projectFinished && subscribedToChannel) {
-          setIsSubscribedAutostartPending(true)
-          setIsGameLaunchPending(true)
+        if (projectFinished || isTelegramHost) {
+          return
         }
-      })
-      .catch((error) => {
+
+        setIsInitialSubscriptionStatusPending(true)
+
+        try {
+          const subscriptionStatus = await getJson("/game/subscription-status")
+
+          if (isCancelled) {
+            return
+          }
+
+          if (Boolean(subscriptionStatus?.user?.subscribedToChannel)) {
+            setIsSubscribedAutostartPending(true)
+            setIsGameLaunchPending(true)
+          }
+        } catch (error) {
+          if (!isCancelled) {
+            console.warn("Initial subscription status refresh failed", error)
+          }
+        } finally {
+          if (!isCancelled) {
+            setIsInitialSubscriptionStatusPending(false)
+          }
+        }
+      } catch (error) {
+        if (isCancelled) {
+          return
+        }
+
         console.warn("Game open tracking failed", error)
         setIsSubscribedAutostartPending(false)
+        setIsInitialSubscriptionStatusPending(false)
         setIsProjectFinished(false)
-      })
-  }, [])
+      }
+    }
+
+    void initApp()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isTelegramHost])
 
   useEffect(() => {
     if (INTRO_DISABLED || isProjectFinished) {
@@ -386,7 +425,7 @@ function App() {
         <PersistentGameScreen />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
-        {!isProjectStateResolved || (isSubscribedAutostartPending && !isGameActive) ? (
+        {!isProjectStateResolved || isInitialSubscriptionStatusPending || (isSubscribedAutostartPending && !isGameActive) ? (
           <div className="project-finished-loading" aria-hidden="true" />
         ) : isProjectFinished ? (
           <section className="project-finished-screen" aria-label="Проект завершен">
