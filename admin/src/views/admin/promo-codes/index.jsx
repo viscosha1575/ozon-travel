@@ -62,9 +62,34 @@ const PROMO_CODE_TYPE_OPTIONS = [
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
 const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
+const PROMO_CODE_SCHEDULE_TABS = [
+  { id: "available", label: "Доступны" },
+  { id: "waiting", label: "В ожидании" },
+  { id: "claimed", label: "Выданные" },
+];
 
 function formatNumber(value) {
   return new Intl.NumberFormat("ru-RU").format(Number(value) || 0);
+}
+
+function formatDateTimeLabel(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function splitPromoCodes(rawValue) {
@@ -249,6 +274,19 @@ const EMPTY_RESPONSE = {
   },
 };
 
+const EMPTY_PROMO_CODE_SCHEDULE_RESPONSE = {
+  prize: null,
+  summary: {
+    availableCount: 0,
+    waitingCount: 0,
+    claimedCount: 0,
+    totalCount: 0,
+  },
+  availableItems: [],
+  waitingItems: [],
+  claimedItems: [],
+};
+
 function createInitialPrizeForm() {
   return {
     title: "",
@@ -341,6 +379,7 @@ export default function PromoCodesPage() {
   const choosePrizeTypeModal = useDisclosure();
   const createPrizeModal = useDisclosure();
   const nonPrizeModal = useDisclosure();
+  const promoCodesScheduleModal = useDisclosure();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -359,6 +398,10 @@ export default function PromoCodesPage() {
   const [form, setForm] = useState(createInitialPrizeForm);
   const [promoCodesUploadError, setPromoCodesUploadError] = useState("");
   const [promoCodesPoolAction, setPromoCodesPoolAction] = useState("");
+  const [promoCodesScheduleResponse, setPromoCodesScheduleResponse] = useState(EMPTY_PROMO_CODE_SCHEDULE_RESPONSE);
+  const [promoCodesScheduleLoading, setPromoCodesScheduleLoading] = useState(false);
+  const [promoCodesScheduleError, setPromoCodesScheduleError] = useState("");
+  const [promoCodesScheduleTab, setPromoCodesScheduleTab] = useState(PROMO_CODE_SCHEDULE_TABS[0].id);
   const promoCodesInputRef = useRef(null);
   const promoCodesAppendInputRef = useRef(null);
 
@@ -384,6 +427,19 @@ export default function PromoCodesPage() {
     form.codeReleaseStart,
     form.codeReleaseEnd,
   );
+  const hasStoredPromoCodeScheduleWindow = Boolean(form.codeReleaseStart) && Boolean(form.codeReleaseEnd);
+  const canOpenPromoCodeSchedule = Boolean(editingPrizeId)
+    && hasStoredPromoCodeScheduleWindow
+    && (
+      Number(form.availablePromoCodesCount || 0)
+      + Number(form.unavailablePromoCodesCount || 0)
+      + Number(form.claimedPromoCodesCount || 0)
+    ) > 0;
+  const promoCodesScheduleItems = promoCodesScheduleTab === "available"
+    ? promoCodesScheduleResponse.availableItems
+    : promoCodesScheduleTab === "waiting"
+      ? promoCodesScheduleResponse.waitingItems
+      : promoCodesScheduleResponse.claimedItems;
 
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
@@ -684,6 +740,43 @@ export default function PromoCodesPage() {
       }
 
       setPromoCodesPoolAction("");
+    }
+  }
+
+  function handleClosePromoCodesScheduleModal() {
+    promoCodesScheduleModal.onClose();
+    setPromoCodesScheduleError("");
+    setPromoCodesScheduleLoading(false);
+    setPromoCodesScheduleTab(PROMO_CODE_SCHEDULE_TABS[0].id);
+  }
+
+  async function handleOpenPromoCodesSchedule() {
+    if (!editingPrizeId) {
+      return;
+    }
+
+    setPromoCodesScheduleLoading(true);
+    setPromoCodesScheduleError("");
+    setPromoCodesScheduleTab(PROMO_CODE_SCHEDULE_TABS[0].id);
+    promoCodesScheduleModal.onOpen();
+
+    try {
+      const result = await postJson("/api/prizes/promo-codes/schedule", {
+        id: editingPrizeId,
+      });
+
+      setPromoCodesScheduleResponse({
+        prize: result?.prize ?? null,
+        summary: result?.summary ?? EMPTY_PROMO_CODE_SCHEDULE_RESPONSE.summary,
+        availableItems: Array.isArray(result?.availableItems) ? result.availableItems : [],
+        waitingItems: Array.isArray(result?.waitingItems) ? result.waitingItems : [],
+        claimedItems: Array.isArray(result?.claimedItems) ? result.claimedItems : [],
+      });
+    } catch (requestError) {
+      setPromoCodesScheduleResponse(EMPTY_PROMO_CODE_SCHEDULE_RESPONSE);
+      setPromoCodesScheduleError(requestError.message || "Не удалось загрузить расписание промокодов");
+    } finally {
+      setPromoCodesScheduleLoading(false);
     }
   }
 
@@ -1159,6 +1252,100 @@ export default function PromoCodesPage() {
         </ModalContent>
       </Modal>
 
+      <Modal isOpen={promoCodesScheduleModal.isOpen} onClose={handleClosePromoCodesScheduleModal} isCentered size="4xl" scrollBehavior="inside">
+        <ModalOverlay bg="rgba(15, 23, 42, 0.45)" />
+        <ModalContent bg={modalBg} borderRadius="24px" p="4px" maxW={{ base: "94vw", xl: "920px" }} border="1px solid" borderColor={tableCardBorder}>
+          <ModalHeader color={textColor} fontSize="xl" fontWeight="700">
+            {promoCodesScheduleResponse.prize?.title
+              ? `Расписание промокодов: ${promoCodesScheduleResponse.prize.title}`
+              : "Расписание промокодов"}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb="24px">
+            <Stack spacing="18px">
+              <Flex gap="12px" wrap="wrap">
+                {PROMO_CODE_SCHEDULE_TABS.map((tab) => {
+                  const count = tab.id === "available"
+                    ? promoCodesScheduleResponse.summary.availableCount
+                    : tab.id === "waiting"
+                      ? promoCodesScheduleResponse.summary.waitingCount
+                      : promoCodesScheduleResponse.summary.claimedCount;
+
+                  return (
+                    <Button
+                      key={tab.id}
+                      type="button"
+                      variant={promoCodesScheduleTab === tab.id ? "brand" : "light"}
+                      h="44px"
+                      borderRadius="16px"
+                      onClick={() => setPromoCodesScheduleTab(tab.id)}
+                    >
+                      {tab.label}: {formatNumber(count)}
+                    </Button>
+                  );
+                })}
+              </Flex>
+
+              <Text color={textColorSecondary} fontSize="sm">
+                Всего кодов в расписании: {formatNumber(promoCodesScheduleResponse.summary.totalCount)}
+              </Text>
+
+              {promoCodesScheduleError ? (
+                <Text color="red.400" fontSize="sm">
+                  {promoCodesScheduleError}
+                </Text>
+              ) : null}
+
+              <Skeleton isLoaded={!promoCodesScheduleLoading}>
+                <Stack spacing="12px">
+                  {promoCodesScheduleItems.length > 0 ? promoCodesScheduleItems.map((item) => (
+                    <Box
+                      key={`${promoCodesScheduleTab}-${item.id}-${item.code}`}
+                      border="1px solid"
+                      borderColor={tableCardBorder}
+                      borderRadius="20px"
+                      p="16px"
+                    >
+                      <Stack spacing="8px">
+                        <Text color={textColor} fontSize="md" fontWeight="700">
+                          {item.code}
+                        </Text>
+                        <SimpleGrid columns={{ base: 1, md: promoCodesScheduleTab === "claimed" ? 2 : 1 }} spacing="8px">
+                          <Text color={textColorSecondary} fontSize="sm">
+                            {promoCodesScheduleTab === "available"
+                              ? `Доступен с: ${formatDateTimeLabel(item.availableFrom)}`
+                              : promoCodesScheduleTab === "waiting"
+                                ? `Станет доступен: ${formatDateTimeLabel(item.availableFrom)}`
+                                : `Был в пуле с: ${formatDateTimeLabel(item.availableFrom)}`}
+                          </Text>
+                          {promoCodesScheduleTab === "claimed" ? (
+                            <Text color={textColorSecondary} fontSize="sm">
+                              Получен: {formatDateTimeLabel(item.awardedAt || item.claimedAt)}
+                            </Text>
+                          ) : null}
+                        </SimpleGrid>
+                      </Stack>
+                    </Box>
+                  )) : (
+                    <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
+                      <Text color={textColorSecondary} fontSize="sm" textAlign="center">
+                        {promoCodesScheduleLoading
+                          ? "Загружаем расписание..."
+                          : promoCodesScheduleTab === "available"
+                            ? "Сейчас нет доступных промокодов."
+                            : promoCodesScheduleTab === "waiting"
+                              ? "Сейчас нет промокодов в ожидании."
+                              : "Сейчас нет выданных промокодов."}
+                      </Text>
+                    </Box>
+                  )}
+                </Stack>
+              </Skeleton>
+            </Stack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
       <Modal isOpen={createPrizeModal.isOpen} onClose={createPrizeModal.onClose} isCentered size="4xl" scrollBehavior="inside">
         <ModalOverlay bg="rgba(15, 23, 42, 0.45)" />
         <ModalContent bg={modalBg} borderRadius="24px" p="4px" maxW={{ base: "94vw", xl: "960px" }} border="1px solid" borderColor={tableCardBorder}>
@@ -1345,6 +1532,18 @@ export default function PromoCodesPage() {
                         <Text color={textColorSecondary} fontSize="sm">
                           {promoReleaseIntervalHint}
                         </Text>
+                      ) : null}
+                      {canOpenPromoCodeSchedule ? (
+                        <Flex justify="flex-start">
+                          <Button
+                            type="button"
+                            variant="light"
+                            h="48px"
+                            onClick={() => void handleOpenPromoCodesSchedule()}
+                          >
+                            Посмотреть расписание промокодов
+                          </Button>
+                        </Flex>
                       ) : null}
                     </>
                   ) : (

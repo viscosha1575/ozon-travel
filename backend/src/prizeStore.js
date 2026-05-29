@@ -833,6 +833,97 @@ export async function appendPrizePromoCodes(payload = {}) {
   };
 }
 
+export async function getPrizePromoCodeSchedule(payload = {}) {
+  const id = Number(payload.id);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const prizeResult = await query(
+    `
+      SELECT
+        id,
+        title,
+        has_prize_limit,
+        promo_codes_file_name
+      FROM prize_positions
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [id],
+  );
+  const prizeRow = prizeResult.rows[0];
+
+  if (!prizeRow) {
+    throw new Error("Prize not found");
+  }
+
+  const scheduleResult = await query(
+    `
+      SELECT
+        prize_promo_codes.id,
+        prize_promo_codes.code,
+        prize_promo_codes.available_from,
+        prize_promo_codes.claimed_at,
+        awarded_prizes.created_at AS awarded_at
+      FROM prize_promo_codes
+      LEFT JOIN awarded_prizes
+        ON awarded_prizes.id = prize_promo_codes.awarded_prize_id
+      WHERE prize_promo_codes.prize_id = $1
+      ORDER BY prize_promo_codes.available_from ASC NULLS FIRST, prize_promo_codes.id ASC
+    `,
+    [id],
+  );
+
+  const now = Date.now();
+  const availableItems = [];
+  const waitingItems = [];
+  const claimedItems = [];
+
+  for (const row of scheduleResult.rows) {
+    const item = {
+      id: Number(row.id),
+      code: String(row.code || "").trim(),
+      availableFrom: row.available_from ? new Date(row.available_from).toISOString() : null,
+      claimedAt: row.claimed_at ? new Date(row.claimed_at).toISOString() : null,
+      awardedAt: row.awarded_at ? new Date(row.awarded_at).toISOString() : null,
+    };
+
+    if (item.claimedAt) {
+      claimedItems.push(item);
+      continue;
+    }
+
+    const availableFromMs = item.availableFrom ? new Date(item.availableFrom).getTime() : now;
+
+    if (!Number.isNaN(availableFromMs) && availableFromMs > now) {
+      waitingItems.push(item);
+      continue;
+    }
+
+    availableItems.push(item);
+  }
+
+  return {
+    prize: {
+      id: Number(prizeRow.id),
+      title: String(prizeRow.title || "").trim(),
+      hasPrizeLimit: Boolean(prizeRow.has_prize_limit),
+      promoCodesFileName: String(prizeRow.promo_codes_file_name || "").trim(),
+    },
+    summary: {
+      availableCount: availableItems.length,
+      waitingCount: waitingItems.length,
+      claimedCount: claimedItems.length,
+      totalCount: scheduleResult.rows.length,
+    },
+    availableItems,
+    waitingItems,
+    claimedItems,
+  };
+}
+
 export async function deletePrize(payload = {}) {
   const id = Number(payload.id);
 

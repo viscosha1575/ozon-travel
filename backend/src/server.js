@@ -25,6 +25,7 @@ import {
   deletePrize,
   appendPrizePromoCodes,
   clearPrizePromoCodes,
+  getPrizePromoCodeSchedule,
   getGameBootstrap,
   listChances,
   listPrizes,
@@ -309,6 +310,11 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/prizes/promo-codes/clear") {
       res.json(await clearPrizePromoCodes(body));
+      return;
+    }
+
+    if (path === "/api/prizes/promo-codes/schedule") {
+      res.json(await getPrizePromoCodeSchedule(body));
       return;
     }
 

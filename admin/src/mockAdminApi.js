@@ -252,6 +252,113 @@ function buildMockPromoCodePoolMeta({
   };
 }
 
+function buildMockPromoCodeSchedule(codes = [], releaseStart = "", releaseEnd = "") {
+  const normalizedCodes = Array.from(new Set(
+    Array.isArray(codes)
+      ? codes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
+  ));
+
+  if (!normalizedCodes.length) {
+    return [];
+  }
+
+  const now = Date.now();
+  const startDate = releaseStart ? new Date(releaseStart) : new Date(now);
+  const safeStartDate = Number.isNaN(startDate.getTime()) ? new Date(now) : startDate;
+  const endDate = releaseEnd ? new Date(releaseEnd) : safeStartDate;
+  const safeEndDate = Number.isNaN(endDate.getTime()) || endDate.getTime() < safeStartDate.getTime()
+    ? safeStartDate
+    : endDate;
+
+  if (normalizedCodes.length === 1 || safeStartDate.getTime() === safeEndDate.getTime()) {
+    return normalizedCodes.map((code, index) => ({
+      id: index + 1,
+      code,
+      availableFrom: safeStartDate.toISOString(),
+    }));
+  }
+
+  const stepMs = (safeEndDate.getTime() - safeStartDate.getTime()) / (normalizedCodes.length - 1);
+
+  return normalizedCodes.map((code, index) => ({
+    id: index + 1,
+    code,
+    availableFrom: new Date(safeStartDate.getTime() + stepMs * index).toISOString(),
+  }));
+}
+
+function buildPrizePromoCodeScheduleResponse(payload = {}) {
+  const id = Number(payload?.id);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const prize = mockState.prizes.find((item) => item.id === id);
+
+  if (!prize) {
+    throw new Error("Prize not found");
+  }
+
+  const schedule = buildMockPromoCodeSchedule(
+    prize.promoCodes,
+    prize.codeReleaseStart,
+    prize.codeReleaseEnd,
+  );
+  const claimedCount = Math.max(0, Math.min(schedule.length, Number(prize.claimedPromoCodesCount || 0)));
+  const now = Date.now();
+  const claimedItems = [];
+  const availableItems = [];
+  const waitingItems = [];
+
+  schedule.forEach((item, index) => {
+    const availableFromMs = item.availableFrom ? new Date(item.availableFrom).getTime() : now;
+
+    if (index < claimedCount) {
+      claimedItems.push({
+        ...item,
+        claimedAt: new Date(Math.max(availableFromMs, now - (claimedCount - index) * 60 * 60 * 1000)).toISOString(),
+        awardedAt: new Date(Math.max(availableFromMs, now - (claimedCount - index) * 60 * 60 * 1000)).toISOString(),
+      });
+      return;
+    }
+
+    if (!Number.isNaN(availableFromMs) && availableFromMs > now) {
+      waitingItems.push({
+        ...item,
+        claimedAt: null,
+        awardedAt: null,
+      });
+      return;
+    }
+
+    availableItems.push({
+      ...item,
+      claimedAt: null,
+      awardedAt: null,
+    });
+  });
+
+  return {
+    prize: {
+      id: prize.id,
+      title: prize.title,
+      hasPrizeLimit: prize.hasPrizeLimit,
+      promoCodesFileName: prize.promoCodesFileName,
+    },
+    summary: {
+      availableCount: availableItems.length,
+      waitingCount: waitingItems.length,
+      claimedCount: claimedItems.length,
+      totalCount: schedule.length,
+    },
+    availableItems,
+    waitingItems,
+    claimedItems,
+  };
+}
+
 function createMockPush({
   id,
   title,
@@ -2076,6 +2183,10 @@ export function resolveMockAdminResponse(path, body = {}) {
 
   if (path === "/api/prizes/promo-codes/clear") {
     return clearPrizePromoCodes(body);
+  }
+
+  if (path === "/api/prizes/promo-codes/schedule") {
+    return buildPrizePromoCodeScheduleResponse(body);
   }
 
   if (path === "/api/prizes/promo-codes/append") {
