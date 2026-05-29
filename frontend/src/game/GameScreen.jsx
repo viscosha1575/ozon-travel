@@ -753,6 +753,7 @@ export default function GameScreen() {
       step > 0 ? (baseTranslate - currentTranslate) / step : 0,
       activeRouletteItems.length,
     )
+    const normalizedCurrentTranslate = roundToDevicePixel(baseTranslate - currentProgressSteps * step)
     const targetProgressSteps = getLoopedIndex(
       targetBagIndex - currentCenterBagIndex,
       activeRouletteItems.length
@@ -802,8 +803,8 @@ export default function GameScreen() {
       totalSteps,
     ))
     const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + totalSteps) * step)
-    setTrackTranslate(currentTranslate)
-    virtualTranslateRef.current = currentTranslate
+    setTrackTranslate(normalizedCurrentTranslate)
+    virtualTranslateRef.current = normalizedCurrentTranslate
 
     cancelAnimationFrame(animationFrameRef.current)
     clearTimeout(spinCompletionTimeoutRef.current)
@@ -815,7 +816,7 @@ export default function GameScreen() {
       }
 
       carouselMotionRef.current.style.transition = "none"
-      applyTrackStyles(currentTranslate)
+      applyTrackStyles(normalizedCurrentTranslate)
       void carouselMotionRef.current.offsetWidth
 
       animationFrameRef.current = requestAnimationFrame(() => {
