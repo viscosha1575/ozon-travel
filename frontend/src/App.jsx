@@ -306,6 +306,10 @@ function App() {
 
   const handlePrimaryAction = () => {
     if (currentScreen.id === "intro") {
+      if (!isTelegramHost && isInitialSubscriptionStatusPending) {
+        return
+      }
+
       if (isTelegramHost) {
         handleStartGame()
         return
@@ -410,6 +414,7 @@ function App() {
   }
 
   const isProjectStateResolved = INTRO_DISABLED || isProjectFinished !== null
+  const isPrimaryActionDisabled = currentScreen.id === "intro" && !isTelegramHost && isInitialSubscriptionStatusPending
 
   return (
     <main className="app-shell" aria-label="Application shell">
@@ -417,7 +422,7 @@ function App() {
         <PersistentGameScreen />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
-        {!isProjectStateResolved || isInitialSubscriptionStatusPending || (isSubscribedAutostartPending && !isGameActive) ? (
+        {!isProjectStateResolved || (isSubscribedAutostartPending && !isGameActive) ? (
           <div className="project-finished-loading" aria-hidden="true" />
         ) : isProjectFinished ? (
           <section className="project-finished-screen" aria-label="Проект завершен">
@@ -725,8 +730,9 @@ function App() {
                         type="button"
                         className="content-action"
                         onClick={handlePrimaryAction}
+                        disabled={isPrimaryActionDisabled}
                       >
-                        {screen.actionLabel}
+                        {isPrimaryActionDisabled ? "Проверяем..." : screen.actionLabel}
                       </button>
                     </>
                   )}
