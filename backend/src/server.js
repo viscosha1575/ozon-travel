@@ -69,6 +69,7 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/game/bootstrap", async (req, res, next) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const response = await getGameBootstrap(resolveMiniAppUser(req));
     res.json(response);
   } catch (error) {
@@ -78,6 +79,7 @@ app.get("/api/game/bootstrap", async (req, res, next) => {
 
 app.get("/api/game/subscription-status", async (req, res, next) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
     const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
@@ -118,6 +120,7 @@ app.post("/api/game/spin", async (req, res, next) => {
 
 app.post("/api/game/open", async (req, res, next) => {
   try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const userInfo = resolveMiniAppUser(req);
     const user = await getOrCreateUser(userInfo);
     const subscribedToChannel = await refreshMiniAppSubscriptionStatus(

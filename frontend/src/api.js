@@ -85,6 +85,7 @@ export async function getJson(path) {
   const response = await fetch(buildApiUrl(path), {
     method: "GET",
     headers: buildHeaders(),
+    cache: "no-store",
   });
   const data = await response.json().catch(() => ({}));
 
