@@ -671,11 +671,15 @@ export default function GameScreen() {
     if (step > 0) {
       setTrackTranslate(baseTranslate)
       virtualTranslateRef.current = baseTranslate
+      if (carouselMotionRef.current) {
+        carouselMotionRef.current.style.transition = "none"
+      }
+      applyTrackStyles(baseTranslate)
+
       requestAnimationFrame(() => {
         if (carouselMotionRef.current) {
           carouselMotionRef.current.style.transition = ""
         }
-        applyTrackStyles(baseTranslate)
       })
     }
   }
@@ -1000,6 +1004,8 @@ export default function GameScreen() {
       prizeId: resultBag?.id ?? resultPrize?.positionId ?? null,
       prizeType: resultPrize?.type || resultBag?.type || "",
     })
+    clearIdleSpin()
+    pendingSpinRef.current = null
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
@@ -1013,6 +1019,7 @@ export default function GameScreen() {
       return
     }
 
+    stopIdleSpin(true)
     void trackGameEvent("my_prize_opened", {
       prizeId: prize.id,
       title: prize.title || "",
