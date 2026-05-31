@@ -36,7 +36,7 @@ import {
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { MdAdd, MdCardGiftcard, MdDelete, MdDoNotDisturbAlt, MdEdit } from "react-icons/md";
+import { MdAdd, MdCardGiftcard, MdDelete, MdDoNotDisturbAlt, MdEdit, MdFlag } from "react-icons/md";
 import * as XLSX from "xlsx";
 import Card from "components/card/Card";
 import ImageUploader from "components/editor/ImageUploader";
@@ -1083,52 +1083,69 @@ export default function PromoCodesPage() {
                 ))}
               </Select>
 
-              <Button
-                h="56px"
-                flex={{ base: "1 1 100%", lg: "0 0 220px" }}
-                variant={projectFinished ? "light" : "solid"}
-                color={projectFinished ? "brand.500" : "white"}
-                bg={projectFinished ? undefined : "red.500"}
-                borderRadius="20px"
-                fontSize="sm"
-                fontWeight="700"
-                isLoading={projectToggleLoading}
-                loadingText="Обновляем"
-                onClick={() => void handleToggleProjectFinished()}
-                _hover={projectFinished ? undefined : { bg: "red.600" }}
+              <Tooltip
+                hasArrow
+                placement="top"
+                label={projectFinished ? "Продолжить проект" : "Флаг финиша"}
               >
-                Флаг финиша
-              </Button>
-              <Button
-                h="56px"
-                flex={{ base: "1 1 100%", lg: "0 0 220px" }}
-                bg="brand.500"
-                color="white"
-                borderRadius="20px"
-                fontSize="sm"
-                fontWeight="700"
-                leftIcon={<Icon as={MdAdd} boxSize="20px" />}
-                onClick={handleOpenCreateModal}
-                _hover={{ bg: "brand.600" }}
-              >
-                Добавить
-              </Button>
-              <Button
-                h="56px"
-                flex={{ base: "1 1 100%", lg: "0 0 220px" }}
-                variant="outline"
-                colorScheme="red"
-                borderRadius="20px"
-                fontSize="sm"
-                fontWeight="700"
-                leftIcon={<Icon as={MdDelete} boxSize="20px" />}
-                isDisabled={!selectedPrizeIds.length}
-                isLoading={deletingMany}
-                loadingText="Удаляем"
-                onClick={() => void handleDeleteSelectedPrizes()}
-              >
-                Удалить выбранные
-              </Button>
+                <Button
+                  h="56px"
+                  w="56px"
+                  minW="56px"
+                  flex="0 0 56px"
+                  variant={projectFinished ? "light" : "solid"}
+                  color={projectFinished ? "brand.500" : "white"}
+                  bg={projectFinished ? undefined : "red.500"}
+                  borderRadius="20px"
+                  fontSize="sm"
+                  fontWeight="700"
+                  aria-label={projectFinished ? "Продолжить проект" : "Флаг финиша"}
+                  isLoading={projectToggleLoading}
+                  loadingText=""
+                  onClick={() => void handleToggleProjectFinished()}
+                  _hover={projectFinished ? undefined : { bg: "red.600" }}
+                >
+                  <Icon as={MdFlag} boxSize="22px" />
+                </Button>
+              </Tooltip>
+              <Tooltip hasArrow placement="top" label="Добавить позицию">
+                <Button
+                  h="56px"
+                  w="56px"
+                  minW="56px"
+                  flex="0 0 56px"
+                  bg="brand.500"
+                  color="white"
+                  borderRadius="20px"
+                  fontSize="sm"
+                  fontWeight="700"
+                  aria-label="Добавить позицию"
+                  onClick={handleOpenCreateModal}
+                  _hover={{ bg: "brand.600" }}
+                >
+                  <Icon as={MdAdd} boxSize="24px" />
+                </Button>
+              </Tooltip>
+              <Tooltip hasArrow placement="top" label="Удалить выбранные">
+                <Button
+                  h="56px"
+                  w="56px"
+                  minW="56px"
+                  flex="0 0 56px"
+                  variant="outline"
+                  colorScheme="red"
+                  borderRadius="20px"
+                  fontSize="sm"
+                  fontWeight="700"
+                  aria-label="Удалить выбранные"
+                  isDisabled={!selectedPrizeIds.length}
+                  isLoading={deletingMany}
+                  loadingText=""
+                  onClick={() => void handleDeleteSelectedPrizes()}
+                >
+                  <Icon as={MdDelete} boxSize="22px" />
+                </Button>
+              </Tooltip>
             </Flex>
           </Flex>
         </Card>
