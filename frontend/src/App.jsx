@@ -257,8 +257,12 @@ function App() {
   }, [isTelegramHost])
 
   useEffect(() => {
-    if (INTRO_DISABLED || isProjectFinished) {
+    if (INTRO_DISABLED || isProjectFinished === true) {
       setIsGameBootstrapPreloading(false)
+      return
+    }
+
+    if (isProjectFinished === null) {
       return
     }
 
