@@ -615,6 +615,42 @@ body {
   color: #d63f3f;
 }
 
+.game-carousel-debug-panel {
+  position: absolute;
+  top: calc(12px + var(--app-safe-top));
+  left: 50%;
+  z-index: 11;
+  display: grid;
+  gap: 4px;
+  width: min(92vw, 360px);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(7, 7, 7, 0.82);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: 11px;
+  line-height: 1.25;
+  transform: translateX(-50%);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.game-carousel-debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-carousel-debug-row span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.game-carousel-debug-row--wide span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .game-controls {
   position: absolute;
   left: 0;

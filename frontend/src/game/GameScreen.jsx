@@ -465,6 +465,14 @@ function normalizeLoopProgress(value, length) {
   return ((progress % length) + length) % length
 }
 
+function formatDebugMetric(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a"
+  }
+
+  return String(Math.round(value * 100) / 100)
+}
+
 export default function GameScreen() {
   const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
@@ -514,6 +522,7 @@ export default function GameScreen() {
   const [spinError, setSpinError] = useState("")
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
   const [isDevBootstrapReloading, setIsDevBootstrapReloading] = useState(false)
+  const [carouselDebug, setCarouselDebug] = useState(null)
   const isDevWidgetVisible = true
 
   const measureStep = () => {
@@ -1328,6 +1337,59 @@ export default function GameScreen() {
   }, [isSpinActive])
 
   useEffect(() => {
+    let frameId = 0
+
+    const updateDebugSnapshot = () => {
+      const sceneNode = carouselMotionRef.current?.parentElement?.parentElement || null
+      const backdropNode = carouselMotionRef.current?.parentElement || null
+      const motionNode = carouselMotionRef.current
+      const trackNode = trackRef.current
+      const slotNode = slotRef.current
+
+      const sceneRect = sceneNode?.getBoundingClientRect?.() || null
+      const backdropRect = backdropNode?.getBoundingClientRect?.() || null
+      const motionRect = motionNode?.getBoundingClientRect?.() || null
+      const slotRect = slotNode?.getBoundingClientRect?.() || null
+      const sceneStyle = sceneNode ? window.getComputedStyle(sceneNode) : null
+      const backdropStyle = backdropNode ? window.getComputedStyle(backdropNode) : null
+      const motionStyle = motionNode ? window.getComputedStyle(motionNode) : null
+      const trackStyle = trackNode ? window.getComputedStyle(trackNode) : null
+
+      setCarouselDebug({
+        phase: resultRevealPhase,
+        resultVisible: Boolean(resultBag),
+        spin: isSpinActiveRef.current,
+        idle: isIdleSpinActiveRef.current,
+        rouletteItems: activeRouletteItems.length,
+        trackItems: trackItems.length,
+        centerBagIndex: centerBagIndexRef.current,
+        step: formatDebugMetric(stepRef.current),
+        trackTranslate: formatDebugMetric(trackTranslate),
+        virtualTranslate: formatDebugMetric(virtualTranslateRef.current),
+        liveTranslate: formatDebugMetric(readTranslateY(motionNode)),
+        motionTransition: motionNode?.style.transition || motionStyle?.transition || "",
+        sceneOpacity: sceneStyle?.opacity || "n/a",
+        backdropOpacity: backdropStyle?.opacity || "n/a",
+        trackOpacity: trackStyle?.opacity || "n/a",
+        sceneHeight: formatDebugMetric(sceneRect?.height),
+        motionTop: formatDebugMetric(motionRect?.top),
+        motionBottom: formatDebugMetric(motionRect?.bottom),
+        motionHeight: formatDebugMetric(motionRect?.height),
+        backdropHeight: formatDebugMetric(backdropRect?.height),
+        slotHeight: formatDebugMetric(slotRect?.height),
+      })
+
+      frameId = window.setTimeout(updateDebugSnapshot, 180)
+    }
+
+    updateDebugSnapshot()
+
+    return () => {
+      window.clearTimeout(frameId)
+    }
+  }, [activeRouletteItems.length, resultBag, resultRevealPhase, trackItems.length, trackTranslate])
+
+  useEffect(() => {
     const resultBagElement = resultBagFlightRef.current
     const resultBagTargetElement = resultBagImageRef.current
     const flightState = resultBagFlight
@@ -1436,6 +1498,44 @@ export default function GameScreen() {
               </button>
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {carouselDebug ? (
+        <div className="game-carousel-debug-panel" aria-live="polite">
+          <div className="game-carousel-debug-row">
+            <span>phase: {carouselDebug.phase}</span>
+            <span>spin: {String(carouselDebug.spin)}</span>
+            <span>idle: {String(carouselDebug.idle)}</span>
+            <span>result: {String(carouselDebug.resultVisible)}</span>
+          </div>
+          <div className="game-carousel-debug-row">
+            <span>items: {carouselDebug.rouletteItems}/{carouselDebug.trackItems}</span>
+            <span>center: {carouselDebug.centerBagIndex}</span>
+            <span>step: {carouselDebug.step}</span>
+          </div>
+          <div className="game-carousel-debug-row">
+            <span>track: {carouselDebug.trackTranslate}</span>
+            <span>virtual: {carouselDebug.virtualTranslate}</span>
+            <span>live: {carouselDebug.liveTranslate}</span>
+          </div>
+          <div className="game-carousel-debug-row">
+            <span>scene op: {carouselDebug.sceneOpacity}</span>
+            <span>backdrop op: {carouselDebug.backdropOpacity}</span>
+            <span>track op: {carouselDebug.trackOpacity}</span>
+          </div>
+          <div className="game-carousel-debug-row">
+            <span>scene h: {carouselDebug.sceneHeight}</span>
+            <span>slot h: {carouselDebug.slotHeight}</span>
+            <span>backdrop h: {carouselDebug.backdropHeight}</span>
+          </div>
+          <div className="game-carousel-debug-row">
+            <span>motion top: {carouselDebug.motionTop}</span>
+            <span>bottom: {carouselDebug.motionBottom}</span>
+            <span>h: {carouselDebug.motionHeight}</span>
+          </div>
+          <div className="game-carousel-debug-row game-carousel-debug-row--wide">
+            <span>transition: {carouselDebug.motionTransition || "none"}</span>
+          </div>
         </div>
       ) : null}
       <img
