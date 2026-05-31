@@ -480,6 +480,12 @@ export default function GameScreen({
   allowBootstrapFetch = false,
 }) {
   const cachedBootstrap = readBootstrapCache()
+  const initialRouletteItems = normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0)
+  const initialTrackItems = createTrackItems(
+    initialRouletteItems,
+    0,
+    getTrackWindowSteps(initialRouletteItems.length),
+  )
   const slotRef = useRef(null)
   const centerSlotMediaRef = useRef(null)
   const centerSlotImageRef = useRef(null)
@@ -507,7 +513,7 @@ export default function GameScreen({
   const isSpinActiveRef = useRef(false)
   const isIdleSpinActiveRef = useRef(false)
   const isMountedRef = useRef(true)
-  const [rouletteItems, setRouletteItems] = useState(() => normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0))
+  const [rouletteItems, setRouletteItems] = useState(initialRouletteItems)
   const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(cachedBootstrap?.myPrizes, 0))
   const [availableAttempts, setAvailableAttempts] = useState(() => Number(cachedBootstrap?.attempts?.availableAttempts || 0))
   const [referralLink, setReferralLink] = useState(() => String(cachedBootstrap?.referral?.referralLink || "").trim())
@@ -522,7 +528,7 @@ export default function GameScreen({
   const [resultRevealPhase, setResultRevealPhase] = useState("idle")
   const [resultBagFlight, setResultBagFlight] = useState(null)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
-  const [trackItems, setTrackItems] = useState(() => createTrackItems([], 0, 0))
+  const [trackItems, setTrackItems] = useState(initialTrackItems)
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [lockedSlotHeight, setLockedSlotHeight] = useState(null)
   const [spinError, setSpinError] = useState("")
@@ -568,11 +574,21 @@ export default function GameScreen({
 
     const nextRouletteItems = normalizeRouletteItems(response?.rouletteItems, assetVersion)
     const nextMyPrizes = normalizeMyPrizes(response?.myPrizes, assetVersion)
+    const nextTrackItems = createTrackItems(
+      nextRouletteItems,
+      0,
+      getTrackWindowSteps(nextRouletteItems.length),
+    )
 
+    centerBagIndexRef.current = 0
     setRouletteItems(nextRouletteItems)
     setMyPrizes(nextMyPrizes)
     setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
     setReferralLink(String(response?.referral?.referralLink || "").trim())
+    setCenterBagIndex(0)
+    setTrackItems(nextTrackItems)
+    setTrackTranslate(0)
+    setLockedSlotHeight(null)
 
     if (nextRouletteItems.length) {
       setSpinError("")
@@ -1274,20 +1290,6 @@ export default function GameScreen({
     deferBootstrap,
     loadGameBootstrap,
   ])
-
-  useEffect(() => {
-    const frameId = requestAnimationFrame(() => {
-      centerBagIndexRef.current = 0
-      setCenterBagIndex(0)
-      setTrackItems(createTrackItems(activeRouletteItems, 0, getTrackWindowSteps(activeRouletteItems.length)))
-      setTrackTranslate(0)
-      setLockedSlotHeight(null)
-    })
-
-    return () => {
-      cancelAnimationFrame(frameId)
-    }
-  }, [activeRouletteItemsKey])
 
   useEffect(() => {
     if (isSpinActiveRef.current) {
