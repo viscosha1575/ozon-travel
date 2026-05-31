@@ -477,6 +477,7 @@ export default function GameScreen({
   bootstrapSeed = null,
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
+  allowBootstrapFetch = false,
 }) {
   const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
@@ -1255,7 +1256,7 @@ export default function GameScreen({
           applyBootstrapResponse(bootstrapSeed, bootstrapAssetVersion, "intro_preload")
         })
       }
-    } else if (!deferBootstrap) {
+    } else if (!deferBootstrap && allowBootstrapFetch) {
       frameId = requestAnimationFrame(() => {
         void loadGameBootstrap()
       })
@@ -1265,7 +1266,14 @@ export default function GameScreen({
       cancelAnimationFrame(frameId)
       isMountedRef.current = false
     }
-  }, [applyBootstrapResponse, bootstrapAssetVersion, bootstrapSeed, deferBootstrap, loadGameBootstrap])
+  }, [
+    allowBootstrapFetch,
+    applyBootstrapResponse,
+    bootstrapAssetVersion,
+    bootstrapSeed,
+    deferBootstrap,
+    loadGameBootstrap,
+  ])
 
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {

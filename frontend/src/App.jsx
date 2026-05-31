@@ -494,6 +494,7 @@ function App() {
           bootstrapSeed={prefetchedGameBootstrap}
           bootstrapAssetVersion={prefetchedGameAssetVersion}
           deferBootstrap={isGameBootstrapPreloading}
+          allowBootstrapFetch={isGameActive}
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
