@@ -523,6 +523,7 @@ export default function GameScreen() {
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
   const [isDevBootstrapReloading, setIsDevBootstrapReloading] = useState(false)
   const [carouselDebug, setCarouselDebug] = useState(null)
+  const [isCarouselDebugVisible, setIsCarouselDebugVisible] = useState(false)
   const isDevWidgetVisible = true
 
   const measureStep = () => {
@@ -1500,7 +1501,7 @@ export default function GameScreen() {
           ) : null}
         </div>
       ) : null}
-      {carouselDebug ? (
+      {carouselDebug && isCarouselDebugVisible ? (
         <div className="game-carousel-debug-panel" aria-live="polite">
           <div className="game-carousel-debug-row">
             <span>phase: {carouselDebug.phase}</span>
@@ -1655,6 +1656,7 @@ export default function GameScreen() {
               src="/game/icons/logo.webp"
               alt="Логотип"
               className="game-top-banner-logo"
+              onDoubleClick={() => setIsCarouselDebugVisible((currentValue) => !currentValue)}
             />
           </div>
         </section>
