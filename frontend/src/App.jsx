@@ -80,14 +80,36 @@ const screens = [
 ]
 
 function collectBootstrapImageUrls(response = {}) {
+  const assetVersion = Number(response?.assetVersion || 0)
   const rouletteImages = Array.isArray(response?.rouletteItems)
-    ? response.rouletteItems.map((item) => String(item?.image || "").trim())
+    ? response.rouletteItems.map((item) => withAssetVersion(item?.image, assetVersion))
     : []
   const prizeImages = Array.isArray(response?.myPrizes)
-    ? response.myPrizes.map((item) => String(item?.image || "").trim())
+    ? response.myPrizes.map((item) => withAssetVersion(item?.image, assetVersion))
     : []
 
   return Array.from(new Set([...rouletteImages, ...prizeImages].filter(Boolean)))
+}
+
+function withAssetVersion(url, assetVersion) {
+  const value = String(url || "").trim()
+
+  if (!value || !assetVersion) {
+    return value
+  }
+
+  try {
+    const nextUrl = new URL(value, "http://localhost")
+    nextUrl.searchParams.set("v", String(assetVersion))
+
+    if (/^https?:\/\//i.test(value)) {
+      return nextUrl.toString()
+    }
+
+    return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+  } catch {
+    return value
+  }
 }
 
 function preloadImage(src) {
@@ -158,6 +180,9 @@ function App() {
   const [isInitialSubscriptionStatusPending, setIsInitialSubscriptionStatusPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
   const [isProjectFinished, setIsProjectFinished] = useState(null)
+  const [prefetchedGameBootstrap, setPrefetchedGameBootstrap] = useState(null)
+  const [prefetchedGameAssetVersion, setPrefetchedGameAssetVersion] = useState(0)
+  const [isGameBootstrapPreloading, setIsGameBootstrapPreloading] = useState(!INTRO_DISABLED)
   const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const currentScreen = screens[activeScreen]
@@ -233,16 +258,26 @@ function App() {
 
   useEffect(() => {
     if (INTRO_DISABLED || isProjectFinished) {
+      setIsGameBootstrapPreloading(false)
       return
     }
 
     let isCancelled = false
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
+        let bootstrapResponse = null
         let remoteSceneAssets = []
+        let assetVersion = 0
+
+        setIsGameBootstrapPreloading(true)
 
         try {
-          const bootstrapResponse = await getJson("/game/bootstrap")
+          bootstrapResponse = await getJson("/game/bootstrap")
+          assetVersion = Date.now()
+          bootstrapResponse = {
+            ...bootstrapResponse,
+            assetVersion,
+          }
           remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
         } catch (error) {
           console.warn("Intro bootstrap preload failed", error)
@@ -253,6 +288,9 @@ function App() {
         )
 
         if (!isCancelled) {
+          setPrefetchedGameBootstrap(bootstrapResponse)
+          setPrefetchedGameAssetVersion(assetVersion)
+          setIsGameBootstrapPreloading(false)
           setIsGameSceneReady(true)
         }
       }
@@ -445,7 +483,11 @@ function App() {
   return (
     <main className="app-shell" aria-label="Application shell">
       <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
-        <PersistentGameScreen />
+        <PersistentGameScreen
+          bootstrapSeed={prefetchedGameBootstrap}
+          bootstrapAssetVersion={prefetchedGameAssetVersion}
+          deferBootstrap={isGameBootstrapPreloading}
+        />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
         {!isProjectStateResolved || (isSubscribedAutostartPending && !isGameActive) ? (

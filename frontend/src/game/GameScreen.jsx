@@ -473,7 +473,11 @@ function formatDebugMetric(value) {
   return String(Math.round(value * 100) / 100)
 }
 
-export default function GameScreen() {
+export default function GameScreen({
+  bootstrapSeed = null,
+  bootstrapAssetVersion = 0,
+  deferBootstrap = false,
+}) {
   const cachedBootstrap = readBootstrapCache()
   const slotRef = useRef(null)
   const centerSlotMediaRef = useRef(null)
@@ -484,6 +488,7 @@ export default function GameScreen() {
   const trackRef = useRef(null)
   const resultBagImageRef = useRef(null)
   const resultBagFlightRef = useRef(null)
+  const appliedBootstrapSeedRef = useRef("")
   const stepRef = useRef(0)
   const animationFrameRef = useRef(0)
   const idleAnimationFrameRef = useRef(0)
@@ -553,6 +558,44 @@ export default function GameScreen() {
     setIsResultCopyToastVisible(false)
     setResultBagFlight(null)
     setResultRevealPhase("idle")
+  }, [])
+
+  const applyBootstrapResponse = useCallback((response, assetVersion, source = "game_screen") => {
+    if (!isMountedRef.current) {
+      return
+    }
+
+    const nextRouletteItems = normalizeRouletteItems(response?.rouletteItems, assetVersion)
+    const nextMyPrizes = normalizeMyPrizes(response?.myPrizes, assetVersion)
+
+    setRouletteItems(nextRouletteItems)
+    setMyPrizes(nextMyPrizes)
+    setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
+    setReferralLink(String(response?.referral?.referralLink || "").trim())
+
+    if (nextRouletteItems.length) {
+      setSpinError("")
+    } else {
+      setSpinError("Сервер не вернул позиции для карусели")
+      clearTimeout(overlayTimeoutRef.current)
+      setIsOverlayClosing(false)
+      setActiveOverlay("error")
+      setRenderedOverlay("error")
+    }
+
+    writeBootstrapCache({
+      rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
+      myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
+      attempts: response?.attempts || {},
+      referral: response?.referral || {},
+    })
+
+    void trackGameEvent("bootstrap_loaded", {
+      rouletteItemsCount: nextRouletteItems.length,
+      myPrizesCount: nextMyPrizes.length,
+      availableAttempts: Number(response?.attempts?.availableAttempts || 0),
+      source,
+    })
   }, [])
 
   const openOverlay = (overlayId) => {
@@ -1134,38 +1177,7 @@ export default function GameScreen() {
     try {
       const response = await getJson("/game/bootstrap")
       const assetVersion = getAssetVersion()
-
-      if (!isMountedRef.current) {
-        return
-      }
-
-      const nextRouletteItems = normalizeRouletteItems(response?.rouletteItems, assetVersion)
-      const nextMyPrizes = normalizeMyPrizes(response?.myPrizes, assetVersion)
-
-      setRouletteItems(nextRouletteItems)
-      setMyPrizes(nextMyPrizes)
-      setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
-      setReferralLink(String(response?.referral?.referralLink || "").trim())
-      if (nextRouletteItems.length) {
-        setSpinError("")
-      } else {
-        setSpinError("Сервер не вернул позиции для карусели")
-        clearTimeout(overlayTimeoutRef.current)
-        setIsOverlayClosing(false)
-        setActiveOverlay("error")
-        setRenderedOverlay("error")
-      }
-      writeBootstrapCache({
-        rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
-        myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
-        attempts: response?.attempts || {},
-        referral: response?.referral || {},
-      })
-      void trackGameEvent("bootstrap_loaded", {
-        rouletteItemsCount: nextRouletteItems.length,
-        myPrizesCount: nextMyPrizes.length,
-        availableAttempts: Number(response?.attempts?.availableAttempts || 0),
-      })
+      applyBootstrapResponse(response, assetVersion, "game_screen")
     } catch (error) {
       console.warn("Game bootstrap failed", error)
       setSpinError(getReadableErrorMessage(error, "Не удалось загрузить игру"))
@@ -1174,7 +1186,7 @@ export default function GameScreen() {
       setActiveOverlay("error")
       setRenderedOverlay("error")
     }
-  }, [])
+  }, [applyBootstrapResponse])
 
   const handleDevGrantAttempts = async () => {
     try {
@@ -1232,15 +1244,28 @@ export default function GameScreen() {
 
   useEffect(() => {
     isMountedRef.current = true
-    const frameId = requestAnimationFrame(() => {
-      void loadGameBootstrap()
-    })
+    let frameId = 0
+
+    if (bootstrapSeed && bootstrapAssetVersion) {
+      const nextSeedKey = `${bootstrapAssetVersion}:${Array.isArray(bootstrapSeed?.rouletteItems) ? bootstrapSeed.rouletteItems.length : 0}:${Array.isArray(bootstrapSeed?.myPrizes) ? bootstrapSeed.myPrizes.length : 0}`
+
+      if (appliedBootstrapSeedRef.current !== nextSeedKey) {
+        appliedBootstrapSeedRef.current = nextSeedKey
+        frameId = requestAnimationFrame(() => {
+          applyBootstrapResponse(bootstrapSeed, bootstrapAssetVersion, "intro_preload")
+        })
+      }
+    } else if (!deferBootstrap) {
+      frameId = requestAnimationFrame(() => {
+        void loadGameBootstrap()
+      })
+    }
 
     return () => {
       cancelAnimationFrame(frameId)
       isMountedRef.current = false
     }
-  }, [loadGameBootstrap])
+  }, [applyBootstrapResponse, bootstrapAssetVersion, bootstrapSeed, deferBootstrap, loadGameBootstrap])
 
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {
