@@ -79,6 +79,17 @@ const screens = [
   },
 ]
 
+function collectBootstrapImageUrls(response = {}) {
+  const rouletteImages = Array.isArray(response?.rouletteItems)
+    ? response.rouletteItems.map((item) => String(item?.image || "").trim())
+    : []
+  const prizeImages = Array.isArray(response?.myPrizes)
+    ? response.myPrizes.map((item) => String(item?.image || "").trim())
+    : []
+
+  return Array.from(new Set([...rouletteImages, ...prizeImages].filter(Boolean)))
+}
+
 function preloadImage(src) {
   return new Promise((resolve) => {
     const image = new Image()
@@ -227,11 +238,26 @@ function App() {
 
     let isCancelled = false
     const startPreload = window.setTimeout(() => {
-      Promise.all(GAME_SCENE_ASSETS.map(preloadImage)).then(() => {
+      const preloadGameScene = async () => {
+        let remoteSceneAssets = []
+
+        try {
+          const bootstrapResponse = await getJson("/game/bootstrap")
+          remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
+        } catch (error) {
+          console.warn("Intro bootstrap preload failed", error)
+        }
+
+        await Promise.all(
+          [...GAME_SCENE_ASSETS, ...remoteSceneAssets].map(preloadImage),
+        )
+
         if (!isCancelled) {
           setIsGameSceneReady(true)
         }
-      })
+      }
+
+      void preloadGameScene()
     }, 0)
 
     return () => {

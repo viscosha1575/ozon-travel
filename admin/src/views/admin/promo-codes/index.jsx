@@ -5,6 +5,7 @@ import {
   Checkbox,
   Flex,
   FormControl,
+  FormErrorMessage,
   FormLabel,
   Icon,
   Image,
@@ -240,14 +241,23 @@ function FormSection({
   title,
   description,
   children,
+  isInvalid = false,
 }) {
   const bg = useColorModeValue("white", "navy.900");
   const borderColor = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
+  const invalidBorderColor = useColorModeValue("red.300", "red.400");
   const titleColor = useColorModeValue("navy.700", "white");
   const descriptionColor = useColorModeValue("secondaryGray.600", "secondaryGray.500");
 
   return (
-    <Box bg={bg} border="1px solid" borderColor={borderColor} borderRadius="24px" p={{ base: "18px", md: "22px" }}>
+    <Box
+      bg={bg}
+      border="1px solid"
+      borderColor={isInvalid ? invalidBorderColor : borderColor}
+      boxShadow={isInvalid ? "0 0 0 1px var(--chakra-colors-red-300)" : undefined}
+      borderRadius="24px"
+      p={{ base: "18px", md: "22px" }}
+    >
       <Stack spacing="16px">
         <Box>
           <Text color={titleColor} fontSize="md" fontWeight="700">
@@ -343,6 +353,78 @@ function buildPrizeForm(item = {}) {
   };
 }
 
+function createEmptyValidationState() {
+  return {
+    fields: {},
+    sections: {},
+  };
+}
+
+function validatePrizeForm(form = {}) {
+  const fields = {};
+  const sections = {};
+  const markField = (field, section, message) => {
+    fields[field] = message;
+    if (section) {
+      sections[section] = true;
+    }
+  };
+
+  const title = String(form.title || "").trim();
+  const type = String(form.type || "").trim();
+  const category = String(form.category || "").trim();
+  const promoCodeValue = String(form.promoCodeValue || "").trim();
+  const activeFrom = String(form.activeFrom || "").trim();
+  const activeTo = String(form.activeTo || "").trim();
+  const userLimitCount = Math.max(0, Number(form.userLimitCount) || 0);
+  const hasPromoCodes = Array.isArray(form.promoCodes) && form.promoCodes.length > 0;
+  const hasRouletteImage = Boolean(form.rouletteImage);
+  const rouletteDescription = String(form.rouletteDescription || "").trim();
+
+  if (!title) {
+    markField("title", "main", "Заполните имя позиции.");
+  }
+
+  if (type !== "Не приз" && !category) {
+    markField("category", "main", "Выберите категорию.");
+  }
+
+  if (type !== "Не приз") {
+    if (form.hasPrizeLimit) {
+      if (!hasPromoCodes) {
+        markField("promoCodes", "limits", "Загрузите промокоды для ограниченного приза.");
+      }
+    } else if (!promoCodeValue) {
+      markField("promoCodeValue", "limits", "Введите промокод.");
+    }
+
+    if (form.hasUserLimit && !userLimitCount) {
+      markField("userLimitCount", "restrictions", "Укажите лимит на пользователя.");
+    }
+  }
+
+  if (!activeFrom) {
+    markField("activeFrom", type === "Не приз" ? "nonPrize" : "restrictions", "Укажите начало периода.");
+  }
+
+  if (!activeTo) {
+    markField("activeTo", type === "Не приз" ? "nonPrize" : "restrictions", "Укажите конец периода.");
+  }
+
+  if (!hasRouletteImage) {
+    markField("rouletteImage", type === "Не приз" ? "nonPrize" : "content", "Загрузите изображение.");
+  }
+
+  if (!rouletteDescription) {
+    markField("rouletteDescription", type === "Не приз" ? "nonPrize" : "content", "Добавьте описание.");
+  }
+
+  return {
+    fields,
+    sections,
+  };
+}
+
 async function parsePromoCodesFromFile(file) {
   if (!file) {
     return [];
@@ -398,6 +480,7 @@ export default function PromoCodesPage() {
   const [projectFinished, setProjectFinished] = useState(false);
   const [projectToggleLoading, setProjectToggleLoading] = useState(false);
   const [form, setForm] = useState(createInitialPrizeForm);
+  const [formValidation, setFormValidation] = useState(createEmptyValidationState);
   const [promoCodesUploadError, setPromoCodesUploadError] = useState("");
   const [promoCodesPoolAction, setPromoCodesPoolAction] = useState("");
   const [promoCodesScheduleResponse, setPromoCodesScheduleResponse] = useState(EMPTY_PROMO_CODE_SCHEDULE_RESPONSE);
@@ -505,6 +588,18 @@ export default function PromoCodesPage() {
     setSelectedPrizeIds((current) => current.filter((id) => visibleIds.has(id)));
   }, [response.items]);
 
+  useEffect(() => {
+    if (!Object.keys(formValidation.fields).length) {
+      return;
+    }
+
+    const nextValidation = validatePrizeForm(form);
+
+    if (JSON.stringify(nextValidation) !== JSON.stringify(formValidation)) {
+      setFormValidation(nextValidation);
+    }
+  }, [form, formValidation]);
+
   async function reloadPrizes() {
     const nextResponse = await postJson("/api/prizes/list", {
       search: deferredSearch,
@@ -552,6 +647,15 @@ export default function PromoCodesPage() {
   }
 
   async function handleCreatePrize() {
+    const nextValidation = validatePrizeForm(form);
+
+    setFormValidation(nextValidation);
+
+    if (Object.keys(nextValidation.fields).length > 0) {
+      setError("Заполните обязательные поля, подсвеченные красным.");
+      return;
+    }
+
     setCreating(true);
     setError("");
     setSuccessMessage("");
@@ -590,6 +694,7 @@ export default function PromoCodesPage() {
       );
       setEditingPrizeId(null);
       setForm(createInitialPrizeForm());
+      setFormValidation(createEmptyValidationState());
       setPromoCodesUploadError("");
       createPrizeModal.onClose();
       nonPrizeModal.onClose();
@@ -604,6 +709,7 @@ export default function PromoCodesPage() {
   function handleOpenCreateModal() {
     setEditingPrizeId(null);
     setForm(createInitialPrizeForm());
+    setFormValidation(createEmptyValidationState());
     setPromoCodesUploadError("");
     choosePrizeTypeModal.onOpen();
   }
@@ -611,6 +717,7 @@ export default function PromoCodesPage() {
   function handleSelectPrizeType(nextType) {
     setEditingPrizeId(null);
     setPromoCodesUploadError("");
+    setFormValidation(createEmptyValidationState());
     setForm({
       ...createInitialPrizeForm(),
       type: nextType,
@@ -631,6 +738,7 @@ export default function PromoCodesPage() {
   function handleOpenEditModal(item) {
     setEditingPrizeId(item.id);
     setForm(buildPrizeForm(item));
+    setFormValidation(createEmptyValidationState());
     setPromoCodesUploadError("");
     setPromoCodesPoolAction("");
 
@@ -811,6 +919,7 @@ export default function PromoCodesPage() {
       if (editingPrizeId === item.id) {
         setEditingPrizeId(null);
         setForm(createInitialPrizeForm());
+        setFormValidation(createEmptyValidationState());
         setPromoCodesUploadError("");
         createPrizeModal.onClose();
         nonPrizeModal.onClose();
@@ -868,6 +977,7 @@ export default function PromoCodesPage() {
       if (editingPrizeId && selectedPrizeIds.includes(editingPrizeId)) {
         setEditingPrizeId(null);
         setForm(createInitialPrizeForm());
+        setFormValidation(createEmptyValidationState());
         setPromoCodesUploadError("");
         createPrizeModal.onClose();
         nonPrizeModal.onClose();
@@ -983,11 +1093,11 @@ export default function PromoCodesPage() {
                 fontSize="sm"
                 fontWeight="700"
                 isLoading={projectToggleLoading}
-                loadingText={projectFinished ? "Продолжаем" : "Завершаем"}
+                loadingText="Обновляем"
                 onClick={() => void handleToggleProjectFinished()}
                 _hover={projectFinished ? undefined : { bg: "red.600" }}
               >
-                {projectFinished ? "Продолжить проект" : "Закончить проект"}
+                Флаг финиша
               </Button>
               <Button
                 h="56px"
@@ -1359,9 +1469,13 @@ export default function PromoCodesPage() {
           <ModalCloseButton />
           <ModalBody pb="24px">
             <Stack spacing="18px">
-              <FormSection title="Основное" description="Базовые параметры позиции для призовой механики.">
+              <FormSection
+                title="Основное"
+                description="Базовые параметры позиции для призовой механики."
+                isInvalid={Boolean(formValidation.sections.main)}
+              >
                 <Stack spacing="16px">
-                  <FormControl>
+                  <FormControl isInvalid={Boolean(formValidation.fields.title)}>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Имя позиции
                     </FormLabel>
@@ -1372,10 +1486,11 @@ export default function PromoCodesPage() {
                       onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                       placeholder="Например: Скидка 300 ₽ на авиа"
                     />
+                    <FormErrorMessage>{formValidation.fields.title}</FormErrorMessage>
                   </FormControl>
 
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
-                    <FormControl>
+                    <FormControl isInvalid={Boolean(formValidation.fields.category)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Категория
                       </FormLabel>
@@ -1392,6 +1507,7 @@ export default function PromoCodesPage() {
                           </option>
                         ))}
                       </Select>
+                      <FormErrorMessage>{formValidation.fields.category}</FormErrorMessage>
                     </FormControl>
 
                     <FormControl>
@@ -1415,7 +1531,11 @@ export default function PromoCodesPage() {
                 </Stack>
               </FormSection>
 
-              <FormSection title="Приз И Лимиты" description="Здесь выбирается сценарий с ограниченным количеством или безлимитная выдача.">
+              <FormSection
+                title="Приз И Лимиты"
+                description="Здесь выбирается сценарий с ограниченным количеством или безлимитная выдача."
+                isInvalid={Boolean(formValidation.sections.limits)}
+              >
                 <Stack spacing="16px">
                   <FormControl>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
@@ -1433,7 +1553,7 @@ export default function PromoCodesPage() {
 
                   {form.hasPrizeLimit ? (
                     <>
-                      <FormControl>
+                      <FormControl isInvalid={Boolean(formValidation.fields.promoCodes)}>
                         <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                           Промокоды
                         </FormLabel>
@@ -1499,6 +1619,9 @@ export default function PromoCodesPage() {
                           <Text color="red.400" fontSize="xs" mt="8px">
                             {promoCodesUploadError}
                           </Text>
+                        ) : null}
+                        {formValidation.fields.promoCodes ? (
+                          <FormErrorMessage>{formValidation.fields.promoCodes}</FormErrorMessage>
                         ) : null}
                       </FormControl>
 
@@ -1567,7 +1690,7 @@ export default function PromoCodesPage() {
                       ) : null}
                     </>
                   ) : (
-                    <FormControl>
+                    <FormControl isInvalid={Boolean(formValidation.fields.promoCodeValue)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Промокод
                       </FormLabel>
@@ -1578,6 +1701,7 @@ export default function PromoCodesPage() {
                         onChange={(event) => setForm((current) => ({ ...current, promoCodeValue: event.target.value }))}
                         placeholder="Введите текст промокода"
                       />
+                      <FormErrorMessage>{formValidation.fields.promoCodeValue}</FormErrorMessage>
                     </FormControl>
                   )}
 
@@ -1596,7 +1720,11 @@ export default function PromoCodesPage() {
                 </Stack>
               </FormSection>
 
-              <FormSection title="Ограничения И Период" description="Лимит на одного пользователя и временное окно действия позиции.">
+              <FormSection
+                title="Ограничения И Период"
+                description="Лимит на одного пользователя и временное окно действия позиции."
+                isInvalid={Boolean(formValidation.sections.restrictions)}
+              >
                 <Stack spacing="16px">
                   <FormControl>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
@@ -1613,7 +1741,7 @@ export default function PromoCodesPage() {
                   </FormControl>
 
                   {form.hasUserLimit ? (
-                    <FormControl>
+                    <FormControl isInvalid={Boolean(formValidation.fields.userLimitCount)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Кол-во в период
                       </FormLabel>
@@ -1626,11 +1754,12 @@ export default function PromoCodesPage() {
                         onChange={(event) => setForm((current) => ({ ...current, userLimitCount: event.target.value }))}
                         placeholder="Например: 1"
                       />
+                      <FormErrorMessage>{formValidation.fields.userLimitCount}</FormErrorMessage>
                     </FormControl>
                   ) : null}
 
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
-                    <FormControl>
+                    <FormControl isInvalid={Boolean(formValidation.fields.activeFrom)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Период розыгрыша: от
                       </FormLabel>
@@ -1641,9 +1770,10 @@ export default function PromoCodesPage() {
                         value={form.activeFrom}
                         onChange={(event) => setForm((current) => ({ ...current, activeFrom: event.target.value }))}
                       />
+                      <FormErrorMessage>{formValidation.fields.activeFrom}</FormErrorMessage>
                     </FormControl>
 
-                    <FormControl>
+                    <FormControl isInvalid={Boolean(formValidation.fields.activeTo)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Период розыгрыша: до
                       </FormLabel>
@@ -1654,14 +1784,19 @@ export default function PromoCodesPage() {
                         value={form.activeTo}
                         onChange={(event) => setForm((current) => ({ ...current, activeTo: event.target.value }))}
                       />
+                      <FormErrorMessage>{formValidation.fields.activeTo}</FormErrorMessage>
                     </FormControl>
                   </SimpleGrid>
                 </Stack>
               </FormSection>
 
-              <FormSection title="Контент Для Интерфейса" description="Картинка и тексты, которые будут использоваться на клиенте.">
+              <FormSection
+                title="Контент Для Интерфейса"
+                description="Картинка и тексты, которые будут использоваться на клиенте."
+                isInvalid={Boolean(formValidation.sections.content)}
+              >
                 <Stack spacing="16px">
-                  <FormControl>
+                  <FormControl isInvalid={Boolean(formValidation.fields.rouletteImage)}>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Изображение чемодана для рулетки
                     </FormLabel>
@@ -1669,6 +1804,7 @@ export default function PromoCodesPage() {
                       value={form.rouletteImage}
                       onChange={(nextValue) => setForm((current) => ({ ...current, rouletteImage: nextValue }))}
                     />
+                    <FormErrorMessage>{formValidation.fields.rouletteImage}</FormErrorMessage>
                   </FormControl>
 
                   <FormControl>
@@ -1684,7 +1820,7 @@ export default function PromoCodesPage() {
                     />
                   </FormControl>
 
-                  <FormControl>
+                  <FormControl isInvalid={Boolean(formValidation.fields.rouletteDescription)}>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Текстовое описание для рулетки
                     </FormLabel>
@@ -1699,6 +1835,7 @@ export default function PromoCodesPage() {
                     <Text mt="8px" color={textColorSecondary} fontSize="xs">
                       Переносы строки сохраняются. Используйте Enter, чтобы разбить описание на несколько строк.
                     </Text>
+                    <FormErrorMessage>{formValidation.fields.rouletteDescription}</FormErrorMessage>
                   </FormControl>
                 </Stack>
               </FormSection>
@@ -1732,9 +1869,13 @@ export default function PromoCodesPage() {
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb="24px">
-            <FormSection title="Не Приз" description="Упрощённая форма для технической или пустой позиции без категории и промокода.">
+            <FormSection
+              title="Не Приз"
+              description="Упрощённая форма для технической или пустой позиции без категории и промокода."
+              isInvalid={Boolean(formValidation.sections.nonPrize)}
+            >
               <Stack spacing="16px">
-                <FormControl>
+                <FormControl isInvalid={Boolean(formValidation.fields.title)}>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                     Имя позиции
                   </FormLabel>
@@ -1745,6 +1886,7 @@ export default function PromoCodesPage() {
                     onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
                     placeholder="Например: Пустой слот"
                   />
+                  <FormErrorMessage>{formValidation.fields.title}</FormErrorMessage>
                 </FormControl>
 
                 <FormControl>
@@ -1761,7 +1903,7 @@ export default function PromoCodesPage() {
                 </FormControl>
 
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
-                  <FormControl>
+                  <FormControl isInvalid={Boolean(formValidation.fields.activeFrom)}>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Период розыгрыша: от
                     </FormLabel>
@@ -1772,9 +1914,10 @@ export default function PromoCodesPage() {
                       value={form.activeFrom}
                       onChange={(event) => setForm((current) => ({ ...current, activeFrom: event.target.value }))}
                     />
+                    <FormErrorMessage>{formValidation.fields.activeFrom}</FormErrorMessage>
                   </FormControl>
 
-                  <FormControl>
+                  <FormControl isInvalid={Boolean(formValidation.fields.activeTo)}>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Период розыгрыша: до
                     </FormLabel>
@@ -1785,10 +1928,11 @@ export default function PromoCodesPage() {
                       value={form.activeTo}
                       onChange={(event) => setForm((current) => ({ ...current, activeTo: event.target.value }))}
                     />
+                    <FormErrorMessage>{formValidation.fields.activeTo}</FormErrorMessage>
                   </FormControl>
                 </SimpleGrid>
 
-                <FormControl>
+                <FormControl isInvalid={Boolean(formValidation.fields.rouletteImage)}>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                     Изображение чемодана для рулетки
                   </FormLabel>
@@ -1796,9 +1940,10 @@ export default function PromoCodesPage() {
                     value={form.rouletteImage}
                     onChange={(nextValue) => setForm((current) => ({ ...current, rouletteImage: nextValue }))}
                   />
+                  <FormErrorMessage>{formValidation.fields.rouletteImage}</FormErrorMessage>
                 </FormControl>
 
-                <FormControl>
+                <FormControl isInvalid={Boolean(formValidation.fields.rouletteDescription)}>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                     Текстовое описание
                   </FormLabel>
@@ -1813,6 +1958,7 @@ export default function PromoCodesPage() {
                   <Text mt="8px" color={textColorSecondary} fontSize="xs">
                     Переносы строки сохраняются. Используйте Enter, чтобы разбить описание на несколько строк.
                   </Text>
+                  <FormErrorMessage>{formValidation.fields.rouletteDescription}</FormErrorMessage>
                 </FormControl>
 
                 <Flex justify="flex-end" gap="12px" wrap="wrap">

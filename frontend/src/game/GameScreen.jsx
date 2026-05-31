@@ -479,6 +479,7 @@ export default function GameScreen() {
   const stepRef = useRef(0)
   const animationFrameRef = useRef(0)
   const idleAnimationFrameRef = useRef(0)
+  const transitionResetFrameRef = useRef(0)
   const spinCompletionTimeoutRef = useRef(0)
   const idleSpinTimeoutRef = useRef(0)
   const overlayTimeoutRef = useRef(0)
@@ -570,6 +571,7 @@ export default function GameScreen() {
 
   const clearIdleSpin = () => {
     cancelAnimationFrame(idleAnimationFrameRef.current)
+    cancelAnimationFrame(transitionResetFrameRef.current)
     clearTimeout(idleSpinTimeoutRef.current)
     idleSpinTimeoutRef.current = 0
     isIdleSpinActiveRef.current = false
@@ -676,7 +678,8 @@ export default function GameScreen() {
       }
       applyTrackStyles(baseTranslate)
 
-      requestAnimationFrame(() => {
+      cancelAnimationFrame(transitionResetFrameRef.current)
+      transitionResetFrameRef.current = requestAnimationFrame(() => {
         if (carouselMotionRef.current) {
           carouselMotionRef.current.style.transition = ""
         }
@@ -807,6 +810,7 @@ export default function GameScreen() {
     virtualTranslateRef.current = normalizedCurrentTranslate
 
     cancelAnimationFrame(animationFrameRef.current)
+    cancelAnimationFrame(transitionResetFrameRef.current)
     clearTimeout(spinCompletionTimeoutRef.current)
     animationFrameRef.current = requestAnimationFrame(() => {
       const spinState = pendingSpinRef.current
@@ -1282,6 +1286,7 @@ export default function GameScreen() {
 
     return () => {
       cancelAnimationFrame(frameId)
+      cancelAnimationFrame(transitionResetFrameRef.current)
       window.removeEventListener("resize", handleResize)
       clearIdleSpin()
       cancelAnimationFrame(animationFrameRef.current)
