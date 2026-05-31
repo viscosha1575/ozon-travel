@@ -359,6 +359,13 @@ function App() {
     })
     setIsGameLaunchPending(true)
 
+    if (isTelegramHost) {
+      startTransition(() => {
+        setIsGameActive(true)
+      })
+      return
+    }
+
     if (!isGameSceneReady) {
       return
     }
