@@ -1,102 +1,65 @@
 import { setUserSubscriptionStatus } from "./userStore.js";
 
-const MAX_CHANNEL_URL = String(process.env.MAX_CHANNEL_URL || "https://max.ru/ozontravel_official")
-  .trim();
-const MAX_CHANNEL_CHAT_ID = Number(process.env.MAX_CHANNEL_CHAT_ID) || null;
 const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MODE || "api")
   .trim()
   .toLowerCase();
-
-let cachedChannelChatId = MAX_CHANNEL_CHAT_ID;
-let cachedBotApiPromise = null;
-
-function normalizeMaxChatLink(value) {
-  const normalizedValue = String(value || "").trim();
-
-  if (!normalizedValue) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedValue);
-
-    if (parsedUrl.hostname !== "max.ru") {
-      return normalizedValue;
-    }
-
-    return parsedUrl.pathname.replace(/^\/+/, "").split("/")[0] || "";
-  } catch {
-    return normalizedValue
-      .replace(/^https?:\/\/max\.ru\/?/i, "")
-      .replace(/^\/+/, "")
-      .split("/")[0]
-      .trim();
-  }
-}
-
-async function getMaxBotApi() {
-  if (!String(process.env.MAX_BOT_TOKEN || "").trim()) {
-    return null;
-  }
-
-  if (!cachedBotApiPromise) {
-    cachedBotApiPromise = import("../../max-bot/maxInstance.js")
-      .then((module) => module?.bot?.api || null)
-      .catch((error) => {
-        console.warn("MAX bot API import failed", error);
-        return null;
-      });
-  }
-
-  return cachedBotApiPromise;
-}
-
-async function resolveChannelChatId(api) {
-  if (cachedChannelChatId) {
-    return cachedChannelChatId;
-  }
-
-  const channelLink = normalizeMaxChatLink(MAX_CHANNEL_URL);
-
-  if (!channelLink) {
-    throw new Error(`MAX channel link is empty: ${MAX_CHANNEL_URL}`);
-  }
-
-  const chat = await api.getChatByLink(channelLink);
-  cachedChannelChatId = Number(chat?.chat_id) || null;
-
-  if (!cachedChannelChatId) {
-    throw new Error(`Failed to resolve MAX channel chat id for ${MAX_CHANNEL_URL}`);
-  }
-
-  return cachedChannelChatId;
-}
+const MAX_BOT_INTERNAL_URL = String(process.env.MAX_BOT_INTERNAL_URL || "http://max-bot:3011")
+  .trim()
+  .replace(/\/$/, "");
+const INTERNAL_MAX_BOT_TOKEN = String(
+  process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || "",
+).trim();
+const MAX_SUBSCRIPTION_TIMEOUT_MS = Math.max(
+  1000,
+  Math.round(Number(process.env.MAX_SUBSCRIPTION_TIMEOUT_MS || 10000) || 10000),
+);
 
 async function checkMaxChannelSubscription(platformUserId) {
   if (MAX_SUBSCRIPTION_CHECK_MODE === "mock") {
     return true;
   }
 
-  const api = await getMaxBotApi();
-
-  if (!api) {
-    return null;
+  if (!INTERNAL_MAX_BOT_TOKEN) {
+    throw new Error("Missing internal MAX bot token");
   }
 
-  const channelChatId = await resolveChannelChatId(api);
-  const response = await api.getChatMembers(channelChatId, {
-    user_ids: [Number(platformUserId)],
-    count: 1,
-  });
-  const members = Array.isArray(response?.members) ? response.members : [];
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, MAX_SUBSCRIPTION_TIMEOUT_MS);
 
-  return members.some((member) => String(member.user_id) === String(platformUserId));
+  try {
+    const response = await fetch(`${MAX_BOT_INTERNAL_URL}/internal/subscription/check`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Broadcast-Token": INTERNAL_MAX_BOT_TOKEN,
+      },
+      body: JSON.stringify({
+        userId: String(platformUserId),
+      }),
+      signal: abortController.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(payload?.message || `MAX bot internal check failed with ${response.status}`);
+    }
+
+    return Boolean(payload?.subscribed);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackValue = false) {
   const platform = String(userInfo?.platform || "").trim().toLowerCase();
   const platformUserId = String(userInfo?.platformUserId || "").trim();
   const externalId = String(userInfo?.externalId || "").trim();
+
+  if (platform === "telegram") {
+    return true;
+  }
 
   if ((platformUserId === "local-demo-user" || externalId === "local-demo-user") && platform !== "max") {
     return true;

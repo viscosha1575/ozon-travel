@@ -231,6 +231,15 @@ export function getMiniApp() {
   return null
 }
 
+function isMaxDeepLink(url) {
+  try {
+    const parsedUrl = new URL(String(url || '').trim())
+    return parsedUrl.protocol === 'https:' && parsedUrl.hostname.toLowerCase() === 'max.ru'
+  } catch {
+    return false
+  }
+}
+
 export function openExternalLink(url) {
   const normalizedUrl = String(url || '').trim()
 
@@ -239,6 +248,15 @@ export function openExternalLink(url) {
   }
 
   const miniApp = getMiniApp()
+
+  if (isMaxMiniApp() && isMaxDeepLink(normalizedUrl) && typeof miniApp?.openMaxLink === 'function') {
+    try {
+      miniApp.openMaxLink(normalizedUrl)
+      return
+    } catch (error) {
+      console.warn('Failed to open MAX deep link with mini app SDK', error)
+    }
+  }
 
   if (typeof miniApp?.openLink === 'function') {
     try {

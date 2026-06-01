@@ -4,15 +4,14 @@ import { fileURLToPath } from 'url';
 import { bot, Keyboard } from '../maxInstance.js';
 import {
   addUser,
-  setSubscriptionStatus,
 } from '../services/userService.js';
 import { createMaxLog } from '../services/logService.js';
 import {
   MAX_CHANNEL_URL,
-  MAX_CHANNEL_CHAT_ID,
   GAME_WEBAPP_URL,
   SUPPORT_CONTACT,
 } from '../config.js';
+import { refreshSubscriptionStatus } from '../services/subscriptionService.js';
 import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
 import { parseStartParam } from '../utils/startParam.js';
@@ -90,11 +89,6 @@ const supportMessage = [
   '@ozon_travel_support_bot',
 ].join('\n');
 
-let cachedChannelChatId = Number(MAX_CHANNEL_CHAT_ID) || null;
-const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MODE || 'api')
-  .trim()
-  .toLowerCase();
-
 async function getStartBannerAttachment() {
   if (!startBannerAttachmentPromise) {
     startBannerAttachmentPromise = bot.api.uploadImage({
@@ -148,30 +142,6 @@ function getStringValue(...values) {
   return value === undefined || value === null ? '' : String(value);
 }
 
-function normalizeMaxChatLink(value) {
-  const normalizedValue = String(value || '').trim();
-
-  if (!normalizedValue) {
-    return '';
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedValue);
-
-    if (parsedUrl.hostname !== 'max.ru') {
-      return normalizedValue;
-    }
-
-    return parsedUrl.pathname.replace(/^\/+/, '').split('/')[0] || '';
-  } catch {
-    return normalizedValue
-      .replace(/^https?:\/\/max\.ru\/?/i, '')
-      .replace(/^\/+/, '')
-      .split('/')[0]
-      .trim();
-  }
-}
-
 function extractUser(ctx) {
   const sender = getSender(ctx);
   const userId = getStringValue(
@@ -202,66 +172,6 @@ function extractUser(ctx) {
     firstName,
     lastName,
   };
-}
-
-async function resolveChannelChatId() {
-  if (cachedChannelChatId) {
-    return cachedChannelChatId;
-  }
-
-  const channelLink = normalizeMaxChatLink(MAX_CHANNEL_URL);
-
-  if (!channelLink) {
-    throw new Error(`MAX channel link is empty: ${MAX_CHANNEL_URL}`);
-  }
-
-  const chat = await bot.api.getChatByLink(channelLink);
-  cachedChannelChatId = Number(chat?.chat_id) || null;
-
-  if (!cachedChannelChatId) {
-    throw new Error(`Failed to resolve MAX channel chat id for ${MAX_CHANNEL_URL}`);
-  }
-
-  return cachedChannelChatId;
-}
-
-async function checkChannelSubscription(userId) {
-  if (MAX_SUBSCRIPTION_CHECK_MODE === 'mock') {
-    logger.info('MAX subscription check is mocked', {
-      userId,
-    });
-    return true;
-  }
-
-  const channelChatId = await resolveChannelChatId();
-  const response = await bot.api.getChatMembers(channelChatId, {
-    user_ids: [Number(userId)],
-    count: 1,
-  });
-
-  const members = Array.isArray(response?.members) ? response.members : [];
-  return members.some((member) => String(member.user_id) === String(userId));
-}
-
-async function refreshSubscriptionStatus(userId, { source = 'unknown' } = {}) {
-  if (!userId) {
-    return false;
-  }
-
-  const isSubscribed = await checkChannelSubscription(userId);
-
-  await setSubscriptionStatus({
-    maxUserId: userId,
-    isSubscribed,
-  });
-
-  logger.info('MAX subscription status refreshed', {
-    userId,
-    isSubscribed,
-    source,
-  });
-
-  return isSubscribed;
 }
 
 async function registerUser(ctx, { logEntry = true } = {}) {
