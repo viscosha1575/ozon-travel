@@ -54,7 +54,17 @@ function buildReferralLink(referralCode) {
 }
 
 async function upsertUser(executor, userInfo = {}) {
-  const externalId = String(userInfo.externalId || "local-demo-user").trim() || "local-demo-user";
+  const platform = normalizePlatform(userInfo.platform);
+  const resolvedExternalId = String(userInfo.externalId || "").trim();
+
+  if (platform === "max" && !resolvedExternalId) {
+    const error = new Error("Не удалось определить пользователя MAX");
+    error.statusCode = 403;
+    error.code = "MAX_USER_REQUIRED";
+    throw error;
+  }
+
+  const externalId = resolvedExternalId || "local-demo-user";
   const username = String(userInfo.username || "").trim();
   const firstName = String(userInfo.firstName || "").trim();
   const lastName = String(userInfo.lastName || "").trim();

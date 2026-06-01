@@ -80,6 +80,28 @@ function extractTelegramInitDataFromLocation() {
   return ''
 }
 
+function extractMaxLaunchParamsFromLocation() {
+  if (typeof window === 'undefined' || !window.location.hash.startsWith('#')) {
+    return {
+      initData: '',
+      platform: '',
+      version: '',
+    }
+  }
+
+  const params = new URLSearchParams(window.location.hash.slice(1))
+
+  return {
+    initData: String(params.get('WebAppData') || ''),
+    platform: String(params.get('WebAppPlatform') || '').trim().toLowerCase(),
+    version: String(params.get('WebAppVersion') || '').trim(),
+  }
+}
+
+function extractMaxInitDataFromLocation() {
+  return extractMaxLaunchParamsFromLocation().initData
+}
+
 function loadExternalScript({ id, src, resolveValue, errorMessage, cacheKey }) {
   if (resolveValue()) {
     return Promise.resolve(resolveValue())
@@ -155,7 +177,7 @@ function shouldAttemptMaxSdkLoad() {
     return false
   }
 
-  if (getMaxWebApp()) {
+  if (getMaxWebApp() || hasValue(extractMaxInitDataFromLocation())) {
     return true
   }
 
@@ -176,7 +198,8 @@ function resolveMiniAppHost() {
   if (
     hasValue(getMaxWebApp()?.initData)
     || hasValue(String(getMaxWebApp()?.initDataUnsafe?.user?.id || ''))
-    || Boolean(getMaxWebApp())
+    || hasValue(extractMaxInitDataFromLocation())
+    || hasValue(extractMaxLaunchParamsFromLocation().platform)
   ) {
     return MAX_HOST
   }
@@ -235,7 +258,7 @@ export function getMiniAppInitData() {
   }
 
   if (isMaxMiniApp()) {
-    return String(getMaxWebApp()?.initData || '')
+    return String(getMaxWebApp()?.initData || extractMaxInitDataFromLocation() || '')
   }
 
   return ''
@@ -254,6 +277,10 @@ export function getMiniAppUser() {
 }
 
 export function getMiniAppPlatform() {
+  if (isMaxMiniApp()) {
+    return String(getMaxWebApp()?.platform || extractMaxLaunchParamsFromLocation().platform || '').trim().toLowerCase()
+  }
+
   return String(getMiniApp()?.platform || '').trim().toLowerCase()
 }
 
