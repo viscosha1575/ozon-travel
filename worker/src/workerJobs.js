@@ -1,7 +1,7 @@
 export const WORKER_QUEUE_NAMES = {
-  scheduler: "worker:scheduler",
-  notificationSend: "worker:notification-send",
-  pushControl: "worker:push-control",
+  scheduler: "worker_scheduler",
+  notificationSend: "worker_notification_send",
+  pushControl: "worker_push_control",
 };
 
 export const WORKER_JOB_NAMES = {
