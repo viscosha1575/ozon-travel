@@ -6,6 +6,15 @@ import {
 const EMBEDDED_PAGE_CACHE = new Map()
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 
+function getEmbeddedSafeBottomValue() {
+  if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") {
+    return "env(safe-area-inset-bottom, 0px)"
+  }
+
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue("--app-safe-bottom").trim()
+  return value || "env(safe-area-inset-bottom, 0px)"
+}
+
 function escapeAttribute(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -24,6 +33,7 @@ function escapeHtml(value) {
 function buildHeadInjection(url, title) {
   const regularFontUrl = escapeAttribute(GT_EESTI_REGULAR_DATA_URL)
   const mediumFontUrl = escapeAttribute(GT_EESTI_MEDIUM_DATA_URL)
+  const safeBottomValue = escapeAttribute(getEmbeddedSafeBottomValue())
 
   return [
     `<meta charset="utf-8">`,
@@ -51,6 +61,7 @@ function buildHeadInjection(url, title) {
         background: #fff;
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
+        --embedded-safe-bottom: ${safeBottomValue};
         --app-button-font-size: clamp(16px, 4.3vw, 17px);
         --font-weight-semibold: 500;
         font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
@@ -60,7 +71,7 @@ function buildHeadInjection(url, title) {
         margin: 0;
         background: #fff;
         color: #070707;
-        padding-bottom: calc(83px + env(safe-area-inset-bottom));
+        padding-bottom: calc(83px + var(--embedded-safe-bottom));
         font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
       }
 
@@ -74,13 +85,13 @@ function buildHeadInjection(url, title) {
       #Content {
         box-sizing: border-box;
         width: 100%;
-        padding: 0 16px calc(24px + env(safe-area-inset-bottom)) !important;
+        padding: 0 16px calc(24px + var(--embedded-safe-bottom)) !important;
       }
 
       .embedded-page-close {
         position: fixed;
         left: 50%;
-        bottom: calc(23px + env(safe-area-inset-bottom));
+        bottom: calc(23px + var(--embedded-safe-bottom));
         z-index: 2147483647;
         display: flex;
         align-items: center;
