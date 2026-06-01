@@ -1007,13 +1007,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(228px, 78vw, 312px);
+  width: clamp(196px, 68vw, 272px);
   max-width: min(
     calc(100vw - 8px),
     var(--game-carousel-visual-max-width)
   );
-  height: min(calc(var(--app-viewport-height) * 42 / 100), 360px);
-  max-height: 360px;
+  height: min(calc(var(--app-viewport-height) * 34 / 100), 292px);
+  max-height: 292px;
   overflow: visible;
   pointer-events: none;
 }
@@ -1026,7 +1026,7 @@ body {
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(var(--game-result-bag-scale));
+  transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.08);
   transform-origin: center center;
   will-change: transform;
   backface-visibility: hidden;
@@ -1289,13 +1289,13 @@ body {
   }
 
   .game-result-bag-frame {
-    width: clamp(210px, 74vw, 280px);
+    width: clamp(188px, 64vw, 248px);
     max-width: min(
       calc(100vw - 8px),
       var(--game-carousel-visual-max-width)
     );
-    height: min(calc(var(--app-viewport-height) * 38 / 100), 332px);
-    max-height: 332px;
+    height: min(calc(var(--app-viewport-height) * 31 / 100), 252px);
+    max-height: 252px;
   }
 
   .game-result-sheet {
