@@ -54,6 +54,7 @@
   --intro-sheet-side-padding: 20px;
   --app-sheet-side-padding: var(--intro-sheet-side-padding);
   --app-sheet-actions-side-padding: var(--intro-sheet-side-padding);
+  --app-sheet-content-max-width: 390px;
   --app-button-width: 272px;
   --app-button-height: 60px;
   --app-button-radius: 14px;
@@ -216,10 +217,14 @@ body {
   display: grid;
   justify-items: center;
   gap: clamp(8px, 1.185svh, 12px);
-  width: 100%;
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--intro-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
   padding:
     clamp(22px, 3.317svh, 28px)
-    var(--intro-sheet-side-padding)
+    0
     calc(clamp(22px, 3.317svh, 28px) + var(--app-safe-bottom));
   box-sizing: border-box;
   text-align: center;
@@ -732,7 +737,12 @@ body {
   display: grid;
   justify-items: center;
   gap: 14px;
-  padding: 28px var(--app-sheet-side-padding) 24px;
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--app-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
+  padding: 28px 0 24px;
   text-align: center;
 }
 
@@ -1186,7 +1196,7 @@ body {
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.08);
+  transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(var(--game-result-preview-scale, 1.2));
   transform-origin: center center;
   will-change: transform;
   backface-visibility: hidden;
@@ -1195,6 +1205,20 @@ body {
 
 .game-result.is-collection-entering .game-result-bag-visual {
   animation: game-result-bag-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.game-result.is-collection-entering .game-result-bag-frame {
+  width: min(
+    calc(100vw - 8px),
+    var(--game-carousel-visual-max-width)
+  );
+  max-width: min(
+    calc(100vw - 8px),
+    var(--game-carousel-visual-max-width)
+  );
+  height: auto;
+  max-height: none;
+  aspect-ratio: 272 / 292;
 }
 
 .game-result-bag-visual.is-hidden {
@@ -1253,9 +1277,13 @@ body {
   display: grid;
   justify-items: center;
   gap: clamp(4px, 0.711svh, 8px);
-  width: 100%;
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--intro-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
   box-sizing: border-box;
-  padding: clamp(22px, 3.317svh, 28px) var(--intro-sheet-side-padding) clamp(22px, 3.317svh, 28px);
+  padding: clamp(22px, 3.317svh, 28px) 0 clamp(22px, 3.317svh, 28px);
   text-align: center;
 }
 
@@ -1449,16 +1477,6 @@ body {
 
   .game-prizes-footer {
     padding-top: 14px;
-  }
-
-  .game-result-bag-frame {
-    width: clamp(188px, 64vw, 248px);
-    max-width: min(
-      calc(100vw - 8px),
-      var(--game-carousel-visual-max-width)
-    );
-    height: min(calc(var(--app-viewport-height) * 31 / 100), 252px);
-    max-height: 252px;
   }
 
   .game-result-sheet {
@@ -1764,12 +1782,12 @@ body {
 
   82% {
     opacity: 1;
-    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.12);
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(calc(var(--game-result-preview-scale, 1.2) * 1.0333333333));
   }
 
   to {
     opacity: 1;
-    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.08);
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(var(--game-result-preview-scale, 1.2));
   }
 }
 
@@ -2221,7 +2239,7 @@ body {
 
 .content-description--result {
   max-width: 100%;
-  font-size: var(--app-muted-copy-font-size);
+  font-size: var(--font-body);
   line-height: 1.3;
   letter-spacing: 0.12px;
 }
@@ -2270,7 +2288,7 @@ body {
   }
 
   .content-description--result {
-    font-size: var(--app-muted-copy-font-size);
+    font-size: var(--font-body);
   }
 }
 

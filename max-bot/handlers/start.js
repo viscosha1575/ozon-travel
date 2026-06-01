@@ -1,3 +1,6 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import { bot, Keyboard } from '../maxInstance.js';
 import {
   addUser,
@@ -19,6 +22,11 @@ const subscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
 ]);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const START_BANNER_PATH = path.resolve(__dirname, '../public/banner1.png');
+let startBannerAttachmentPromise = null;
+
 function buildOpenAppButton(url) {
   const normalizedUrl = String(url || '').trim();
   const fallbackWebApp = 'ozontravel_lenta_bot';
@@ -26,7 +34,7 @@ function buildOpenAppButton(url) {
   if (!normalizedUrl) {
     return {
       type: 'open_app',
-      text: 'Открыть',
+      text: 'КРУТИТЬ ЛЕНТУ',
       web_app: fallbackWebApp,
     };
   }
@@ -37,7 +45,7 @@ function buildOpenAppButton(url) {
     const payload = String(parsedUrl.searchParams.get('startapp') || '').trim();
     const button = {
       type: 'open_app',
-      text: 'Открыть',
+      text: 'КРУТИТЬ ЛЕНТУ',
       web_app: webApp,
     };
 
@@ -49,7 +57,7 @@ function buildOpenAppButton(url) {
   } catch {
     return {
       type: 'open_app',
-      text: 'Открыть',
+      text: 'КРУТИТЬ ЛЕНТУ',
       web_app: normalizedUrl.replace(/^@/, '') || fallbackWebApp,
     };
   }
@@ -57,7 +65,7 @@ function buildOpenAppButton(url) {
 
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
   [buildOpenAppButton(GAME_WEBAPP_URL)],
-  [Keyboard.button.callback('Поддержка', 'show_support')],
+  [Keyboard.button.callback('ПОДДЕРЖКА', 'show_support')],
 ]);
 
 const welcomeMessage = [
@@ -86,6 +94,16 @@ let cachedChannelChatId = Number(MAX_CHANNEL_CHAT_ID) || null;
 const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MODE || 'api')
   .trim()
   .toLowerCase();
+
+async function getStartBannerAttachment() {
+  if (!startBannerAttachmentPromise) {
+    startBannerAttachmentPromise = bot.api.uploadImage({
+      source: START_BANNER_PATH,
+    });
+  }
+
+  return startBannerAttachmentPromise;
+}
 
 async function safeReply(ctx, message, options, context) {
   try {
@@ -342,8 +360,25 @@ async function sendSubscriptionStep(ctx) {
 }
 
 async function sendGameMenu(ctx) {
+  const attachments = [];
+
+  try {
+    const bannerAttachment = await getStartBannerAttachment();
+
+    if (bannerAttachment) {
+      attachments.push(bannerAttachment.toJson());
+    }
+  } catch (error) {
+    logger.warn('Failed to upload MAX start banner', {
+      error: error?.response?.data || error?.message || String(error),
+      bannerPath: START_BANNER_PATH,
+    });
+  }
+
+  attachments.push(gameMenuKeyboard);
+
   await safeReply(ctx, menuMessage, {
-    attachments: [gameMenuKeyboard],
+    attachments,
   }, 'sendGameMenu');
 }
 

@@ -41,10 +41,12 @@ const REFERRAL_SHARE_MESSAGE = [
 ].join("\n")
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
 const IMPORTANT_INFO_TITLE = "Условия акции"
-const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?__rr=1"
+const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?utm_source=telegram&utm_medium=special_project&utm_campaign=oztravel_06_26_lenta_prizov_promo_activation"
 const DEFAULT_ROULETTE_IMAGE_PATH = "/game/bags/case.webp"
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
+const RESULT_PREVIEW_TARGET_WIDTH_PX = 326.4
+const NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR = 0.94
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
@@ -512,6 +514,7 @@ export default function GameScreen({
   const centerSlotImageRef = useRef(null)
   const trackSlotImageRefs = useRef([])
   const trackSlotMediaRefs = useRef([])
+  const patternUnderlayRef = useRef(null)
   const patternMotionRef = useRef(null)
   const carouselMotionRef = useRef(null)
   const trackRef = useRef(null)
@@ -554,6 +557,7 @@ export default function GameScreen({
   const [resultRevealPhase, setResultRevealPhase] = useState("idle")
   const [resultEntrySource, setResultEntrySource] = useState("spin")
   const [resultBagFlight, setResultBagFlight] = useState(null)
+  const [resultBagPreviewScale, setResultBagPreviewScale] = useState(1.2)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
   const [trackItems, setTrackItems] = useState(initialTrackItems)
   const [trackTranslate, setTrackTranslate] = useState(0)
@@ -580,6 +584,9 @@ export default function GameScreen({
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
+  const effectiveResultBagPreviewScale = resultPrize?.type === "Не приз"
+    ? resultBagPreviewScale * NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR
+    : resultBagPreviewScale
 
   const resetResultState = useCallback(() => {
     cancelAnimationFrame(resultAnimationFrameRef.current)
@@ -1222,7 +1229,7 @@ export default function GameScreen({
     setIsOverlayClosing(false)
     setIsResultCopied(false)
     resetResultState()
-    const prizeResult = {
+    const basePrizeResult = {
       positionId: prize.positionId ?? prize.id,
       type: prize.type || "Приз",
       title: prize.title || "",
@@ -1232,7 +1239,17 @@ export default function GameScreen({
       promoCode: prize.promoCode || "",
       expiresAt: prize.expiresAt || "",
     }
-    const nextResultBag = buildResultBag(prizeResult, activeRouletteItems) || {
+    const matchedResultBag = buildResultBag(basePrizeResult, activeRouletteItems)
+    const prizeResult = {
+      ...basePrizeResult,
+      image: matchedResultBag?.path || basePrizeResult.image || "",
+      type: matchedResultBag?.type || basePrizeResult.type,
+      title: matchedResultBag?.title || basePrizeResult.title,
+      myPrizeText: matchedResultBag?.myPrizeText || basePrizeResult.myPrizeText,
+      description: matchedResultBag?.description || basePrizeResult.description,
+      expiresAt: matchedResultBag?.expiresAt || basePrizeResult.expiresAt,
+    }
+    const nextResultBag = matchedResultBag || {
       id: prize.id,
       key: `my-prize-${prize.id}`,
       path: prize.image || "",
@@ -1412,6 +1429,12 @@ export default function GameScreen({
     const syncCarousel = () => {
       const measuredHeight = slotRef.current?.getBoundingClientRect().height ?? 0
       const step = measuredHeight > 0 ? measuredHeight + SLOT_GAP : stepRef.current
+      const patternWidth = patternUnderlayRef.current?.getBoundingClientRect().width ?? 0
+
+      if (patternWidth > 0) {
+        console.log("[game-carousel] visual width px:", Math.round(patternWidth))
+        setResultBagPreviewScale(RESULT_PREVIEW_TARGET_WIDTH_PX / patternWidth)
+      }
 
       if (step > SLOT_GAP) {
         stepRef.current = roundToDevicePixel(step)
@@ -1742,6 +1765,7 @@ export default function GameScreen({
           <div className={`game-carousel-scene ${isSpinActive ? "is-spinning" : ""}`}>
             <div className="game-carousel-backdrop">
               <div
+                ref={patternUnderlayRef}
                 className="game-carousel-pattern-underlay"
                 aria-hidden="true"
               />
@@ -2056,6 +2080,9 @@ export default function GameScreen({
               <div className="game-result-bag-frame">
               <div
                 className={`game-result-bag-visual ${resultBagFlight ? "is-hidden" : ""}`.trim()}
+                style={{
+                  "--game-result-preview-scale": String(effectiveResultBagPreviewScale),
+                }}
               >
                 <img
                   ref={resultBagImageRef}

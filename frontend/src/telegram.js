@@ -135,7 +135,7 @@ function shouldAttemptTelegramSdkLoad() {
 }
 
 function shouldAttemptMaxSdkLoad() {
-  if (typeof window === 'undefined' || isLocalBrowserHost()) {
+  if (typeof window === 'undefined') {
     return false
   }
 
