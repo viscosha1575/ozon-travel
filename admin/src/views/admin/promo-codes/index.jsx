@@ -213,6 +213,17 @@ function normalizeRouletteDescriptions(value) {
   );
 }
 
+function buildNonPrizeDescriptions(item = {}) {
+  const variants = normalizeRouletteDescriptions(item.rouletteDescriptions);
+  const fallbackDescription = String(item.rouletteDescription || "").trim();
+
+  if (variants.length) {
+    return variants;
+  }
+
+  return fallbackDescription ? [fallbackDescription] : [];
+}
+
 function ToggleButtonGroup({
   value,
   onChange,
@@ -287,7 +298,6 @@ function FormSection({
 
 const EMPTY_RESPONSE = {
   items: [],
-  nonPrizeDescriptionOptions: [],
   summary: {
     totalPrizesCount: 0,
     totalUnitsCount: 0,
@@ -334,6 +344,7 @@ function createInitialPrizeForm() {
     myPrizeText: "",
     rouletteDescription: "",
     rouletteDescriptions: [],
+    rouletteDescriptionDraft: "",
   };
 }
 
@@ -362,7 +373,8 @@ function buildPrizeForm(item = {}) {
     rouletteImage: item.rouletteImage || null,
     myPrizeText: item.myPrizeText || "",
     rouletteDescription: item.rouletteDescription || "",
-    rouletteDescriptions: normalizeRouletteDescriptions(item.rouletteDescriptions),
+    rouletteDescriptions: buildNonPrizeDescriptions(item),
+    rouletteDescriptionDraft: "",
   };
 }
 
@@ -429,7 +441,11 @@ function validatePrizeForm(form = {}) {
     markField("rouletteImage", type === "Не приз" ? "nonPrize" : "content", "Загрузите изображение.");
   }
 
-  if (!rouletteDescription && !rouletteDescriptions.length) {
+  if (type === "Не приз") {
+    if (!rouletteDescriptions.length) {
+      markField("rouletteDescription", "nonPrize", "Добавьте хотя бы одно описание.");
+    }
+  } else if (!rouletteDescription) {
     markField("rouletteDescription", type === "Не приз" ? "nonPrize" : "content", "Добавьте описание.");
   }
 
@@ -541,10 +557,6 @@ export default function PromoCodesPage() {
     : promoCodesScheduleTab === "waiting"
       ? promoCodesScheduleResponse.waitingItems
       : promoCodesScheduleResponse.claimedItems;
-  const nonPrizeDescriptionOptions = Array.isArray(response.nonPrizeDescriptionOptions)
-    ? response.nonPrizeDescriptionOptions
-    : [];
-
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
       return "Без лимита";
@@ -578,9 +590,6 @@ export default function PromoCodesPage() {
         if (!cancelled) {
           setResponse({
             items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
-            nonPrizeDescriptionOptions: Array.isArray(nextResponse?.nonPrizeDescriptionOptions)
-              ? nextResponse.nonPrizeDescriptionOptions
-              : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
           });
           setProjectFinished(Boolean(nextResponse?.projectFinished));
@@ -629,9 +638,6 @@ export default function PromoCodesPage() {
 
     setResponse({
       items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
-      nonPrizeDescriptionOptions: Array.isArray(nextResponse?.nonPrizeDescriptionOptions)
-        ? nextResponse.nonPrizeDescriptionOptions
-        : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
     });
     setProjectFinished(Boolean(nextResponse?.projectFinished));
@@ -706,7 +712,9 @@ export default function PromoCodesPage() {
         codeReleaseEnd: isNonPrize || form.disablePromoCodeReleaseSchedule ? "" : form.codeReleaseEnd,
         rouletteImage: form.rouletteImage,
         myPrizeText: isNonPrize ? form.title : form.myPrizeText,
-        rouletteDescription: form.rouletteDescription,
+        rouletteDescription: isNonPrize
+          ? normalizeRouletteDescriptions(form.rouletteDescriptions)[0] || ""
+          : form.rouletteDescription,
         rouletteDescriptions: isNonPrize ? normalizeRouletteDescriptions(form.rouletteDescriptions) : [],
       });
 
@@ -1986,70 +1994,89 @@ export default function PromoCodesPage() {
 
                 <FormControl isInvalid={Boolean(formValidation.fields.rouletteDescription)}>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
-                    Базовое описание
+                    Описание
                   </FormLabel>
                   <Textarea
-                    minH="220px"
+                    minH="160px"
                     borderRadius="20px"
                     resize="vertical"
-                    value={form.rouletteDescription}
-                    onChange={(event) => setForm((current) => ({ ...current, rouletteDescription: event.target.value }))}
-                    placeholder="Описание позиции"
+                    value={form.rouletteDescriptionDraft}
+                    onChange={(event) => setForm((current) => ({ ...current, rouletteDescriptionDraft: event.target.value }))}
+                    placeholder="Введите описание и нажмите «Добавить»"
                   />
-                  <Text mt="8px" color={textColorSecondary} fontSize="xs">
-                    Если массив ниже не выбран, в рулетке будет использоваться этот текст. Переносы строки сохраняются.
-                  </Text>
                   <FormErrorMessage>{formValidation.fields.rouletteDescription}</FormErrorMessage>
                 </FormControl>
 
+                <Flex justify="flex-start">
+                  <Button
+                    type="button"
+                    variant="brand"
+                    h="48px"
+                    isDisabled={!String(form.rouletteDescriptionDraft || "").trim()}
+                    onClick={() => setForm((current) => {
+                      const nextDescription = String(current.rouletteDescriptionDraft || "").trim();
+
+                      if (!nextDescription) {
+                        return current;
+                      }
+
+                      return {
+                        ...current,
+                        rouletteDescriptions: normalizeRouletteDescriptions([
+                          ...current.rouletteDescriptions,
+                          nextDescription,
+                        ]),
+                        rouletteDescriptionDraft: "",
+                      };
+                    })}
+                  >
+                    Добавить
+                  </Button>
+                </Flex>
+
                 <FormControl>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
-                    Описания для массива
+                    Добавленные описания
                   </FormLabel>
                   <Stack spacing="10px">
-                    {nonPrizeDescriptionOptions.length ? nonPrizeDescriptionOptions.map((description) => {
-                      const isChecked = form.rouletteDescriptions.includes(description);
-
-                      return (
-                        <Box
-                          key={description}
-                          border="1px solid"
-                          borderColor={isChecked ? "brand.500" : borderColor}
-                          borderRadius="18px"
-                          px="16px"
-                          py="14px"
-                        >
-                          <Checkbox
-                            colorScheme="brandScheme"
-                            isChecked={isChecked}
-                            onChange={(event) => setForm((current) => {
-                              const currentValues = normalizeRouletteDescriptions(current.rouletteDescriptions);
-                              const nextValues = event.target.checked
-                                ? [...currentValues, description]
-                                : currentValues.filter((item) => item !== description);
-
-                              return {
-                                ...current,
-                                rouletteDescriptions: normalizeRouletteDescriptions(nextValues),
-                              };
-                            })}
+                    {form.rouletteDescriptions.length ? form.rouletteDescriptions.map((description) => (
+                      <Box
+                        key={description}
+                        border="1px solid"
+                        borderColor={borderColor}
+                        borderRadius="18px"
+                        px="16px"
+                        py="14px"
+                      >
+                        <Flex justify="space-between" align="flex-start" gap="12px">
+                          <Text color={textColor} fontSize="sm" whiteSpace="pre-wrap">
+                            {description}
+                          </Text>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            colorScheme="red"
+                            size="sm"
+                            flexShrink={0}
+                            onClick={() => setForm((current) => ({
+                              ...current,
+                              rouletteDescriptions: current.rouletteDescriptions.filter((item) => item !== description),
+                            }))}
                           >
-                            <Text color={textColor} fontSize="sm" whiteSpace="pre-wrap">
-                              {description}
-                            </Text>
-                          </Checkbox>
-                        </Box>
-                      );
-                    }) : (
+                            Удалить
+                          </Button>
+                        </Flex>
+                      </Box>
+                    )) : (
                       <Box border="1px dashed" borderColor={borderColor} borderRadius="18px" px="16px" py="14px">
                         <Text color={textColorSecondary} fontSize="sm">
-                          Пока нет сохранённых описаний для выбора. Можно оставить только базовое описание и сохранить неприз без массива.
+                          Пока нет описаний. Добавьте хотя бы одно описание для неприза.
                         </Text>
                       </Box>
                     )}
                   </Stack>
                   <Text mt="8px" color={textColorSecondary} fontSize="xs">
-                    Если выбрать несколько описаний, в bootstrap и при выпадении неприза будет отдаваться случайный текст из этого массива.
+                    Если описаний несколько, в bootstrap и при выпадении неприза будет отдаваться случайный текст из списка.
                   </Text>
                 </FormControl>
 

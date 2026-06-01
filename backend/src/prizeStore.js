@@ -355,8 +355,9 @@ function validatePrizePayload(payload = {}) {
   const codeReleaseEnd = parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
   const rouletteImage = payload.rouletteImage ?? null;
   const myPrizeText = String(payload.myPrizeText || "").trim();
-  const rouletteDescription = String(payload.rouletteDescription || "").trim();
+  const incomingRouletteDescription = String(payload.rouletteDescription || "").trim();
   const rouletteDescriptions = normalizeRouletteDescriptions(payload.rouletteDescriptions);
+  const rouletteDescription = incomingRouletteDescription || rouletteDescriptions[0] || "";
 
   if (!title) {
     throw new Error("Prize title is required");
