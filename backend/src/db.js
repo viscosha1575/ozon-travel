@@ -114,6 +114,11 @@ async function ensureSchema() {
 
   await query(`
     ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS has_seen_game_controls_guide BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+
+  await query(`
+    ALTER TABLE app_users
     ADD COLUMN IF NOT EXISTS utm_slug TEXT NOT NULL DEFAULT ''
   `);
 

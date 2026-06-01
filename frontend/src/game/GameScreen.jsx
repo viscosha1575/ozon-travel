@@ -1,6 +1,7 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
+import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "../embeddedPage.js"
 import {
   getMiniApp,
   getMiniAppViewportHeight,
@@ -37,6 +38,7 @@ const REFERRAL_SHARE_MESSAGE = [
   "Скорее летим забирать!",
 ].join("\n")
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
+const IMPORTANT_INFO_TITLE = "Условия акции"
 const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?__rr=1"
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
@@ -478,6 +480,7 @@ export default function GameScreen({
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
   allowBootstrapFetch = false,
+  shouldShowControlsGuide = false,
 }) {
   const cachedBootstrap = readBootstrapCache()
   const initialRouletteItems = normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0)
@@ -491,6 +494,7 @@ export default function GameScreen({
   const centerSlotImageRef = useRef(null)
   const trackSlotImageRefs = useRef([])
   const trackSlotMediaRefs = useRef([])
+  const patternMotionRef = useRef(null)
   const carouselMotionRef = useRef(null)
   const trackRef = useRef(null)
   const resultBagImageRef = useRef(null)
@@ -507,8 +511,10 @@ export default function GameScreen({
   const resultAnimationFrameRef = useRef(0)
   const resultAnimationTimeoutRef = useRef(0)
   const resultCopyToastTimeoutRef = useRef(0)
+  const embeddedPageRequestRef = useRef(0)
   const virtualTranslateRef = useRef(0)
   const pendingSpinRef = useRef(null)
+  const hasOpenedControlsGuideRef = useRef(false)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
   const isIdleSpinActiveRef = useRef(false)
@@ -521,6 +527,7 @@ export default function GameScreen({
   const [activeOverlay, setActiveOverlay] = useState(null)
   const [renderedOverlay, setRenderedOverlay] = useState(null)
   const [isOverlayClosing, setIsOverlayClosing] = useState(false)
+  const [embeddedPage, setEmbeddedPage] = useState(null)
   const [resultBag, setResultBag] = useState(null)
   const [resultPrize, setResultPrize] = useState(null)
   const [isResultCopied, setIsResultCopied] = useState(false)
@@ -530,7 +537,6 @@ export default function GameScreen({
   const [centerBagIndex, setCenterBagIndex] = useState(0)
   const [trackItems, setTrackItems] = useState(initialTrackItems)
   const [trackTranslate, setTrackTranslate] = useState(0)
-  const [lockedSlotHeight, setLockedSlotHeight] = useState(null)
   const [spinError, setSpinError] = useState("")
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
   const [isDevBootstrapReloading, setIsDevBootstrapReloading] = useState(false)
@@ -588,7 +594,6 @@ export default function GameScreen({
     setCenterBagIndex(0)
     setTrackItems(nextTrackItems)
     setTrackTranslate(0)
-    setLockedSlotHeight(null)
 
     if (nextRouletteItems.length) {
       setSpinError("")
@@ -630,12 +635,28 @@ export default function GameScreen({
   const applyTrackStyles = (translateY) => {
     const normalizedTranslateY = Number(translateY || 0)
 
+    if (patternMotionRef.current) {
+      patternMotionRef.current.style.transform = `translate3d(0, ${normalizedTranslateY}px, 0)`
+    }
+
     if (carouselMotionRef.current) {
       carouselMotionRef.current.style.transform = `translate3d(0, ${normalizedTranslateY}px, 0)`
     }
 
     if (trackRef.current) {
       trackRef.current.style.transform = "translate3d(0, 0, 0)"
+    }
+  }
+
+  const setCarouselMotionTransition = (transitionValue) => {
+    const normalizedTransitionValue = transitionValue || ""
+
+    if (patternMotionRef.current) {
+      patternMotionRef.current.style.transition = normalizedTransitionValue
+    }
+
+    if (carouselMotionRef.current) {
+      carouselMotionRef.current.style.transition = normalizedTransitionValue
     }
   }
 
@@ -654,9 +675,7 @@ export default function GameScreen({
       ? readTranslateY(carouselMotionRef.current)
       : virtualTranslateRef.current
 
-    if (carouselMotionRef.current) {
-      carouselMotionRef.current.style.transition = "none"
-    }
+    setCarouselMotionTransition("none")
 
     applyTrackStyles(currentTranslate)
     virtualTranslateRef.current = currentTranslate
@@ -682,45 +701,43 @@ export default function GameScreen({
 
     clearIdleSpin()
     isIdleSpinActiveRef.current = true
-    setLockedSlotHeight(null)
-    setTrackItems(createTrackItems(
-      activeRouletteItems,
-      centerBagIndexRef.current,
-      idleSteps,
-    ))
     setTrackTranslate(baseTranslate)
     virtualTranslateRef.current = baseTranslate
 
-    idleAnimationFrameRef.current = requestAnimationFrame(() => {
-      if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
-        return
-      }
-
-      carouselMotionRef.current.style.transition = "none"
-      applyTrackStyles(baseTranslate)
-      void carouselMotionRef.current.offsetWidth
-
+    const runIdleCycle = () => {
       idleAnimationFrameRef.current = requestAnimationFrame(() => {
         if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
           return
         }
 
-        carouselMotionRef.current.style.transition = `transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`
-        applyTrackStyles(finalTranslate)
-        virtualTranslateRef.current = finalTranslate
+        setCarouselMotionTransition("none")
+        applyTrackStyles(baseTranslate)
+        void carouselMotionRef.current.offsetWidth
 
-        idleSpinTimeoutRef.current = window.setTimeout(() => {
+        idleAnimationFrameRef.current = requestAnimationFrame(() => {
           if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
             return
           }
 
-          carouselMotionRef.current.style.transition = "none"
-          applyTrackStyles(baseTranslate)
-          virtualTranslateRef.current = baseTranslate
-          startIdleSpin()
-        }, IDLE_SPIN_CYCLE_DURATION)
+          setCarouselMotionTransition(`transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`)
+          applyTrackStyles(finalTranslate)
+          virtualTranslateRef.current = finalTranslate
+
+          idleSpinTimeoutRef.current = window.setTimeout(() => {
+            if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+              return
+            }
+
+            setCarouselMotionTransition("none")
+            applyTrackStyles(baseTranslate)
+            virtualTranslateRef.current = baseTranslate
+            runIdleCycle()
+          }, IDLE_SPIN_CYCLE_DURATION)
+        })
       })
-    })
+    }
+
+    runIdleCycle()
   }
 
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
@@ -733,7 +750,6 @@ export default function GameScreen({
     const normalizedCenterBagIndex = getLoopedIndex(nextCenterBagIndex, activeRouletteItems.length)
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
 
-    setLockedSlotHeight(null)
     setTrackItems(createTrackItems(
       activeRouletteItems,
       normalizedCenterBagIndex,
@@ -743,16 +759,12 @@ export default function GameScreen({
     if (step > 0) {
       setTrackTranslate(baseTranslate)
       virtualTranslateRef.current = baseTranslate
-      if (carouselMotionRef.current) {
-        carouselMotionRef.current.style.transition = "none"
-      }
+      setCarouselMotionTransition("none")
       applyTrackStyles(baseTranslate)
 
       cancelAnimationFrame(transitionResetFrameRef.current)
       transitionResetFrameRef.current = requestAnimationFrame(() => {
-        if (carouselMotionRef.current) {
-          carouselMotionRef.current.style.transition = ""
-        }
+        setCarouselMotionTransition("")
       })
     }
   }
@@ -869,7 +881,6 @@ export default function GameScreen({
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
-    setLockedSlotHeight(step - SLOT_GAP)
     setTrackItems(createTrackItems(
       activeRouletteItems,
       currentCenterBagIndex,
@@ -889,7 +900,7 @@ export default function GameScreen({
         return
       }
 
-      carouselMotionRef.current.style.transition = "none"
+      setCarouselMotionTransition("none")
       applyTrackStyles(normalizedCurrentTranslate)
       void carouselMotionRef.current.offsetWidth
 
@@ -898,15 +909,13 @@ export default function GameScreen({
           return
         }
 
-        carouselMotionRef.current.style.transition = `transform ${durationMs}ms ${SPIN_TRANSITION_EASING}`
+        setCarouselMotionTransition(`transform ${durationMs}ms ${SPIN_TRANSITION_EASING}`)
         applyTrackStyles(finalTranslate)
 
         spinCompletionTimeoutRef.current = window.setTimeout(() => {
           const settledCenterTrackIndex = TRACK_CENTER_OFFSET + spinState.totalSteps
 
-          if (carouselMotionRef.current) {
-            carouselMotionRef.current.style.transition = ""
-          }
+          setCarouselMotionTransition("")
 
           virtualTranslateRef.current = finalTranslate
           setTrackTranslate(finalTranslate)
@@ -971,14 +980,41 @@ export default function GameScreen({
 
   const handleBannerAction = (actionId) => {
     if (actionId === "exclamation") {
-      void trackGameEvent("external_link_opened", {
-        actionId,
+      const requestId = embeddedPageRequestRef.current + 1
+
+      embeddedPageRequestRef.current = requestId
+
+      void trackGameEvent("overlay_opened", {
+        overlayId: "embedded_page",
+        source: actionId,
         url: IMPORTANT_INFO_URL,
       })
+      setEmbeddedPage({
+        title: IMPORTANT_INFO_TITLE,
+        url: IMPORTANT_INFO_URL,
+        srcDoc: "",
+        isLoading: true,
+        sessionKey: requestId,
+      })
 
-      if (typeof window !== "undefined") {
-        window.location.assign(IMPORTANT_INFO_URL)
-      }
+      void loadEmbeddedPageDocument(IMPORTANT_INFO_URL, IMPORTANT_INFO_TITLE).then((srcDoc) => {
+        if (embeddedPageRequestRef.current !== requestId) {
+          return
+        }
+
+        setEmbeddedPage((currentPage) => {
+          if (!currentPage || currentPage.url !== IMPORTANT_INFO_URL) {
+            return currentPage
+          }
+
+          return {
+            ...currentPage,
+            srcDoc,
+            isLoading: false,
+          }
+        })
+      })
+
       return
     }
 
@@ -1088,6 +1124,38 @@ export default function GameScreen({
     resetResultState()
     resetCarousel(centerBagIndexRef.current)
   }
+
+  const handleCloseEmbeddedPage = () => {
+    embeddedPageRequestRef.current += 1
+
+    if (embeddedPage?.url) {
+      void trackGameEvent("overlay_closed", {
+        overlayId: "embedded_page",
+        url: embeddedPage.url,
+      })
+    }
+
+    setEmbeddedPage(null)
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined
+    }
+
+    const handleMessage = (event) => {
+      if (event.data?.type !== EMBEDDED_PAGE_CLOSE_EVENT) {
+        return
+      }
+
+      handleCloseEmbeddedPage()
+    }
+
+    window.addEventListener("message", handleMessage)
+    return () => {
+      window.removeEventListener("message", handleMessage)
+    }
+  })
 
   const openPrizeResult = (prize) => {
     if (!prize) {
@@ -1237,7 +1305,6 @@ export default function GameScreen({
     resetResultState()
     isSpinActiveRef.current = false
     setIsSpinActive(false)
-    setLockedSlotHeight(null)
     setSpinError("")
 
     try {
@@ -1306,13 +1373,9 @@ export default function GameScreen({
 
       if (step > SLOT_GAP) {
         stepRef.current = roundToDevicePixel(step)
-        setTrackItems(createTrackItems(
-          activeRouletteItems,
-          centerBagIndexRef.current,
-          getTrackWindowSteps(activeRouletteItems.length),
-        ))
         const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * stepRef.current)
         setTrackTranslate(baseTranslate)
+        virtualTranslateRef.current = baseTranslate
         applyTrackStyles(baseTranslate)
       }
     }
@@ -1369,6 +1432,36 @@ export default function GameScreen({
   }, [centerBagIndex])
 
   useEffect(() => {
+    if (
+      !shouldShowControlsGuide
+      || hasOpenedControlsGuideRef.current
+      || isSpinActive
+      || Boolean(resultBag)
+      || Boolean(activeOverlay)
+      || Boolean(renderedOverlay)
+      || Boolean(embeddedPage)
+    ) {
+      return
+    }
+
+    hasOpenedControlsGuideRef.current = true
+    void trackGameEvent("overlay_opened", {
+      overlayId: "controls-guide",
+    })
+    openOverlay("controls-guide")
+    void postJson("/game/controls-guide/seen", {}).catch((error) => {
+      console.warn("Failed to persist controls guide state", error)
+    })
+  }, [
+    activeOverlay,
+    embeddedPage,
+    isSpinActive,
+    renderedOverlay,
+    resultBag,
+    shouldShowControlsGuide,
+  ])
+
+  useEffect(() => {
     isSpinActiveRef.current = isSpinActive
   }, [isSpinActive])
 
@@ -1376,8 +1469,8 @@ export default function GameScreen({
     let frameId = 0
 
     const updateDebugSnapshot = () => {
-      const sceneNode = carouselMotionRef.current?.parentElement?.parentElement || null
-      const backdropNode = carouselMotionRef.current?.parentElement || null
+      const sceneNode = carouselMotionRef.current?.closest(".game-carousel-scene") || null
+      const backdropNode = carouselMotionRef.current?.closest(".game-carousel-backdrop") || null
       const motionNode = carouselMotionRef.current
       const trackNode = trackRef.current
       const slotNode = slotRef.current
@@ -1600,14 +1693,19 @@ export default function GameScreen({
                 aria-hidden="true"
               />
               <div
-                ref={carouselMotionRef}
-                className="game-carousel-motion-layer"
+                ref={patternMotionRef}
+                className="game-carousel-pattern-motion-layer"
                 aria-hidden="true"
               >
                 <div
                   className="game-carousel-pattern"
                   aria-hidden="true"
                 />
+              </div>
+              <div
+                ref={carouselMotionRef}
+                className="game-carousel-track-motion-layer"
+              >
                 <div
                   ref={trackRef}
                   className="game-carousel-track"
@@ -1617,7 +1715,6 @@ export default function GameScreen({
                       key={`${bag.key}-${index}`}
                       ref={index === 0 ? slotRef : null}
                       className="game-carousel-slot"
-                      style={lockedSlotHeight ? { height: `${lockedSlotHeight}px` } : undefined}
                     >
                       <div
                         ref={(node) => {
@@ -1847,6 +1944,52 @@ export default function GameScreen({
             </section>
           </div>
         ) : null}
+        {renderedOverlay === "controls-guide" ? (
+          <div
+            className={`game-overlay ${isOverlayClosing ? "is-closing" : "is-opening"}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-controls-guide-title"
+          >
+            <div className="game-overlay-backdrop" />
+            <section className="game-overlay-sheet">
+              <div className="game-overlay-sheet-inner game-overlay-sheet-inner--controls-guide">
+                <h2 id="game-controls-guide-title" className="game-overlay-title game-overlay-title--controls-guide">
+                  Управление
+                </h2>
+                <div className="game-controls-guide-list" aria-label="Подсказки по управлению">
+                  <div className="game-controls-guide-item">
+                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
+                      <img src="/game/icons/question.svg" alt="" className="game-controls-guide-icon" />
+                    </span>
+                    <span className="game-controls-guide-text">Поддержка бота</span>
+                  </div>
+                  <div className="game-controls-guide-item">
+                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
+                      <img src="/game/icons/exclamation.svg" alt="" className="game-controls-guide-icon" />
+                    </span>
+                    <span className="game-controls-guide-text">Правила акции</span>
+                  </div>
+                  <div className="game-controls-guide-item">
+                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
+                      <img src="/game/icons/gift.svg" alt="" className="game-controls-guide-icon" />
+                    </span>
+                    <span className="game-controls-guide-text">Список ваших призов</span>
+                  </div>
+                </div>
+                <div className="game-overlay-actions">
+                  <button
+                    type="button"
+                    className="game-overlay-action game-overlay-action--primary"
+                    onClick={handleCloseOverlay}
+                  >
+                    Понятно
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
         {resultBag ? (
           <section
             className={`game-result ${isResultSheetVisible ? "is-sheet-visible" : "is-bag-entering"}`}
@@ -1941,6 +2084,32 @@ export default function GameScreen({
           <div className="game-result-copy-toast" role="status" aria-live="polite">
             <span className="game-result-copy-toast-text">Скопировано</span>
             <span className="game-result-copy-toast-check" aria-hidden="true">✓</span>
+          </div>
+        ) : null}
+        {embeddedPage ? (
+          <div
+            className="embedded-page"
+            role="dialog"
+            aria-modal="true"
+            aria-label={embeddedPage.title}
+          >
+            <section className="embedded-page-inner">
+              <div className="embedded-page-frame-wrap">
+                {embeddedPage.isLoading ? (
+                  <div className="embedded-page-loading" role="status" aria-live="polite">
+                    Загружаем страницу…
+                  </div>
+                ) : (
+                  <iframe
+                    key={embeddedPage.sessionKey}
+                    srcDoc={embeddedPage.srcDoc}
+                    title={embeddedPage.title}
+                    className="embedded-page-frame"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts"
+                  />
+                )}
+              </div>
+            </section>
           </div>
         ) : null}
       </div>

@@ -72,11 +72,12 @@ async function upsertUser(executor, userInfo = {}) {
         language_code,
         start_param,
         referral_code,
+        has_seen_game_controls_guide,
         utm_slug,
         updated_at,
         last_seen_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, NOW(), NOW())
       ON CONFLICT (external_id)
       DO UPDATE SET
         username = EXCLUDED.username,
@@ -385,6 +386,22 @@ export async function getReferralData(userId, client = null) {
     referralLink: buildReferralLink(user.referral_code || ""),
     invitedReferralIds,
   };
+}
+
+export async function markGameControlsGuideSeen(userId, client = null) {
+  const executor = client || { query };
+  const result = await executor.query(
+    `
+      UPDATE app_users
+      SET has_seen_game_controls_guide = TRUE,
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING has_seen_game_controls_guide
+    `,
+    [userId],
+  );
+
+  return Boolean(result.rows[0]?.has_seen_game_controls_guide);
 }
 
 export async function registerUtmVisit(userId, userInfo = {}, options = {}, client = null) {

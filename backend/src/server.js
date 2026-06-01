@@ -48,6 +48,7 @@ import {
   getOrCreateUser,
   getReferralData,
   grantUserAttempts,
+  markGameControlsGuideSeen,
   setUserSubscriptionStatus,
 } from "./userStore.js";
 
@@ -145,6 +146,7 @@ app.post("/api/game/open", async (req, res, next) => {
     res.json({
       ok: true,
       projectFinished: projectState.projectFinished,
+      shouldShowControlsGuide: !Boolean(user.has_seen_game_controls_guide),
       user: {
         id: Number(user.id),
         externalId: user.external_id,
@@ -152,6 +154,20 @@ app.post("/api/game/open", async (req, res, next) => {
       },
       attempts,
       referral,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/game/controls-guide/seen", async (req, res, next) => {
+  try {
+    const userInfo = resolveMiniAppUser(req);
+    const user = await getOrCreateUser(userInfo);
+    await markGameControlsGuideSeen(user.id);
+
+    res.json({
+      ok: true,
     });
   } catch (error) {
     next(error);

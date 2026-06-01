@@ -1,6 +1,7 @@
-import { memo, startTransition, useEffect, useState } from "react"
+import { memo, startTransition, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
+import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
 import { isTelegramMiniApp } from "./telegram.js"
 
@@ -148,6 +149,7 @@ function buildSupportLink(contact) {
 }
 
 const PersistentGameScreen = memo(GameScreen)
+const IMPORTANT_INFO_TITLE = "Условия акции"
 
 function openExternalLink(url) {
   const normalizedUrl = String(url || "").trim()
@@ -183,8 +185,11 @@ function App() {
   const [prefetchedGameBootstrap, setPrefetchedGameBootstrap] = useState(null)
   const [prefetchedGameAssetVersion, setPrefetchedGameAssetVersion] = useState(0)
   const [isGameBootstrapPreloading, setIsGameBootstrapPreloading] = useState(!INTRO_DISABLED)
+  const [shouldShowControlsGuide, setShouldShowControlsGuide] = useState(false)
   const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
+  const [embeddedPage, setEmbeddedPage] = useState(null)
+  const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
 
   useEffect(() => {
@@ -210,6 +215,7 @@ function App() {
         }
 
         setIsProjectFinished(projectFinished)
+        setShouldShowControlsGuide(Boolean(response?.shouldShowControlsGuide))
 
         if (projectFinished || isTelegramHost) {
           return
@@ -245,6 +251,7 @@ function App() {
         console.warn("Game open tracking failed", error)
         setIsSubscribedAutostartPending(false)
         setIsInitialSubscriptionStatusPending(false)
+        setShouldShowControlsGuide(false)
         setIsProjectFinished(false)
       }
     }
@@ -444,6 +451,83 @@ function App() {
     setIsProjectFinishedPrizesOpen(false)
   }
 
+  const handleOpenEmbeddedPage = (title, url, source) => {
+    const normalizedUrl = String(url || "").trim()
+    const normalizedTitle = String(title || "").trim() || IMPORTANT_INFO_TITLE
+
+    if (!normalizedUrl) {
+      return
+    }
+
+    void trackGameEvent("overlay_opened", {
+      overlayId: "embedded_page",
+      source,
+      url: normalizedUrl,
+    })
+
+    const requestId = embeddedPageRequestRef.current + 1
+
+    embeddedPageRequestRef.current = requestId
+
+    setEmbeddedPage({
+      title: normalizedTitle,
+      url: normalizedUrl,
+      srcDoc: "",
+      isLoading: true,
+      sessionKey: requestId,
+    })
+
+    void loadEmbeddedPageDocument(normalizedUrl, normalizedTitle).then((srcDoc) => {
+      if (embeddedPageRequestRef.current !== requestId) {
+        return
+      }
+
+      setEmbeddedPage((currentPage) => {
+        if (!currentPage || currentPage.url !== normalizedUrl) {
+          return currentPage
+        }
+
+        return {
+          ...currentPage,
+          srcDoc,
+          isLoading: false,
+        }
+      })
+    })
+  }
+
+  const handleCloseEmbeddedPage = () => {
+    embeddedPageRequestRef.current += 1
+
+    if (embeddedPage?.url) {
+      void trackGameEvent("overlay_closed", {
+        overlayId: "embedded_page",
+        url: embeddedPage.url,
+      })
+    }
+
+    setEmbeddedPage(null)
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined
+    }
+
+    const handleMessage = (event) => {
+      if (event.data?.type !== EMBEDDED_PAGE_CLOSE_EVENT) {
+        return
+      }
+
+      handleCloseEmbeddedPage()
+    }
+
+    window.addEventListener("message", handleMessage)
+    return () => {
+      window.removeEventListener("message", handleMessage)
+    }
+  })
+
   const handleProjectFinishedBannerAction = (actionId) => {
     if (actionId === "question") {
       const supportLink = buildSupportLink(SUPPORT_CONTACT)
@@ -461,12 +545,7 @@ function App() {
     }
 
     if (actionId === "exclamation") {
-      void trackGameEvent("external_link_opened", {
-        actionId,
-        url: IMPORTANT_INFO_URL,
-        source: "project_finished",
-      })
-      openExternalLink(IMPORTANT_INFO_URL)
+      handleOpenEmbeddedPage(IMPORTANT_INFO_TITLE, IMPORTANT_INFO_URL, "project_finished")
       return
     }
 
@@ -499,6 +578,7 @@ function App() {
           bootstrapAssetVersion={prefetchedGameAssetVersion}
           deferBootstrap={isGameBootstrapPreloading}
           allowBootstrapFetch={isGameActive}
+          shouldShowControlsGuide={shouldShowControlsGuide}
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
@@ -610,6 +690,32 @@ function App() {
                     >
                       Закрыть
                     </button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+            {embeddedPage ? (
+              <div
+                className="embedded-page"
+                role="dialog"
+                aria-modal="true"
+                aria-label={embeddedPage.title}
+              >
+                <section className="embedded-page-inner">
+                  <div className="embedded-page-frame-wrap">
+                    {embeddedPage.isLoading ? (
+                      <div className="embedded-page-loading" role="status" aria-live="polite">
+                        Загружаем страницу…
+                      </div>
+                    ) : (
+                      <iframe
+                        key={embeddedPage.sessionKey}
+                        srcDoc={embeddedPage.srcDoc}
+                        title={embeddedPage.title}
+                        className="embedded-page-frame"
+                        sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts"
+                      />
+                    )}
                   </div>
                 </section>
               </div>
