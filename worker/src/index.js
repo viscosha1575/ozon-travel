@@ -1,6 +1,6 @@
 import { Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
-import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "../../shared/workerJobs.js";
+import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "./workerJobs.js";
 import {
   DAILY_ATTEMPT_GRANT_CRON,
   DAILY_ATTEMPT_GRANT_ENABLED,

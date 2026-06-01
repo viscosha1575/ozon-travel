@@ -1,7 +1,7 @@
 import { Queue, QueueEvents } from "bullmq";
 import IORedis from "ioredis";
 
-import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "../../shared/workerJobs.js";
+import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "./workerJobs.js";
 
 const REDIS_URL = String(process.env.REDIS_URL || "redis://redis:6379").trim();
 const TEST_PUSH_WAIT_TIMEOUT_MS = Math.max(
