@@ -476,6 +476,16 @@ function App() {
     openExternalLink(SUBSCRIPTION_CHANNEL_URL)
   }
 
+  const handleDevShowProjectFinished = () => {
+    embeddedPageRequestRef.current += 1
+    setEmbeddedPage(null)
+    setIsProjectFinishedPrizesOpen(false)
+    setProjectFinishedMyPrizes([])
+    setIsGameLaunchPending(false)
+    setIsGameActive(false)
+    setIsProjectFinished(true)
+  }
+
   const handleCloseProjectFinishedPrizes = () => {
     setIsProjectFinishedPrizesOpen(false)
   }
@@ -608,6 +618,7 @@ function App() {
           deferBootstrap={isGameBootstrapPreloading}
           allowBootstrapFetch={isGameActive}
           shouldShowControlsGuide={shouldShowControlsGuide}
+          onDevShowProjectFinished={handleDevShowProjectFinished}
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>

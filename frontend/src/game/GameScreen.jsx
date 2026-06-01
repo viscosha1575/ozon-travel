@@ -516,6 +516,7 @@ export default function GameScreen({
   deferBootstrap = false,
   allowBootstrapFetch = false,
   shouldShowControlsGuide = false,
+  onDevShowProjectFinished = null,
 }) {
   const cachedBootstrap = readBootstrapCache()
   const initialRouletteItems = normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0)
@@ -1414,6 +1415,14 @@ export default function GameScreen({
     }
   }
 
+  const handleDevShowProjectFinished = () => {
+    if (typeof onDevShowProjectFinished === "function") {
+      onDevShowProjectFinished()
+    }
+
+    setIsDevWidgetOpen(false)
+  }
+
   useEffect(() => {
     isMountedRef.current = true
     let frameId = 0
@@ -1732,6 +1741,13 @@ export default function GameScreen({
                 onClick={handleDevGrantAttempts}
               >
                 +10 попыток
+              </button>
+              <button
+                type="button"
+                className="game-dev-widget-action"
+                onClick={handleDevShowProjectFinished}
+              >
+                → Финиш
               </button>
             </div>
           ) : null}
