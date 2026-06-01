@@ -19,6 +19,49 @@ function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeRouletteDescriptions(value) {
+  return Array.from(
+    new Set(
+      Array.isArray(value)
+        ? value.map((item) => String(item || "").trim()).filter(Boolean)
+        : [],
+    ),
+  );
+}
+
+function collectPrizeDescriptionOptions(prize = {}) {
+  const variants = normalizeRouletteDescriptions(prize.rouletteDescriptions);
+  const fallbackDescription = String(prize.rouletteDescription || "").trim();
+
+  if (fallbackDescription && !variants.includes(fallbackDescription)) {
+    variants.unshift(fallbackDescription);
+  }
+
+  return variants;
+}
+
+function collectEffectivePrizeDescriptions(prize = {}) {
+  const variants = normalizeRouletteDescriptions(prize.rouletteDescriptions);
+
+  if (variants.length) {
+    return variants;
+  }
+
+  const fallbackDescription = String(prize.rouletteDescription || "").trim();
+
+  return fallbackDescription ? [fallbackDescription] : [];
+}
+
+function pickRandomItem(items = []) {
+  if (!Array.isArray(items) || !items.length) {
+    return "";
+  }
+
+  const index = Math.floor(Math.random() * items.length);
+
+  return items[index] || items[0] || "";
+}
+
 function parseChanceWeight(value) {
   const normalized = String(value || "").trim().replace(",", ".").replace(/x$/i, "");
   const parsed = Number(normalized);
@@ -46,6 +89,20 @@ function formatDateLabel(value) {
     month: "2-digit",
     year: "2-digit",
   })}`;
+}
+
+function formatChanceValue(weight) {
+  const parsedWeight = Number(weight);
+
+  if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+    return "1x";
+  }
+
+  const normalizedWeight = Number.isInteger(parsedWeight)
+    ? String(parsedWeight)
+    : String(Number(parsedWeight.toFixed(3)));
+
+  return `${normalizedWeight}x`;
 }
 
 function getTodayValue() {
@@ -134,6 +191,8 @@ function requiresPromoCodePool(prize) {
 }
 
 function mapPrizeRow(row) {
+  const rouletteDescriptions = normalizeRouletteDescriptions(row.roulette_descriptions);
+
   return {
     id: Number(row.id),
     title: row.title,
@@ -160,6 +219,7 @@ function mapPrizeRow(row) {
     rouletteImage: normalizeStoredImage(row.roulette_image),
     myPrizeText: row.my_prize_text,
     rouletteDescription: row.roulette_description,
+    rouletteDescriptions,
     availablePromoCodesCount: Number(row.available_promo_codes_count || 0),
     unavailablePromoCodesCount: Number(row.unavailable_promo_codes_count || 0),
     claimedPromoCodesCount: Number(row.claimed_promo_codes_count || 0),
@@ -193,6 +253,7 @@ async function getAllPrizes(client = null) {
       roulette_image,
       my_prize_text,
       roulette_description,
+      roulette_descriptions,
       COALESCE(pool.available_promo_codes_count, 0) AS available_promo_codes_count,
       COALESCE(pool.unavailable_promo_codes_count, 0) AS unavailable_promo_codes_count,
       COALESCE(pool.claimed_promo_codes_count, 0) AS claimed_promo_codes_count,
@@ -224,8 +285,16 @@ export async function listPrizes(payload = {}) {
   const search = normalizeSearch(payload.search);
   const categoryFilter = String(payload.category || "").trim();
   const promoCodeTypeFilter = String(payload.promoCodeType || "").trim();
-  let items = await getAllPrizes();
+  const allItems = await getAllPrizes();
+  let items = allItems;
   const projectState = await getProjectState();
+  const nonPrizeDescriptionOptions = Array.from(
+    new Set(
+      allItems
+        .filter((item) => item.type === "Не приз")
+        .flatMap((item) => collectPrizeDescriptionOptions(item)),
+    ),
+  );
 
   if (search) {
     items = items.filter((item) => {
@@ -236,7 +305,7 @@ export async function listPrizes(payload = {}) {
         item.promoCodeType,
         item.promoCodeValue,
         item.myPrizeText,
-        item.rouletteDescription,
+        ...collectPrizeDescriptionOptions(item),
       ].join(" ").toLowerCase();
 
       return haystack.includes(search);
@@ -255,6 +324,7 @@ export async function listPrizes(payload = {}) {
 
   return {
     items,
+    nonPrizeDescriptionOptions,
     projectFinished: projectState.projectFinished,
     summary: {
       totalPrizesCount: items.length,
@@ -286,6 +356,7 @@ function validatePrizePayload(payload = {}) {
   const rouletteImage = payload.rouletteImage ?? null;
   const myPrizeText = String(payload.myPrizeText || "").trim();
   const rouletteDescription = String(payload.rouletteDescription || "").trim();
+  const rouletteDescriptions = normalizeRouletteDescriptions(payload.rouletteDescriptions);
 
   if (!title) {
     throw new Error("Prize title is required");
@@ -305,6 +376,10 @@ function validatePrizePayload(payload = {}) {
 
   if (hasUserLimit && !userLimitCount) {
     throw new Error("Prize user limit count is required");
+  }
+
+  if (!rouletteDescription && !rouletteDescriptions.length) {
+    throw new Error("Prize roulette description is required");
   }
 
   return {
@@ -327,6 +402,7 @@ function validatePrizePayload(payload = {}) {
     rouletteImage,
     myPrizeText: type === "Не приз" ? title : myPrizeText,
     rouletteDescription,
+    rouletteDescriptions: type === "Не приз" ? rouletteDescriptions : [],
   };
 }
 
@@ -442,10 +518,11 @@ export async function createPrize(payload = {}) {
             roulette_image,
             my_prize_text,
             roulette_description,
+            roulette_descriptions,
             updated_at
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22::jsonb, NOW()
           )
         `,
         [
@@ -470,6 +547,7 @@ export async function createPrize(payload = {}) {
           nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
           nextPrize.myPrizeText,
           nextPrize.rouletteDescription,
+          JSON.stringify(nextPrize.rouletteDescriptions),
         ],
       );
 
@@ -569,6 +647,7 @@ export async function updatePrize(payload = {}) {
             roulette_image = $19::jsonb,
             my_prize_text = $20,
             roulette_description = $21,
+            roulette_descriptions = $22::jsonb,
             updated_at = NOW()
           WHERE id = $1
         `,
@@ -594,6 +673,7 @@ export async function updatePrize(payload = {}) {
           nextPrize.rouletteImage ? JSON.stringify(nextPrize.rouletteImage) : null,
           nextPrize.myPrizeText,
           nextPrize.rouletteDescription,
+          JSON.stringify(nextPrize.rouletteDescriptions),
         ],
       );
     });
@@ -1243,6 +1323,61 @@ function buildFrontendPrize(prize) {
   };
 }
 
+function buildMergedNonPrize(prizes = [], { randomizeDescription = false } = {}) {
+  const nonPrizes = prizes.filter((item) => item.type === "Не приз");
+
+  if (!nonPrizes.length) {
+    return null;
+  }
+
+  const basePrize = nonPrizes[0];
+  const rouletteDescriptions = Array.from(
+    new Set(nonPrizes.flatMap((item) => collectEffectivePrizeDescriptions(item))),
+  );
+  const fallbackDescription = String(basePrize.rouletteDescription || "").trim();
+  const totalChanceWeight = nonPrizes.reduce((sum, item) => sum + parseChanceWeight(item.chanceValue), 0);
+  const description = randomizeDescription
+    ? pickRandomItem(rouletteDescriptions) || fallbackDescription
+    : fallbackDescription || rouletteDescriptions[0] || "";
+
+  return {
+    ...basePrize,
+    chanceValue: totalChanceWeight > 0 ? formatChanceValue(totalChanceWeight) : basePrize.chanceValue,
+    rouletteDescription: description,
+    rouletteDescriptions,
+  };
+}
+
+function mergeNonPrizePositions(prizes = [], options = {}) {
+  if (!Array.isArray(prizes) || !prizes.length) {
+    return [];
+  }
+
+  const mergedNonPrize = buildMergedNonPrize(prizes, options);
+
+  if (!mergedNonPrize) {
+    return prizes.slice();
+  }
+
+  const result = [];
+  let insertedNonPrize = false;
+
+  prizes.forEach((item) => {
+    if (item.type === "Не приз") {
+      if (!insertedNonPrize) {
+        result.push(mergedNonPrize);
+        insertedNonPrize = true;
+      }
+
+      return;
+    }
+
+    result.push(item);
+  });
+
+  return result;
+}
+
 function getRouletteTypeKey(prize) {
   return [
     String(prize?.type || "").trim(),
@@ -1318,7 +1453,9 @@ export async function getGameBootstrap(userInfo = {}) {
   const projectState = await getProjectState();
   const todayValue = getTodayValue();
   const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
-  const orderedRoulettePrizes = arrangeRoulettePrizes(activePrizes.length ? activePrizes : prizes);
+  const prizePool = activePrizes.length ? activePrizes : prizes;
+  const mergedPrizePool = mergeNonPrizePositions(prizePool, { randomizeDescription: true });
+  const orderedRoulettePrizes = arrangeRoulettePrizes(mergedPrizePool);
   const myPrizes = await listAwardedPrizesForUser(user.id);
   const referral = await getReferralData(user.id);
 
@@ -1326,7 +1463,7 @@ export async function getGameBootstrap(userInfo = {}) {
     source: "backend",
     sessionId: userInfo.sessionId,
     details: {
-      rouletteItemsCount: (activePrizes.length ? activePrizes : prizes).length,
+      rouletteItemsCount: mergedPrizePool.length,
       myPrizesCount: myPrizes.length,
       availableAttempts: attempts.availableAttempts,
     },
@@ -1357,7 +1494,9 @@ export async function spinPrize(userInfo = {}) {
     const prizes = await getAllPrizes(client);
     const todayValue = getTodayValue();
     const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
-    const prizePool = activePrizes.length ? activePrizes : prizes;
+    const prizePool = mergeNonPrizePositions(activePrizes.length ? activePrizes : prizes, {
+      randomizeDescription: true,
+    });
     const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);
     const eligiblePrizes = prizePool.filter((item) =>
       isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId) && isPrizeAvailableByPromoPool(item)

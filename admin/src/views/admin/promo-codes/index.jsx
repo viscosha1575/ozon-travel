@@ -203,6 +203,16 @@ function formatPromoReleaseIntervalHint(codesCount, startValue, endValue) {
   return `Каждый следующий промокод будет доступен каждые ${parts.join(" ")}.`;
 }
 
+function normalizeRouletteDescriptions(value) {
+  return Array.from(
+    new Set(
+      Array.isArray(value)
+        ? value.map((item) => String(item || "").trim()).filter(Boolean)
+        : [],
+    ),
+  );
+}
+
 function ToggleButtonGroup({
   value,
   onChange,
@@ -277,6 +287,7 @@ function FormSection({
 
 const EMPTY_RESPONSE = {
   items: [],
+  nonPrizeDescriptionOptions: [],
   summary: {
     totalPrizesCount: 0,
     totalUnitsCount: 0,
@@ -322,6 +333,7 @@ function createInitialPrizeForm() {
     rouletteImage: null,
     myPrizeText: "",
     rouletteDescription: "",
+    rouletteDescriptions: [],
   };
 }
 
@@ -350,6 +362,7 @@ function buildPrizeForm(item = {}) {
     rouletteImage: item.rouletteImage || null,
     myPrizeText: item.myPrizeText || "",
     rouletteDescription: item.rouletteDescription || "",
+    rouletteDescriptions: normalizeRouletteDescriptions(item.rouletteDescriptions),
   };
 }
 
@@ -380,6 +393,7 @@ function validatePrizeForm(form = {}) {
   const hasPromoCodes = Array.isArray(form.promoCodes) && form.promoCodes.length > 0;
   const hasRouletteImage = Boolean(form.rouletteImage);
   const rouletteDescription = String(form.rouletteDescription || "").trim();
+  const rouletteDescriptions = normalizeRouletteDescriptions(form.rouletteDescriptions);
 
   if (!title) {
     markField("title", "main", "Заполните имя позиции.");
@@ -415,7 +429,7 @@ function validatePrizeForm(form = {}) {
     markField("rouletteImage", type === "Не приз" ? "nonPrize" : "content", "Загрузите изображение.");
   }
 
-  if (!rouletteDescription) {
+  if (!rouletteDescription && !rouletteDescriptions.length) {
     markField("rouletteDescription", type === "Не приз" ? "nonPrize" : "content", "Добавьте описание.");
   }
 
@@ -527,6 +541,9 @@ export default function PromoCodesPage() {
     : promoCodesScheduleTab === "waiting"
       ? promoCodesScheduleResponse.waitingItems
       : promoCodesScheduleResponse.claimedItems;
+  const nonPrizeDescriptionOptions = Array.isArray(response.nonPrizeDescriptionOptions)
+    ? response.nonPrizeDescriptionOptions
+    : [];
 
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
@@ -561,6 +578,9 @@ export default function PromoCodesPage() {
         if (!cancelled) {
           setResponse({
             items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
+            nonPrizeDescriptionOptions: Array.isArray(nextResponse?.nonPrizeDescriptionOptions)
+              ? nextResponse.nonPrizeDescriptionOptions
+              : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
           });
           setProjectFinished(Boolean(nextResponse?.projectFinished));
@@ -609,6 +629,9 @@ export default function PromoCodesPage() {
 
     setResponse({
       items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
+      nonPrizeDescriptionOptions: Array.isArray(nextResponse?.nonPrizeDescriptionOptions)
+        ? nextResponse.nonPrizeDescriptionOptions
+        : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
     });
     setProjectFinished(Boolean(nextResponse?.projectFinished));
@@ -684,6 +707,7 @@ export default function PromoCodesPage() {
         rouletteImage: form.rouletteImage,
         myPrizeText: isNonPrize ? form.title : form.myPrizeText,
         rouletteDescription: form.rouletteDescription,
+        rouletteDescriptions: isNonPrize ? normalizeRouletteDescriptions(form.rouletteDescriptions) : [],
       });
 
       await reloadPrizes();
@@ -1962,7 +1986,7 @@ export default function PromoCodesPage() {
 
                 <FormControl isInvalid={Boolean(formValidation.fields.rouletteDescription)}>
                   <FormLabel color={textColor} fontSize="sm" fontWeight="700">
-                    Текстовое описание
+                    Базовое описание
                   </FormLabel>
                   <Textarea
                     minH="220px"
@@ -1973,9 +1997,60 @@ export default function PromoCodesPage() {
                     placeholder="Описание позиции"
                   />
                   <Text mt="8px" color={textColorSecondary} fontSize="xs">
-                    Переносы строки сохраняются. Используйте Enter, чтобы разбить описание на несколько строк.
+                    Если массив ниже не выбран, в рулетке будет использоваться этот текст. Переносы строки сохраняются.
                   </Text>
                   <FormErrorMessage>{formValidation.fields.rouletteDescription}</FormErrorMessage>
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                    Описания для массива
+                  </FormLabel>
+                  <Stack spacing="10px">
+                    {nonPrizeDescriptionOptions.length ? nonPrizeDescriptionOptions.map((description) => {
+                      const isChecked = form.rouletteDescriptions.includes(description);
+
+                      return (
+                        <Box
+                          key={description}
+                          border="1px solid"
+                          borderColor={isChecked ? "brand.500" : borderColor}
+                          borderRadius="18px"
+                          px="16px"
+                          py="14px"
+                        >
+                          <Checkbox
+                            colorScheme="brandScheme"
+                            isChecked={isChecked}
+                            onChange={(event) => setForm((current) => {
+                              const currentValues = normalizeRouletteDescriptions(current.rouletteDescriptions);
+                              const nextValues = event.target.checked
+                                ? [...currentValues, description]
+                                : currentValues.filter((item) => item !== description);
+
+                              return {
+                                ...current,
+                                rouletteDescriptions: normalizeRouletteDescriptions(nextValues),
+                              };
+                            })}
+                          >
+                            <Text color={textColor} fontSize="sm" whiteSpace="pre-wrap">
+                              {description}
+                            </Text>
+                          </Checkbox>
+                        </Box>
+                      );
+                    }) : (
+                      <Box border="1px dashed" borderColor={borderColor} borderRadius="18px" px="16px" py="14px">
+                        <Text color={textColorSecondary} fontSize="sm">
+                          Пока нет сохранённых описаний для выбора. Можно оставить только базовое описание и сохранить неприз без массива.
+                        </Text>
+                      </Box>
+                    )}
+                  </Stack>
+                  <Text mt="8px" color={textColorSecondary} fontSize="xs">
+                    Если выбрать несколько описаний, в bootstrap и при выпадении неприза будет отдаваться случайный текст из этого массива.
+                  </Text>
                 </FormControl>
 
                 <Flex justify="flex-end" gap="12px" wrap="wrap">

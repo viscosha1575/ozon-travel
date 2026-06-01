@@ -58,10 +58,16 @@ async function ensureSchema() {
       roulette_image JSONB NULL,
       my_prize_text TEXT NOT NULL DEFAULT '',
       roulette_description TEXT NOT NULL DEFAULT '',
+      roulette_descriptions JSONB NOT NULL DEFAULT '[]'::jsonb,
       roulette_description_2 TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await query(`
+    ALTER TABLE prize_positions
+    ADD COLUMN IF NOT EXISTS roulette_descriptions JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 
   await query(`
@@ -367,10 +373,11 @@ async function seedPrizesIfEmpty() {
           code_release_end,
           roulette_image,
           my_prize_text,
-          roulette_description
+          roulette_description,
+          roulette_descriptions
         )
         VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21
+          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22::jsonb
         )
       `,
       [
@@ -395,6 +402,7 @@ async function seedPrizesIfEmpty() {
         item.rouletteImage ? JSON.stringify(item.rouletteImage) : null,
         item.myPrizeText,
         item.rouletteDescription,
+        JSON.stringify(item.rouletteDescriptions || []),
       ],
     );
   }
