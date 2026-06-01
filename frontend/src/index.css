@@ -923,7 +923,7 @@ body {
   box-sizing: border-box;
   padding:
     calc(18px + var(--app-safe-top))
-    40px
+    30px
     calc(23px + var(--app-safe-bottom));
   animation: game-page-rise-in 460ms var(--game-surface-easing) both;
 }
@@ -943,6 +943,11 @@ body {
   line-height: 1.05;
   text-align: center;
   letter-spacing: 0.3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .game-prizes-list {
@@ -1421,9 +1426,9 @@ body {
 @media (max-height: 760px) {
   .game-prizes-page-inner {
     padding-top: calc(14px + var(--app-safe-top));
-    padding-right: 40px;
+    padding-right: 30px;
     padding-bottom: calc(19px + var(--app-safe-bottom));
-    padding-left: 40px;
+    padding-left: 30px;
   }
 
   .game-prizes-list {
