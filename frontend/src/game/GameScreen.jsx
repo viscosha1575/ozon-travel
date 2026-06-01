@@ -28,7 +28,8 @@ const TRACK_TAIL_BUFFER = 9
 const RESULT_REVEAL_DELAY = 72
 const RESULT_BAG_ANIMATION_DURATION = 1400
 const RESULT_BAG_ANIMATION_EASING = "cubic-bezier(0.18, 0.82, 0.22, 1)"
-const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.24
+const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.3
+const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
 const IDLE_SPIN_CYCLE_DURATION = 18000
 const RESULT_COPY_TOAST_DURATION = 2200
@@ -584,9 +585,19 @@ export default function GameScreen({
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
-  const effectiveResultBagPreviewScale = resultPrize?.type === "Не приз"
-    ? resultBagPreviewScale * NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR
-    : resultBagPreviewScale
+  const isNonPrizeResult = (resultPrize?.type || resultBag?.type || "") === "Не приз"
+  const resultBagFinalScaleMultiplier = isNonPrizeResult
+    ? NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER
+    : RESULT_BAG_FINAL_SCALE_MULTIPLIER
+  const effectiveResultBagPreviewScale = (
+    resultEntrySource === "collection"
+      ? resultBagPreviewScale * resultBagFinalScaleMultiplier
+      : resultBagPreviewScale
+  ) * (
+    isNonPrizeResult
+      ? NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR
+      : 1
+  )
 
   const resetResultState = useCallback(() => {
     cancelAnimationFrame(resultAnimationFrameRef.current)
@@ -1627,7 +1638,10 @@ export default function GameScreen({
       const deltaX = roundToDevicePixel(targetPoint.x - originPoint.x)
       const deltaY = roundToDevicePixel(targetPoint.y - originPoint.y)
       const uniformScale = targetRect.width / Math.max(flightState.originRect.width, 1)
-      const finalScale = uniformScale * RESULT_BAG_FINAL_SCALE_MULTIPLIER
+      const flightScaleMultiplier = (resultPrize?.type || resultBag?.type || "") === "Не приз"
+        ? NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER
+        : RESULT_BAG_FINAL_SCALE_MULTIPLIER
+      const finalScale = uniformScale * flightScaleMultiplier
 
       resultBagElement.style.transition = "none"
       resultBagElement.style.top = `${flightState.originRect.top}px`
@@ -1647,7 +1661,7 @@ export default function GameScreen({
           resultBagElement.style.left = `${targetRect.left}px`
           resultBagElement.style.width = `${targetRect.width}px`
           resultBagElement.style.height = `${targetRect.height}px`
-          resultBagElement.style.transform = `translate3d(0, 0, 0) scale(${RESULT_BAG_FINAL_SCALE_MULTIPLIER})`
+          resultBagElement.style.transform = `translate3d(0, 0, 0) scale(${flightScaleMultiplier})`
           setResultRevealPhase("sheet-enter")
         }, RESULT_BAG_ANIMATION_DURATION)
       })
@@ -1657,7 +1671,7 @@ export default function GameScreen({
       cancelAnimationFrame(resultAnimationFrameRef.current)
       clearTimeout(resultAnimationTimeoutRef.current)
     }
-  }, [resultBag, resultBagFlight, resultRevealPhase])
+  }, [resultBag, resultBagFlight, resultPrize?.type, resultRevealPhase])
 
   useEffect(() => () => {
     cancelAnimationFrame(resultAnimationFrameRef.current)

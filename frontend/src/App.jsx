@@ -158,7 +158,7 @@ function App() {
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
-  const [isSubscribedAutostartPending, setIsSubscribedAutostartPending] = useState(false)
+  const [isUserSubscribed, setIsUserSubscribed] = useState(null)
   const [isInitialSubscriptionStatusPending, setIsInitialSubscriptionStatusPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
   const [isProjectFinished, setIsProjectFinished] = useState(null)
@@ -210,10 +210,7 @@ function App() {
             return
           }
 
-          if (Boolean(subscriptionStatus?.user?.subscribedToChannel)) {
-            setIsSubscribedAutostartPending(true)
-            setIsGameLaunchPending(true)
-          }
+          setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
         } catch (error) {
           if (!isCancelled) {
             console.warn("Initial subscription status refresh failed", error)
@@ -229,7 +226,7 @@ function App() {
         }
 
         console.warn("Game open tracking failed", error)
-        setIsSubscribedAutostartPending(false)
+        setIsUserSubscribed(false)
         setIsInitialSubscriptionStatusPending(false)
         setShouldShowControlsGuide(false)
         setIsProjectFinished(false)
@@ -326,7 +323,6 @@ function App() {
 
     startTransition(() => {
       setIsGameActive(true)
-      setIsSubscribedAutostartPending(false)
     })
   }, [isGameLaunchPending, isGameSceneReady])
 
@@ -377,6 +373,11 @@ function App() {
         return
       }
 
+      if (isUserSubscribed) {
+        handleStartGame()
+        return
+      }
+
       setActiveScreen(1)
       return
     }
@@ -413,10 +414,17 @@ function App() {
 
     try {
       const subscriptionStatus = await getJson("/game/subscription-status")
+      const isSubscribed = Boolean(subscriptionStatus?.user?.subscribedToChannel)
 
-      startTransition(() => {
-        setActiveScreen(Boolean(subscriptionStatus?.user?.subscribedToChannel) ? 3 : 2)
-      })
+      setIsUserSubscribed(isSubscribed)
+
+      if (isSubscribed) {
+        handleStartGame()
+      } else {
+        startTransition(() => {
+          setActiveScreen(2)
+        })
+      }
     } catch (error) {
       console.warn("Subscription status refresh failed", error)
     } finally {
@@ -563,7 +571,7 @@ function App() {
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
-        {!isProjectStateResolved || (isSubscribedAutostartPending && !isGameActive) ? (
+        {!isProjectStateResolved ? (
           <div className="project-finished-loading" aria-hidden="true" />
         ) : isProjectFinished ? (
           <section className="project-finished-screen" aria-label="Проект завершен">
