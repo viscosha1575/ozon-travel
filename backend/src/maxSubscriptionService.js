@@ -96,6 +96,11 @@ async function checkMaxChannelSubscription(platformUserId) {
 export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackValue = false) {
   const platform = String(userInfo?.platform || "").trim().toLowerCase();
   const platformUserId = String(userInfo?.platformUserId || "").trim();
+  const externalId = String(userInfo?.externalId || "").trim();
+
+  if (platformUserId === "local-demo-user" || externalId === "local-demo-user") {
+    return true;
+  }
 
   if (platform !== "max" || !platformUserId || platformUserId === "local-demo-user") {
     return Boolean(fallbackValue);

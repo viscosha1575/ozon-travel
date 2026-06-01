@@ -1207,20 +1207,6 @@ body {
   animation: game-result-bag-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.game-result.is-collection-entering .game-result-bag-frame {
-  width: min(
-    calc(100vw - 8px),
-    var(--game-carousel-visual-max-width)
-  );
-  max-width: min(
-    calc(100vw - 8px),
-    var(--game-carousel-visual-max-width)
-  );
-  height: auto;
-  max-height: none;
-  aspect-ratio: 272 / 292;
-}
-
 .game-result-bag-visual.is-hidden {
   opacity: 0;
 }
