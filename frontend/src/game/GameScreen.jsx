@@ -503,6 +503,7 @@ export default function GameScreen({
   const stepRef = useRef(0)
   const animationFrameRef = useRef(0)
   const idleAnimationFrameRef = useRef(0)
+  const idleStartRetryFrameRef = useRef(0)
   const transitionResetFrameRef = useRef(0)
   const spinCompletionTimeoutRef = useRef(0)
   const idleSpinTimeoutRef = useRef(0)
@@ -662,8 +663,10 @@ export default function GameScreen({
 
   const clearIdleSpin = () => {
     cancelAnimationFrame(idleAnimationFrameRef.current)
+    cancelAnimationFrame(idleStartRetryFrameRef.current)
     cancelAnimationFrame(transitionResetFrameRef.current)
     clearTimeout(idleSpinTimeoutRef.current)
+    idleStartRetryFrameRef.current = 0
     idleSpinTimeoutRef.current = 0
     isIdleSpinActiveRef.current = false
   }
@@ -684,6 +687,19 @@ export default function GameScreen({
     return currentTranslate
   }
 
+  const scheduleIdleSpinRetry = () => {
+    cancelAnimationFrame(idleStartRetryFrameRef.current)
+    idleStartRetryFrameRef.current = requestAnimationFrame(() => {
+      idleStartRetryFrameRef.current = 0
+
+      if (!isMountedRef.current || isSpinActiveRef.current || resultBag || !activeRouletteItems.length) {
+        return
+      }
+
+      startIdleSpin()
+    })
+  }
+
   const startIdleSpin = () => {
     if (isSpinActiveRef.current || resultBag || !activeRouletteItems.length) {
       return
@@ -691,7 +707,8 @@ export default function GameScreen({
 
     const step = measureStep()
 
-    if (!step) {
+    if (!step || !carouselMotionRef.current || !patternMotionRef.current || !slotRef.current) {
+      scheduleIdleSpinRetry()
       return
     }
 
@@ -707,6 +724,9 @@ export default function GameScreen({
     const runIdleCycle = () => {
       idleAnimationFrameRef.current = requestAnimationFrame(() => {
         if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+          if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+            scheduleIdleSpinRetry()
+          }
           return
         }
 
@@ -716,6 +736,9 @@ export default function GameScreen({
 
         idleAnimationFrameRef.current = requestAnimationFrame(() => {
           if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+            if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+              scheduleIdleSpinRetry()
+            }
             return
           }
 
@@ -725,6 +748,9 @@ export default function GameScreen({
 
           idleSpinTimeoutRef.current = window.setTimeout(() => {
             if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
+              if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+                scheduleIdleSpinRetry()
+              }
               return
             }
 
@@ -1445,13 +1471,19 @@ export default function GameScreen({
     }
 
     hasOpenedControlsGuideRef.current = true
-    void trackGameEvent("overlay_opened", {
-      overlayId: "controls-guide",
-    })
-    openOverlay("controls-guide")
-    void postJson("/game/controls-guide/seen", {}).catch((error) => {
-      console.warn("Failed to persist controls guide state", error)
-    })
+    const openTimeoutId = window.setTimeout(() => {
+      void trackGameEvent("overlay_opened", {
+        overlayId: "controls-guide",
+      })
+      openOverlay("controls-guide")
+      void postJson("/game/controls-guide/seen", {}).catch((error) => {
+        console.warn("Failed to persist controls guide state", error)
+      })
+    }, 120)
+
+    return () => {
+      window.clearTimeout(openTimeoutId)
+    }
   }, [
     activeOverlay,
     embeddedPage,
@@ -1946,13 +1978,12 @@ export default function GameScreen({
         ) : null}
         {renderedOverlay === "controls-guide" ? (
           <div
-            className={`game-overlay ${isOverlayClosing ? "is-closing" : "is-opening"}`}
+            className={`game-overlay game-overlay--controls-guide ${isOverlayClosing ? "is-closing" : "is-opening"}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="game-controls-guide-title"
           >
-            <div className="game-overlay-backdrop" />
-            <section className="game-overlay-sheet">
+            <section className="game-overlay-sheet game-overlay-sheet--controls-guide">
               <div className="game-overlay-sheet-inner game-overlay-sheet-inner--controls-guide">
                 <h2 id="game-controls-guide-title" className="game-overlay-title game-overlay-title--controls-guide">
                   Управление
@@ -2146,7 +2177,9 @@ export default function GameScreen({
                   </div>
                 </button>
               )) : (
-                <p className="game-overlay-description">Пока призов нет. Крутите ленту, чтобы получить первый.</p>
+                <p className="game-overlay-description game-prizes-empty-description">
+                  Пока призов нет. Крутите ленту, чтобы получить первый.
+                </p>
               )}
             </div>
             <div className="game-prizes-footer">

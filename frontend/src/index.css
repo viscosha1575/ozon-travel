@@ -692,6 +692,14 @@ body {
   align-items: end;
 }
 
+.game-overlay--controls-guide {
+  pointer-events: none;
+}
+
+.game-overlay--controls-guide .game-overlay-sheet {
+  pointer-events: auto;
+}
+
 .game-overlay.is-closing {
   pointer-events: none;
 }
@@ -730,9 +738,14 @@ body {
 
 .game-overlay-sheet-inner--controls-guide {
   justify-items: stretch;
-  gap: 22px;
+  gap: 11px;
   padding-top: 34px;
   padding-bottom: 30px;
+}
+
+.game-overlay-sheet--controls-guide {
+  transform: translateY(100%);
+  animation: panel-rise-in 1440ms var(--intro-screen-easing) 2ms forwards;
 }
 
 .game-overlay-title {
@@ -810,13 +823,13 @@ body {
 
 .game-controls-guide-list {
   display: grid;
-  gap: 14px;
+  gap: 7px;
   width: 100%;
 }
 
 .game-controls-guide-item {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 46px minmax(0, 1fr);
   align-items: center;
   gap: 14px;
 }
@@ -825,26 +838,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(246, 194, 205, 1) 0%, rgba(245, 204, 214, 1) 100%);
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 6px 18px rgba(154, 154, 154, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .game-controls-guide-icon {
   display: block;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
 .game-controls-guide-text {
   color: #6d7d90;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: var(--font-title);
+  font-size: var(--font-body);
   font-weight: var(--font-weight-regular);
-  line-height: 1.14;
+  line-height: 1.3;
+  letter-spacing: 0.12px;
   text-align: left;
 }
 
@@ -935,6 +951,13 @@ body {
   display: none;
   width: 0;
   height: 0;
+}
+
+.game-prizes-empty-description {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  text-align: center;
 }
 
 .game-prize-card {
