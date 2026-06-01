@@ -4,7 +4,7 @@ import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { getMiniAppInitData, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -177,9 +177,6 @@ const IMPORTANT_INFO_TITLE = "Условия акции"
 
 function App() {
   const isTelegramHost = isTelegramMiniApp()
-  const miniAppInitData = typeof window === "undefined"
-    ? ""
-    : String(window.WebApp?.initData || getMiniAppInitData() || "")
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -755,14 +752,6 @@ function App() {
           </section>
         ) : (
         <div className="split-screen" aria-label="Three-row expanded layout">
-          {currentScreen.id === "intro" ? (
-            <aside className="debug-init-data-overlay" aria-live="polite">
-              <div className="debug-init-data-overlay-label">window.WebApp.initData</div>
-              <div className="debug-init-data-overlay-value">
-                {miniAppInitData || "empty"}
-              </div>
-            </aside>
-          ) : null}
           <div className="background-vectors" aria-hidden="true">
         <svg
           className="background-vector background-vector-left"

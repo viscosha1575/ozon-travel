@@ -102,6 +102,36 @@ function extractMaxInitDataFromLocation() {
   return extractMaxLaunchParamsFromLocation().initData
 }
 
+function findExistingScriptBySrc(src) {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const normalizedSrc = String(src || '').trim()
+
+  if (!normalizedSrc) {
+    return null
+  }
+
+  return [...document.scripts].find((script) => {
+    const currentSrc = String(script.getAttribute('src') || script.src || '').trim()
+
+    if (!currentSrc) {
+      return false
+    }
+
+    if (currentSrc === normalizedSrc) {
+      return true
+    }
+
+    try {
+      return new URL(currentSrc, window.location.href).href === new URL(normalizedSrc, window.location.href).href
+    } catch {
+      return false
+    }
+  }) || null
+}
+
 function loadExternalScript({ id, src, resolveValue, errorMessage, cacheKey }) {
   if (resolveValue()) {
     return Promise.resolve(resolveValue())
@@ -109,9 +139,14 @@ function loadExternalScript({ id, src, resolveValue, errorMessage, cacheKey }) {
 
   if (!cacheKey.current) {
     cacheKey.current = new Promise((resolve, reject) => {
-      const existingScript = document.getElementById(id)
+      const existingScript = document.getElementById(id) || findExistingScriptBySrc(src)
 
       if (existingScript) {
+        if (resolveValue()) {
+          resolve(resolveValue())
+          return
+        }
+
         existingScript.addEventListener('load', () => resolve(resolveValue()), { once: true })
         existingScript.addEventListener('error', () => reject(new Error(errorMessage)), { once: true })
         return
