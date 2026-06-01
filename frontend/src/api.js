@@ -1,6 +1,7 @@
 import {
   getMiniAppHost,
   getMiniAppInitData,
+  getMiniAppUser,
 } from "./telegram.js";
 
 const API_URL = String(
@@ -49,6 +50,7 @@ function buildHeaders(headers = {}) {
   };
   const initData = getMiniAppInitData();
   const miniAppHost = getMiniAppHost();
+  const miniAppUser = getMiniAppUser();
 
   if (initData) {
     nextHeaders["X-Mini-App-Init-Data"] = initData;
@@ -64,6 +66,14 @@ function buildHeaders(headers = {}) {
     if (miniAppHost === "max") {
       nextHeaders["X-Max-Init-Data"] = initData;
     }
+  }
+
+  if (miniAppUser?.platformUserId) {
+    nextHeaders["X-Mini-App-User-Id"] = miniAppUser.platformUserId;
+    nextHeaders["X-Mini-App-Username"] = miniAppUser.username;
+    nextHeaders["X-Mini-App-First-Name"] = miniAppUser.firstName;
+    nextHeaders["X-Mini-App-Last-Name"] = miniAppUser.lastName;
+    nextHeaders["X-Mini-App-Language-Code"] = miniAppUser.languageCode;
   }
 
   nextHeaders["X-Client-Session-Id"] = getClientSessionId();

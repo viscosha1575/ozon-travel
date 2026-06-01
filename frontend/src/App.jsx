@@ -117,19 +117,42 @@ function withAssetVersion(url, assetVersion) {
 function preloadImage(src) {
   return new Promise((resolve) => {
     const image = new Image()
+    let isSettled = false
 
     const finalize = () => {
+      if (isSettled) {
+        return
+      }
+
+      isSettled = true
       image.onload = null
       image.onerror = null
       resolve()
     }
 
-    image.onload = finalize
+    image.onload = () => {
+      if (typeof image.decode === "function") {
+        image.decode()
+          .catch(() => {})
+          .finally(finalize)
+        return
+      }
+
+      finalize()
+    }
     image.onerror = finalize
     image.decoding = "async"
+    image.loading = "eager"
     image.src = src
 
     if (image.complete) {
+      if (typeof image.decode === "function") {
+        image.decode()
+          .catch(() => {})
+          .finally(finalize)
+        return
+      }
+
       finalize()
     }
   })
@@ -250,25 +273,35 @@ function App() {
       return
     }
 
+    const canPreloadRemoteBootstrap = isTelegramHost || isUserSubscribed === true
+
+    if (isGameSceneReady && (!canPreloadRemoteBootstrap || prefetchedGameBootstrap)) {
+      return
+    }
+
     let isCancelled = false
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
-        let bootstrapResponse = null
+        let bootstrapResponse = prefetchedGameBootstrap
         let remoteSceneAssets = []
-        let assetVersion = 0
+        let assetVersion = prefetchedGameAssetVersion
 
         setIsGameBootstrapPreloading(true)
 
-        try {
-          bootstrapResponse = await getJson("/game/bootstrap")
-          assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
-          bootstrapResponse = {
-            ...bootstrapResponse,
-            assetVersion,
+        if (canPreloadRemoteBootstrap && !bootstrapResponse) {
+          try {
+            bootstrapResponse = await getJson("/game/bootstrap")
+            assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
+            bootstrapResponse = {
+              ...bootstrapResponse,
+              assetVersion,
+            }
+            remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
+          } catch (error) {
+            console.warn("Intro bootstrap preload failed", error)
           }
+        } else if (bootstrapResponse) {
           remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
-        } catch (error) {
-          console.warn("Intro bootstrap preload failed", error)
         }
 
         await Promise.all(
@@ -290,7 +323,14 @@ function App() {
       isCancelled = true
       window.clearTimeout(startPreload)
     }
-  }, [isProjectFinished])
+  }, [
+    isGameSceneReady,
+    isProjectFinished,
+    isTelegramHost,
+    isUserSubscribed,
+    prefetchedGameAssetVersion,
+    prefetchedGameBootstrap,
+  ])
 
   useEffect(() => {
     if (!isProjectFinished) {

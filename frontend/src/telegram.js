@@ -37,6 +37,22 @@ function getMaxWebApp() {
   return window.WebApp ?? null
 }
 
+function normalizeMiniAppUser(user = {}) {
+  const platformUserId = String(user?.id || '').trim()
+
+  if (!platformUserId) {
+    return null
+  }
+
+  return {
+    platformUserId,
+    username: String(user?.username || '').trim(),
+    firstName: String(user?.first_name || user?.firstName || '').trim(),
+    lastName: String(user?.last_name || user?.lastName || '').trim(),
+    languageCode: String(user?.language_code || user?.languageCode || '').trim(),
+  }
+}
+
 function extractTelegramInitDataFromLocation() {
   if (typeof window === 'undefined') {
     return ''
@@ -160,6 +176,7 @@ function resolveMiniAppHost() {
   if (
     hasValue(getMaxWebApp()?.initData)
     || hasValue(String(getMaxWebApp()?.initDataUnsafe?.user?.id || ''))
+    || Boolean(getMaxWebApp())
   ) {
     return MAX_HOST
   }
@@ -222,6 +239,18 @@ export function getMiniAppInitData() {
   }
 
   return ''
+}
+
+export function getMiniAppUser() {
+  if (isTelegramMiniApp()) {
+    return normalizeMiniAppUser(getTelegramWebApp()?.initDataUnsafe?.user)
+  }
+
+  if (isMaxMiniApp()) {
+    return normalizeMiniAppUser(getMaxWebApp()?.initDataUnsafe?.user)
+  }
+
+  return null
 }
 
 export function getMiniAppPlatform() {

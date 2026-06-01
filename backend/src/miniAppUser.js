@@ -21,6 +21,22 @@ function parseInitDataString(initData = "") {
   }
 }
 
+function parseUserHeaders(req) {
+  const platformUserId = String(req.headers["x-mini-app-user-id"] || "").trim();
+
+  if (!platformUserId) {
+    return null;
+  }
+
+  return {
+    platformUserId,
+    username: String(req.headers["x-mini-app-username"] || "").trim(),
+    firstName: String(req.headers["x-mini-app-first-name"] || "").trim(),
+    lastName: String(req.headers["x-mini-app-last-name"] || "").trim(),
+    languageCode: String(req.headers["x-mini-app-language-code"] || "").trim(),
+  };
+}
+
 function normalizePlatform(value) {
   const platform = String(value || "").trim().toLowerCase();
 
@@ -72,7 +88,8 @@ function resolvePlatform(req) {
 export function resolveMiniAppUser(req) {
   const platform = resolvePlatform(req);
   const headerValue = resolveInitDataHeader(req);
-  const parsed = parseInitDataString(headerValue);
+  const parsed = parseInitDataString(headerValue) || parseUserHeaders(req);
+  const sessionId = String(req.headers["x-client-session-id"] || "").trim();
 
   if (parsed?.platformUserId) {
     return {
@@ -85,7 +102,23 @@ export function resolveMiniAppUser(req) {
       languageCode: parsed.languageCode,
       // Referral binding must happen only in the bot start flow.
       startParam: "",
-      sessionId: String(req.headers["x-client-session-id"] || "").trim(),
+      sessionId,
+      isResolved: true,
+    };
+  }
+
+  if (platform === "max") {
+    return {
+      externalId: "",
+      platform: "max",
+      platformUserId: "",
+      username: "",
+      firstName: "",
+      lastName: "",
+      languageCode: "",
+      startParam: "",
+      sessionId,
+      isResolved: false,
     };
   }
 
@@ -98,6 +131,7 @@ export function resolveMiniAppUser(req) {
     lastName: "Player",
     languageCode: "ru",
     startParam: "",
-    sessionId: String(req.headers["x-client-session-id"] || "").trim(),
+    sessionId,
+    isResolved: true,
   };
 }

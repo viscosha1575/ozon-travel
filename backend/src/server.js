@@ -56,6 +56,61 @@ const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const REQUEST_BODY_SECRET = String(process.env.REQUEST_BODY_SECRET || "").trim();
 
+function buildSubscriptionRequiredError() {
+  const error = new Error("Требуется подписка на канал");
+  error.statusCode = 403;
+  error.code = "SUBSCRIPTION_REQUIRED";
+  return error;
+}
+
+function buildMaxUserRequiredError() {
+  const error = new Error("Не удалось определить пользователя MAX");
+  error.statusCode = 403;
+  error.code = "MAX_USER_REQUIRED";
+  return error;
+}
+
+async function resolveSubscriptionContext(req) {
+  const userInfo = resolveMiniAppUser(req);
+  const isResolved = userInfo?.isResolved !== false;
+
+  if (!isResolved && userInfo.platform === "max") {
+    return {
+      userInfo,
+      user: null,
+      subscribedToChannel: false,
+      isResolved: false,
+    };
+  }
+
+  const user = await getOrCreateUser(userInfo);
+  const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
+    userInfo,
+    Boolean(user.subscribed_to_channel),
+  );
+
+  return {
+    userInfo,
+    user,
+    subscribedToChannel,
+    isResolved: true,
+  };
+}
+
+async function requireSubscribedGameUser(req) {
+  const context = await resolveSubscriptionContext(req);
+
+  if (!context.isResolved && context.userInfo.platform === "max") {
+    throw buildMaxUserRequiredError();
+  }
+
+  if (!context.subscribedToChannel) {
+    throw buildSubscriptionRequiredError();
+  }
+
+  return context;
+}
+
 app.use(cors({
   origin: true,
   credentials: false,
@@ -71,7 +126,8 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/game/bootstrap", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const response = await getGameBootstrap(resolveMiniAppUser(req));
+    const { userInfo } = await requireSubscribedGameUser(req);
+    const response = await getGameBootstrap(userInfo);
     res.json(response);
   } catch (error) {
     next(error);
@@ -81,18 +137,13 @@ app.get("/api/game/bootstrap", async (req, res, next) => {
 app.get("/api/game/subscription-status", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const userInfo = resolveMiniAppUser(req);
-    const user = await getOrCreateUser(userInfo);
-    const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
-      userInfo,
-      Boolean(user.subscribed_to_channel),
-    );
+    const { user, subscribedToChannel } = await resolveSubscriptionContext(req);
 
     res.json({
       ok: true,
       user: {
-        id: Number(user.id),
-        externalId: user.external_id,
+        id: user ? Number(user.id) : null,
+        externalId: user?.external_id || "",
         subscribedToChannel,
       },
     });
@@ -112,7 +163,8 @@ app.post("/api/game/spin", async (req, res, next) => {
       throw error;
     }
 
-    const response = await spinPrize(resolveMiniAppUser(req));
+    const { userInfo } = await requireSubscribedGameUser(req);
+    const response = await spinPrize(userInfo);
     res.json(response);
   } catch (error) {
     next(error);
@@ -122,23 +174,18 @@ app.post("/api/game/spin", async (req, res, next) => {
 app.post("/api/game/open", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const userInfo = resolveMiniAppUser(req);
-    const user = await getOrCreateUser(userInfo);
-    const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
-      userInfo,
-      Boolean(user.subscribed_to_channel),
-    );
-    const attempts = await ensureDailyAttemptGrant(user.id);
-    const referral = await getReferralData(user.id);
+    const { userInfo, user, subscribedToChannel, isResolved } = await resolveSubscriptionContext(req);
     const projectState = await getProjectState();
+    const attempts = user ? await ensureDailyAttemptGrant(user.id) : null;
+    const referral = user ? await getReferralData(user.id) : null;
 
-    if (req.body?.trackOpen !== false) {
+    if (user && req.body?.trackOpen !== false) {
       await logGameEvent(userInfo, "app_open", {
         source: "frontend",
         sessionId: userInfo.sessionId,
         details: {
           entryScreen: String(req.body?.entryScreen || "").trim() || "game",
-          availableAttempts: attempts.availableAttempts,
+          availableAttempts: attempts?.availableAttempts ?? 0,
         },
       });
     }
@@ -146,11 +193,11 @@ app.post("/api/game/open", async (req, res, next) => {
     res.json({
       ok: true,
       projectFinished: projectState.projectFinished,
-      shouldShowControlsGuide: !Boolean(user.has_seen_game_controls_guide),
+      shouldShowControlsGuide: Boolean(user) && !Boolean(user.has_seen_game_controls_guide),
       user: {
-        id: Number(user.id),
-        externalId: user.external_id,
-        subscribedToChannel,
+        id: user ? Number(user.id) : null,
+        externalId: user?.external_id || "",
+        subscribedToChannel: isResolved ? subscribedToChannel : false,
       },
       attempts,
       referral,
@@ -162,8 +209,7 @@ app.post("/api/game/open", async (req, res, next) => {
 
 app.post("/api/game/controls-guide/seen", async (req, res, next) => {
   try {
-    const userInfo = resolveMiniAppUser(req);
-    const user = await getOrCreateUser(userInfo);
+    const { user } = await requireSubscribedGameUser(req);
     await markGameControlsGuideSeen(user.id);
 
     res.json({
@@ -177,6 +223,15 @@ app.post("/api/game/controls-guide/seen", async (req, res, next) => {
 app.post("/api/game/event", async (req, res, next) => {
   try {
     const userInfo = resolveMiniAppUser(req);
+
+    if (userInfo.platform === "max" && userInfo.isResolved === false) {
+      res.json({
+        ok: true,
+        eventId: null,
+      });
+      return;
+    }
+
     const eventName = String(req.body?.eventName || "").trim();
     const details = req.body?.details && typeof req.body.details === "object" && !Array.isArray(req.body.details)
       ? req.body.details

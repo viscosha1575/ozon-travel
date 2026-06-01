@@ -98,11 +98,15 @@ export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackVa
   const platformUserId = String(userInfo?.platformUserId || "").trim();
   const externalId = String(userInfo?.externalId || "").trim();
 
-  if (platformUserId === "local-demo-user" || externalId === "local-demo-user") {
+  if ((platformUserId === "local-demo-user" || externalId === "local-demo-user") && platform !== "max") {
     return true;
   }
 
-  if (platform !== "max" || !platformUserId || platformUserId === "local-demo-user") {
+  if (platform === "max" && !platformUserId) {
+    return false;
+  }
+
+  if (platform !== "max" || platformUserId === "local-demo-user") {
     return Boolean(fallbackValue);
   }
 

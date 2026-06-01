@@ -357,6 +357,20 @@ function getTrackWindowSteps(rouletteItemsLength) {
   return Math.max(rouletteItemsLength + TRACK_TAIL_BUFFER, TRACK_CENTER_OFFSET + TRACK_TAIL_BUFFER + 6)
 }
 
+function collectUniqueImagePaths(...groups) {
+  const uniquePaths = new Set()
+
+  groups.flat().forEach((value) => {
+    const normalizedValue = String(value || "").trim()
+
+    if (normalizedValue) {
+      uniquePaths.add(normalizedValue)
+    }
+  })
+
+  return Array.from(uniquePaths)
+}
+
 function getAssetVersion(payload) {
   return buildBootstrapAssetVersion(payload)
 }
@@ -581,6 +595,10 @@ export default function GameScreen({
 
   const activeRouletteItems = rouletteItems
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
+  const preloadedCarouselImagePaths = collectUniqueImagePaths(
+    activeRouletteItems.map((item) => item.slotPath || item.path || ""),
+    myPrizes.map((item) => item.image || ""),
+  )
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
@@ -1766,6 +1784,18 @@ export default function GameScreen({
         loading="eager"
         decoding="sync"
       />
+      {preloadedCarouselImagePaths.map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          aria-hidden="true"
+          className="game-preload-image"
+          fetchPriority={index < 6 ? "high" : "low"}
+          loading="eager"
+          decoding="async"
+        />
+      ))}
       <div className="game-fade-overlay game-fade-overlay-top" aria-hidden="true" />
       <div className="game-fade-overlay game-fade-overlay-bottom" aria-hidden="true" />
       <div className="game-shell">
