@@ -242,6 +242,7 @@ app.post('/internal/broadcast/send', async (req, res) => {
       text: req.body?.text,
       html: req.body?.html,
       mediaUrls: Array.isArray(req.body?.mediaUrls) ? req.body.mediaUrls : [],
+      mediaPaths: Array.isArray(req.body?.mediaPaths) ? req.body.mediaPaths : [],
       button: req.body?.button,
       disablePreview: Boolean(req.body?.disablePreview),
     });

@@ -1,5 +1,10 @@
 import { query, withTransaction } from "./db.js";
 import { buildStartParam, parseStartParam } from "./startParam.js";
+import {
+  trackNewUserAnalytics,
+  trackReferralLinkedAnalytics,
+  trackSpinConsumedAnalytics,
+} from "./analyticsAggregateStore.js";
 
 const MAX_BOT_PUBLIC_URL = String(
   process.env.MAX_BOT_PUBLIC_URL || "https://max.ru/ozontravel_lenta_bot",
@@ -183,6 +188,7 @@ async function attachReferrer(executor, userRow) {
       }),
     ],
   );
+  await trackReferralLinkedAnalytics(executor, Number(referrer.id), Number(linkedUser.id), linkedUser.created_at || new Date().toISOString());
 
   return linkedUser;
 }
@@ -313,6 +319,11 @@ async function getInvitedReferralIdsInternal(executor, userId) {
 async function runGetOrCreate(executor, userInfo = {}) {
   const upsertedUser = await upsertUser(executor, userInfo);
   const linkedUser = await attachReferrer(executor, upsertedUser);
+
+  if (upsertedUser.was_inserted) {
+    await trackNewUserAnalytics(executor, linkedUser, "system");
+  }
+
   return {
     ...linkedUser,
     was_inserted: Boolean(upsertedUser.was_inserted),
@@ -361,6 +372,7 @@ export async function consumeUserAttempt(userId, details = {}, client = null) {
       `,
       [userId, JSON.stringify(details && typeof details === "object" ? details : {})],
     );
+    await trackSpinConsumedAnalytics(executor, userId);
 
     return getAttemptSummaryInternal(executor, userId);
   };

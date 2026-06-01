@@ -10,6 +10,7 @@ import { decodeRequestBody } from "./adminCipher.js";
 import { initDatabase } from "./db.js";
 import { getUploadsDir, initImageStorage } from "./imageStorage.js";
 import { refreshMiniAppSubscriptionStatus } from "./maxSubscriptionService.js";
+import { syncAnalyticsAggregates } from "./analyticsAggregateStore.js";
 import {
   deletePlayerAnalytics,
   getAnalyticsUtm,
@@ -37,10 +38,20 @@ import {
 import {
   createPush,
   deletePush,
+  finalizePushRevoke,
+  finalizePushSend,
   listPushes,
+  preparePushRevoke,
+  preparePushSend,
   revokePush,
   sendPush,
 } from "./pushStore.js";
+import {
+  claimDailyAttemptReminderRecipients,
+  grantDailyAttemptsForAllUsers,
+  markNotificationDeliveryFailed,
+  markNotificationDeliverySent,
+} from "./notificationStore.js";
 import { resolveMiniAppUser } from "./miniAppUser.js";
 import {
   createUserFromPlatform,
@@ -353,6 +364,86 @@ app.post("/api/logs/create", async (req, res, next) => {
   }
 });
 
+app.post("/api/internal/notifications/daily-attempts/grant", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await grantDailyAttemptsForAllUsers(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/notifications/daily-attempt-reminder/claim", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await claimDailyAttemptReminderRecipients(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/notifications/deliveries/sent", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await markNotificationDeliverySent(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/notifications/deliveries/failed", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await markNotificationDeliveryFailed(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/pushes/send/prepare", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await preparePushSend(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/pushes/send/finalize", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await finalizePushSend(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/pushes/revoke/prepare", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await preparePushRevoke(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/pushes/revoke/finalize", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await finalizePushRevoke(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
   const path = req.path.replace(/^\/api\/admin/, "/api");
   const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
@@ -498,6 +589,7 @@ app.use((error, _req, res, _next) => {
 
 async function start() {
   await initDatabase();
+  await syncAnalyticsAggregates();
   await initImageStorage();
 
   app.listen(PORT, "0.0.0.0", () => {

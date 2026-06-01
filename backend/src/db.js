@@ -202,6 +202,146 @@ async function ensureSchema() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS user_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS user_events_created_at_idx
+    ON user_events (created_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS user_events_action_created_at_idx
+    ON user_events (action, created_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS user_events_user_id_created_at_idx
+    ON user_events (user_id, created_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS user_events_source_created_at_idx
+    ON user_events (source, created_at DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS analytics_daily (
+      date DATE NOT NULL,
+      metric TEXT NOT NULL,
+      value BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (date, metric)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS analytics_daily_metric_date_idx
+    ON analytics_daily (metric, date DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS analytics_hourly (
+      date DATE NOT NULL,
+      hour SMALLINT NOT NULL,
+      metric TEXT NOT NULL,
+      value BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (date, hour, metric)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS analytics_hourly_metric_date_hour_idx
+    ON analytics_hourly (metric, date DESC, hour DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS analytics_metric_users (
+      date DATE NOT NULL,
+      metric TEXT NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (date, metric, user_id)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS analytics_metric_users_metric_date_idx
+    ON analytics_metric_users (metric, date DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS analytics_daily_user_metrics (
+      date DATE NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      metric TEXT NOT NULL,
+      value BIGINT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (date, user_id, metric)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS analytics_daily_user_metrics_metric_date_idx
+    ON analytics_daily_user_metrics (metric, date DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS daily_active_users (
+      date DATE NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (date, user_id)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS daily_active_users_date_idx
+    ON daily_active_users (date DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS game_sessions (
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      started_at TIMESTAMPTZ NOT NULL,
+      finished_at TIMESTAMPTZ NULL,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
+      start_date DATE NOT NULL,
+      start_hour SMALLINT NOT NULL,
+      finish_date DATE NULL,
+      finish_hour SMALLINT NULL,
+      PRIMARY KEY (user_id, session_id)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS game_sessions_start_date_idx
+    ON game_sessions (start_date DESC, started_at DESC)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS game_sessions_finish_date_idx
+    ON game_sessions (finish_date DESC, finished_at DESC)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS analytics_runtime_state (
+      state_key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS user_attempt_transactions (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -234,6 +374,29 @@ async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS user_attempt_transactions_referral_unique_idx
     ON user_attempt_transactions (user_id, reason, related_user_id)
     WHERE related_user_id IS NOT NULL
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id BIGSERIAL PRIMARY KEY,
+      notification_key TEXT NOT NULL,
+      reminder_date DATE NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'queued',
+      message_id TEXT NOT NULL DEFAULT '',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT NOT NULL DEFAULT '',
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      sent_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(notification_key, reminder_date, user_id)
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS notification_deliveries_status_idx
+    ON notification_deliveries (notification_key, reminder_date, status, created_at DESC)
   `);
 
   await query(`

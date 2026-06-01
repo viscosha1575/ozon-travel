@@ -41,6 +41,14 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+    container_name: ozon-travel-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
   backend:
     build:
       context: .
@@ -53,12 +61,14 @@ services:
     environment:
       PORT: 3001
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ozon_travel}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://${DOMAIN}}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://${DOMAIN}}
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
       MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+      TEST_PUSH_WAIT_TIMEOUT_MS: ${TEST_PUSH_WAIT_TIMEOUT_MS:-120000}
       UPLOADS_DIR: /app/uploads
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
     volumes:
@@ -127,6 +137,9 @@ services:
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
       MAX_BOT_MODE: ${MAX_BOT_MODE:-webhook}
       MAX_BOT_PORT: 3011
+      MAX_API_REQUESTS_PER_SECOND: ${MAX_API_REQUESTS_PER_SECOND:-25}
+      MAX_ATTACHMENT_CACHE_TTL_MS: ${MAX_ATTACHMENT_CACHE_TTL_MS:-86400000}
+      MAX_ATTACHMENT_READY_DELAY_MS: ${MAX_ATTACHMENT_READY_DELAY_MS:-2000}
       MAX_WEBHOOK_BASE_URL: ${MAX_WEBHOOK_BASE_URL:-https://bot.${DOMAIN}}
       MAX_WEBHOOK_PATH: ${MAX_WEBHOOK_PATH:-/max/webhook}
       MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET}
@@ -154,6 +167,45 @@ services:
       - default
       - proxy
 
+  worker:
+    build:
+      context: ./worker
+    container_name: ozon-travel-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
+      max-bot:
+        condition: service_started
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GAME_API_URL: http://backend:3001
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+      REQUIRE_ENCRYPTED_REQUESTS: ${REQUIRE_ENCRYPTED_REQUESTS:-false}
+      MAX_INTERNAL_BROADCAST_URL: http://max-bot:3011/internal/broadcast/send
+      MAX_INTERNAL_BROADCAST_DELETE_URL: http://max-bot:3011/internal/broadcast/delete
+      BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
+      GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-https://${DOMAIN}}
+      DAILY_ATTEMPT_GRANT_ENABLED: ${DAILY_ATTEMPT_GRANT_ENABLED:-true}
+      DAILY_ATTEMPT_GRANT_CRON: ${DAILY_ATTEMPT_GRANT_CRON:-0 0 0 * * *}
+      DAILY_ATTEMPT_REMINDER_ENABLED: ${DAILY_ATTEMPT_REMINDER_ENABLED:-true}
+      DAILY_ATTEMPT_REMINDER_CRON: ${DAILY_ATTEMPT_REMINDER_CRON:-0 0 12 * * *}
+      DAILY_ATTEMPT_TIMEZONE: ${DAILY_ATTEMPT_TIMEZONE:-Europe/Moscow}
+      DAILY_ATTEMPT_REMINDER_BATCH_SIZE: ${DAILY_ATTEMPT_REMINDER_BATCH_SIZE:-500}
+      NOTIFICATION_SEND_CONCURRENCY: ${NOTIFICATION_SEND_CONCURRENCY:-20}
+      NOTIFICATION_SEND_LIMIT_MAX: ${NOTIFICATION_SEND_LIMIT_MAX:-20}
+      NOTIFICATION_SEND_LIMIT_DURATION_MS: ${NOTIFICATION_SEND_LIMIT_DURATION_MS:-1000}
+      NOTIFICATION_SEND_ATTEMPTS: ${NOTIFICATION_SEND_ATTEMPTS:-5}
+      NOTIFICATION_SEND_BACKOFF_MS: ${NOTIFICATION_SEND_BACKOFF_MS:-30000}
+      MANUAL_PUSH_JOB_CONCURRENCY: ${MANUAL_PUSH_JOB_CONCURRENCY:-1}
+      MANUAL_PUSH_SEND_CONCURRENCY: ${MANUAL_PUSH_SEND_CONCURRENCY:-20}
+      MANUAL_PUSH_REVOKE_CONCURRENCY: ${MANUAL_PUSH_REVOKE_CONCURRENCY:-20}
+      DAILY_ATTEMPT_REMINDER_BANNER_PATH: ${DAILY_ATTEMPT_REMINDER_BANNER_PATH:-public/banner.png}
+
 networks:
   proxy:
     name: proxy
@@ -161,4 +213,5 @@ networks:
 volumes:
   traefik_letsencrypt:
   postgres_data:
+  redis_data:
   backend_uploads:

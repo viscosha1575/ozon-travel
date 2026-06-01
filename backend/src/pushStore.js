@@ -1,19 +1,10 @@
 import { deleteManagedImage, normalizeStoredImage, storeManagedImage } from "./imageStorage.js";
 import { query, withTransaction } from "./db.js";
+import { enqueuePushRevokeJob, enqueuePushSendJob } from "./workerQueue.js";
 
 const PUSH_STATUS_VALUES = new Set(["template", "scheduled", "sent", "revoked"]);
-const INTERNAL_BROADCAST_URL = String(
-  process.env.MAX_INTERNAL_BROADCAST_URL || "http://max-bot:3011/internal/broadcast/send"
-).trim();
-const INTERNAL_BROADCAST_DELETE_URL = String(
-  process.env.MAX_INTERNAL_BROADCAST_DELETE_URL || "http://max-bot:3011/internal/broadcast/delete"
-).trim();
-const INTERNAL_BROADCAST_TOKEN = String(
-  process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || ""
-).trim();
 const MAX_PUSH_TEST_USER_ID = String(process.env.MAX_PUSH_TEST_USER_ID || "169639251").trim();
 const MAX_TEXT_LIMIT = 4000;
-const MAX_BROADCAST_CONCURRENCY = Math.min(10, Math.max(1, Number(process.env.MAX_BROADCAST_CONCURRENCY || 2) || 2));
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -445,77 +436,6 @@ async function resolveMaxRecipientIds(executor, push) {
     .filter(Boolean);
 }
 
-async function callMaxBroadcast(payload) {
-  if (!INTERNAL_BROADCAST_URL) {
-    throw new Error("MAX internal broadcast URL is not configured");
-  }
-
-  if (!INTERNAL_BROADCAST_TOKEN) {
-    throw new Error("MAX internal broadcast token is not configured");
-  }
-
-  const response = await fetch(INTERNAL_BROADCAST_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-broadcast-token": INTERNAL_BROADCAST_TOKEN,
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data?.message || `MAX broadcast failed with ${response.status}`);
-  }
-
-  return data;
-}
-
-async function callMaxBroadcastDelete(payload) {
-  if (!INTERNAL_BROADCAST_DELETE_URL) {
-    throw new Error("MAX internal broadcast delete URL is not configured");
-  }
-
-  if (!INTERNAL_BROADCAST_TOKEN) {
-    throw new Error("MAX internal broadcast token is not configured");
-  }
-
-  const response = await fetch(INTERNAL_BROADCAST_DELETE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-broadcast-token": INTERNAL_BROADCAST_TOKEN,
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data?.message || `MAX broadcast delete failed with ${response.status}`);
-  }
-
-  return data;
-}
-
-async function runWithConcurrency(items, run) {
-  let cursor = 0;
-  const results = new Array(items.length);
-
-  async function worker() {
-    while (cursor < items.length) {
-      const nextIndex = cursor;
-      cursor += 1;
-      results[nextIndex] = await run(items[nextIndex], nextIndex);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(MAX_BROADCAST_CONCURRENCY, items.length || 1) }, () => worker()),
-  );
-
-  return results;
-}
-
 function buildBroadcastHtml(push) {
   const html = String(push.html || "").trim();
 
@@ -528,6 +448,15 @@ function buildBroadcastHtml(push) {
 
 function resolveMaxLinkPreviewFlag(push) {
   return push.disableLinkPreview ? false : true;
+}
+
+function buildBroadcastPayloadForPush(push) {
+  return {
+    html: buildBroadcastHtml(push),
+    mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
+    button: push.button,
+    disablePreview: resolveMaxLinkPreviewFlag(push),
+  };
 }
 
 function decorateTestSendError(error) {
@@ -704,8 +633,8 @@ export async function deletePush(payload = {}) {
 
   const push = normalizePushRow(row);
 
-  if (push.sentAt) {
-    throw new Error("Нельзя удалить уже отправленную рассылку. Сначала используйте отзыв у получателей.");
+  if (push.status !== "template") {
+    throw new Error("Нельзя удалить рассылку вне статуса шаблона. Сначала дождитесь отправки или используйте отзыв у получателей.");
   }
 
   await query("DELETE FROM push_campaigns WHERE id = $1", [push.id]);
@@ -721,7 +650,7 @@ export async function deletePush(payload = {}) {
   };
 }
 
-export async function sendPush(payload = {}) {
+export async function preparePushSend(payload = {}) {
   const pushId = Number(payload?.pushId) || 0;
   const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
   const row = await fetchPushById({ query }, pushId);
@@ -737,16 +666,64 @@ export async function sendPush(payload = {}) {
       throw new Error("MAX test recipient is not configured");
     }
 
-    try {
-      await callMaxBroadcast({
-        userId: MAX_PUSH_TEST_USER_ID,
-        html: buildBroadcastHtml(push),
-        mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
-        button: push.button,
-        disablePreview: resolveMaxLinkPreviewFlag(push),
-      });
-    } catch (error) {
-      throw decorateTestSendError(error);
+    if (push.status !== "template") {
+      throw new Error("Тестовую отправку можно сделать только для шаблона.");
+    }
+
+    return {
+      pushId: push.id,
+      title: push.title,
+      mode,
+      recipients: [MAX_PUSH_TEST_USER_ID],
+      ...buildBroadcastPayloadForPush(push),
+    };
+  }
+
+  if (push.status === "scheduled") {
+    throw new Error("Эта рассылка уже поставлена в очередь.");
+  }
+
+  if (push.status !== "template") {
+    throw new Error("Отправить можно только рассылку в статусе шаблона.");
+  }
+
+  if (push.status === "template" && !push.testSentAt) {
+    throw new Error("Test send is required before live send");
+  }
+
+  const recipientIds = await resolveMaxRecipientIds({ query }, push);
+
+  if (recipientIds.length === 0) {
+    throw new Error("Нет MAX-пользователей для этой рассылки");
+  }
+
+  return {
+    pushId: push.id,
+    title: push.title,
+    mode,
+    recipients: recipientIds,
+    ...buildBroadcastPayloadForPush(push),
+  };
+}
+
+export async function finalizePushSend(payload = {}) {
+  const pushId = Number(payload?.pushId) || 0;
+  const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const row = await fetchPushById({ query }, pushId);
+
+  if (!row) {
+    throw new Error("Push not found");
+  }
+
+  const push = normalizePushRow(row);
+
+  if (mode === "test") {
+    const successfulResult = results.find((item) => item?.ok);
+
+    if (!successfulResult) {
+      const firstErrorMessage = results.find((item) => !item?.ok && String(item?.error || "").trim())?.error;
+      throw new Error(String(firstErrorMessage || "Тестовая рассылка не была доставлена"));
     }
 
     const result = await query(
@@ -762,45 +739,16 @@ export async function sendPush(payload = {}) {
     return {
       push: normalizePushRow(result.rows[0]),
       mode,
+      stats: {
+        recipientsCount: 1,
+        deliveredCount: 1,
+        failedCount: 0,
+      },
     };
   }
 
-  if (push.status === "template" && !push.testSentAt) {
-    throw new Error("Test send is required before live send");
-  }
-
-  const recipientIds = await resolveMaxRecipientIds({ query }, push);
-
-  if (recipientIds.length === 0) {
-    throw new Error("Нет MAX-пользователей для этой рассылки");
-  }
-
-  const results = await runWithConcurrency(recipientIds, async (recipientId) => {
-    try {
-      const response = await callMaxBroadcast({
-        userId: recipientId,
-        html: buildBroadcastHtml(push),
-        mediaUrls: push.image?.previewUrl ? [push.image.previewUrl] : [],
-        button: push.button,
-        disablePreview: resolveMaxLinkPreviewFlag(push),
-      });
-
-      return {
-        ok: true,
-        recipientId,
-        messageId: Number(response?.messageId) || null,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        recipientId,
-        error: error?.message || String(error),
-      };
-    }
-  });
-
   const deliveredCount = results.filter((item) => item?.ok).length;
-  const failedCount = recipientIds.length - deliveredCount;
+  const failedCount = results.length - deliveredCount;
 
   if (results.length > 0) {
     const values = [];
@@ -851,21 +799,71 @@ export async function sendPush(payload = {}) {
       WHERE id = $1
       RETURNING *
     `,
-    [push.id, recipientIds.length, deliveredCount],
+    [push.id, results.length, deliveredCount],
   );
 
   return {
     push: normalizePushRow(updateResult.rows[0]),
     mode,
     stats: {
-      recipientsCount: recipientIds.length,
+      recipientsCount: results.length,
       deliveredCount,
       failedCount,
     },
   };
 }
 
-export async function revokePush(payload = {}) {
+export async function sendPush(payload = {}) {
+  const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
+  const prepared = await preparePushSend(payload);
+
+  if (mode === "test") {
+    try {
+      return await enqueuePushSendJob({
+        pushId: prepared.pushId,
+        mode,
+        waitUntilFinished: true,
+      });
+    } catch (error) {
+      throw decorateTestSendError(error);
+    }
+  }
+
+  const updateResult = await query(
+    `
+      UPDATE push_campaigns
+      SET status = 'scheduled', scheduled_at = COALESCE(scheduled_at, NOW()), updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `,
+    [prepared.pushId],
+  );
+
+  try {
+    await enqueuePushSendJob({
+      pushId: prepared.pushId,
+      mode,
+    });
+  } catch (error) {
+    await query(
+      `
+        UPDATE push_campaigns
+        SET status = 'template', updated_at = NOW()
+        WHERE id = $1
+      `,
+      [prepared.pushId],
+    ).catch(() => {});
+    throw error;
+  }
+
+  return {
+    push: normalizePushRow(updateResult.rows[0]),
+    mode,
+    queued: true,
+  };
+}
+
+export async function preparePushRevoke(payload = {}) {
   const pushId = Number(payload?.pushId) || 0;
   const row = await fetchPushById({ query }, pushId);
 
@@ -900,42 +898,63 @@ export async function revokePush(payload = {}) {
     throw new Error("У этой рассылки больше нет сообщений, доступных для отзыва.");
   }
 
-  const revokeResults = await runWithConcurrency(deliveries, async (delivery) => {
-    try {
-      await callMaxBroadcastDelete({
-        userId: String(delivery.max_user_id || ""),
-        messageId: Number(delivery.message_id),
-      });
+  return {
+    pushId: push.id,
+    title: push.title,
+    deliveries: deliveries.map((delivery) => ({
+      deliveryId: Number(delivery.id),
+      maxUserId: String(delivery.max_user_id || ""),
+      messageId: Number(delivery.message_id) || 0,
+    })),
+  };
+}
 
+export async function finalizePushRevoke(payload = {}) {
+  const pushId = Number(payload?.pushId) || 0;
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const row = await fetchPushById({ query }, pushId);
+
+  if (!row) {
+    throw new Error("Push not found");
+  }
+
+  const push = normalizePushRow(row);
+
+  if (!push.sentAt) {
+    throw new Error("Отзывать можно только уже отправленную рассылку.");
+  }
+
+  for (const item of results) {
+    const deliveryId = Number(item?.deliveryId) || 0;
+
+    if (!deliveryId) {
+      continue;
+    }
+
+    if (item?.ok) {
       await query(
         `
           UPDATE push_deliveries
           SET delivery_status = 'deleted', deleted_at = NOW(), error_message = '', updated_at = NOW()
           WHERE id = $1
         `,
-        [Number(delivery.id)],
+        [deliveryId],
       );
-
-      return { ok: true };
-    } catch (error) {
-      await query(
-        `
-          UPDATE push_deliveries
-          SET delivery_status = 'delete_failed', error_message = $2, updated_at = NOW()
-          WHERE id = $1
-        `,
-        [Number(delivery.id), String(error?.message || error || "")],
-      );
-
-      return {
-        ok: false,
-        error: error?.message || String(error),
-      };
+      continue;
     }
-  });
 
-  const revokedCount = revokeResults.filter((item) => item?.ok).length;
-  const failedCount = revokeResults.length - revokedCount;
+    await query(
+      `
+        UPDATE push_deliveries
+        SET delivery_status = 'delete_failed', error_message = $2, updated_at = NOW()
+        WHERE id = $1
+      `,
+      [deliveryId, String(item?.error || "")],
+    );
+  }
+
+  const revokedCount = results.filter((item) => item?.ok).length;
+  const failedCount = results.length - revokedCount;
   const refreshedRow = await fetchPushById({ query }, push.id);
   const refreshedPush = normalizePushRow(refreshedRow);
   const nextStatus = refreshedPush.pendingRevokeCount <= 0 ? "revoked" : "sent";
@@ -957,5 +976,19 @@ export async function revokePush(payload = {}) {
       revokedCount,
       failedCount,
     },
+  };
+}
+
+export async function revokePush(payload = {}) {
+  const prepared = await preparePushRevoke(payload);
+  await enqueuePushRevokeJob({
+    pushId: prepared.pushId,
+  });
+
+  return {
+    ok: true,
+    pushId: prepared.pushId,
+    title: prepared.title,
+    queued: true,
   };
 }

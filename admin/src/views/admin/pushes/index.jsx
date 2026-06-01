@@ -526,7 +526,9 @@ export default function PushesPage() {
       setSuccessMessage(
         mode === "test"
           ? `Тестовая рассылка для шаблона «${result?.push?.title || "Без названия"}» выполнена.`
-          : `Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» отправлена.`,
+          : result?.queued
+            ? `Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» поставлена в очередь.`
+            : `Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» отправлена.`,
       );
     } catch (requestError) {
       setError(requestError.message || "Не удалось отправить пуш");
@@ -590,7 +592,11 @@ export default function PushesPage() {
           mode: "live",
         });
         await loadPushes();
-        setSuccessMessage(`Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» отправлена.`);
+        setSuccessMessage(
+          result?.queued
+            ? `Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» поставлена в очередь.`
+            : `Реальная рассылка для шаблона «${result?.push?.title || "Без названия"}» отправлена.`,
+        );
       } catch (requestError) {
         setError(requestError.message || "Не удалось отправить реальную рассылку");
       } finally {
@@ -673,7 +679,9 @@ export default function PushesPage() {
       const result = await postJson("/api/pushes/revoke", { pushId });
       await loadPushes();
       setSuccessMessage(
-        `Отзыв завершён: удалено ${result?.stats?.revokedCount || 0}, ошибок ${result?.stats?.failedCount || 0}.`,
+        result?.queued
+          ? `Отзыв рассылки «${result?.title || `#${pushId}`}» поставлен в очередь.`
+          : `Отзыв завершён: удалено ${result?.stats?.revokedCount || 0}, ошибок ${result?.stats?.failedCount || 0}.`,
       );
     } catch (requestError) {
       setError(requestError.message || "Не удалось отозвать рассылку");

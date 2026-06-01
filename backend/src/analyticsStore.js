@@ -1,4 +1,12 @@
-import { query } from "./db.js";
+import { query, withTransaction } from "./db.js";
+import {
+  ANALYTICS_METRICS,
+  ANALYTICS_USER_METRICS,
+  ANALYTICS_USER_PRESENCE_METRICS,
+  buildAnalyticsRangeWhere,
+  toAnalyticsDateValue,
+  trackGameEventAnalytics,
+} from "./analyticsAggregateStore.js";
 import { parseStartParam } from "./startParam.js";
 import {
   deleteUserById,
@@ -8,8 +16,6 @@ import {
 } from "./userStore.js";
 
 const ANALYTICS_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Moscow").trim() || "Europe/Moscow";
-const APP_OPEN_EVENT_NAMES = new Set(["app_open", "bootstrap_loaded", "game_bootstrap_loaded"]);
-const PROMO_CODE_APPLY_EVENT_NAME = "promo_code_apply_clicked";
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -52,13 +58,7 @@ function getZonedParts(value) {
 }
 
 function toDateToken(value) {
-  const parts = getZonedParts(value);
-
-  if (!parts) {
-    return "";
-  }
-
-  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+  return toAnalyticsDateValue(value);
 }
 
 function toHourToken(value) {
@@ -303,6 +303,31 @@ function buildSeries(items, range, tokenGetter, startToken, endToken) {
   }));
 }
 
+function monthTokenFromDateToken(dateToken) {
+  return String(dateToken || "").slice(0, 7);
+}
+
+function buildSeriesFromAggregateRows(rows, range, startToken, endToken, valueGetter = (item) => Number(item.value || 0)) {
+  const bucketMap = new Map();
+
+  for (const row of rows) {
+    const rawToken = String(row.key || "").trim();
+
+    if (!rawToken) {
+      continue;
+    }
+
+    const token = range === "all" ? monthTokenFromDateToken(rawToken) : rawToken;
+    bucketMap.set(token, (bucketMap.get(token) || 0) + Number(valueGetter(row) || 0));
+  }
+
+  return getBucketTokens(range, startToken, endToken).map((token) => ({
+    key: token,
+    label: bucketLabel(token, range),
+    value: Number(bucketMap.get(token) || 0),
+  }));
+}
+
 function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeContext(payload)) {
   return {
     meta: {
@@ -482,26 +507,15 @@ async function getPlayerBaseMaps() {
       FROM app_users
     `),
     query(`
-      WITH session_events AS (
-        SELECT
-          user_id,
-          session_id,
-          MIN(created_at) AS started_at,
-          MAX(created_at) AS finished_at,
-          BOOL_OR(event_name = 'spin_result') AS has_finished
-        FROM game_event_logs
-        WHERE session_id <> ''
-        GROUP BY user_id, session_id
-      )
       SELECT
         user_id,
         COUNT(*)::int AS total_sessions,
-        (COUNT(*) FILTER (WHERE has_finished))::int AS finished_sessions,
-        COALESCE(SUM(EXTRACT(EPOCH FROM finished_at - started_at)) FILTER (WHERE has_finished), 0)::int AS total_duration_seconds,
-        COALESCE(MIN(EXTRACT(EPOCH FROM finished_at - started_at)) FILTER (WHERE has_finished), 0)::int AS best_duration_seconds,
-        COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM finished_at - started_at)) FILTER (WHERE has_finished)), 0)::int AS average_duration_seconds,
+        (COUNT(*) FILTER (WHERE finished_at IS NOT NULL))::int AS finished_sessions,
+        COALESCE(SUM(duration_seconds) FILTER (WHERE finished_at IS NOT NULL), 0)::int AS total_duration_seconds,
+        COALESCE(MIN(duration_seconds) FILTER (WHERE finished_at IS NOT NULL), 0)::int AS best_duration_seconds,
+        COALESCE(ROUND(AVG(duration_seconds) FILTER (WHERE finished_at IS NOT NULL)), 0)::int AS average_duration_seconds,
         MAX(started_at) AS last_session_at
-      FROM session_events
+      FROM game_sessions
       GROUP BY user_id
     `),
     query(`
@@ -509,7 +523,7 @@ async function getPlayerBaseMaps() {
         user_id,
         COUNT(*)::int AS total_activity_logs,
         MAX(created_at) AS last_activity_at
-      FROM game_event_logs
+      FROM user_events
       GROUP BY user_id
     `),
     query(`
@@ -548,211 +562,231 @@ export async function logGameEvent(userInfo = {}, eventName = "", options = {}) 
   const source = String(options.source || "frontend").trim() || "frontend";
   const sessionId = String(options.sessionId || "").trim();
   const details = toSafeDetails(options.details);
-  const user = await getOrCreateUser(userInfo, options.client || null);
+  const run = async (executor) => {
+    const user = await getOrCreateUser(userInfo, executor);
+    const result = await executor.query(
+      `
+        INSERT INTO game_event_logs (user_id, session_id, event_name, source, details)
+        VALUES ($1, $2, $3, $4, $5::jsonb)
+        RETURNING id, created_at
+      `,
+      [user.id, sessionId, normalizedEventName, source, JSON.stringify(details)],
+    );
+    const createdAt = result.rows[0].created_at;
 
-  const result = await (options.client || { query }).query(
-    `
-      INSERT INTO game_event_logs (user_id, session_id, event_name, source, details)
-      VALUES ($1, $2, $3, $4, $5::jsonb)
-      RETURNING id, created_at
-    `,
-    [user.id, sessionId, normalizedEventName, source, JSON.stringify(details)],
-  );
+    await trackGameEventAnalytics(executor, {
+      userId: Number(user.id),
+      eventName: normalizedEventName,
+      source,
+      sessionId,
+      details,
+      createdAt,
+    });
 
-  return {
-    id: Number(result.rows[0].id),
-    createdAt: result.rows[0].created_at,
-    user,
+    return {
+      id: Number(result.rows[0].id),
+      createdAt,
+      user,
+    };
   };
+
+  if (options.client) {
+    return run(options.client);
+  }
+
+  return withTransaction(run);
 }
 
 export async function getAnalyticsOverview(payload = {}) {
   const rangeContext = getRangeContext(payload);
   const emptyOverview = createEmptyAnalyticsOverview(payload, rangeContext);
-  const [usersResult, logsResult, attemptsResult] = await Promise.all([
+  const chartStartToken = rangeContext.chartStartToken;
+  const chartEndToken = rangeContext.chartEndToken;
+  const metricNames = [
+    ANALYTICS_METRICS.newPlayers,
+    ANALYTICS_METRICS.referralsCreated,
+    ANALYTICS_METRICS.promoCodeApplyClicks,
+    ANALYTICS_METRICS.sessionsStarted,
+    ANALYTICS_METRICS.sessionsFinished,
+  ];
+  const rangeWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "date");
+  const chartWhere = buildAnalyticsRangeWhere(chartStartToken, chartEndToken, "date");
+  const uniquePresenceRangeWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "date");
+  const sessionStartWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "start_date");
+  const recentSessionsWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "start_date");
+  const hourlyDateToken = rangeContext.effectiveRange === "today"
+    ? (chartStartToken || rangeContext.rangeStartToken || getTodayToken())
+    : "";
+  const chartParamsWithMetrics = [...chartWhere.params, metricNames];
+  const playerSeriesStartToken = rangeContext.effectiveRange === "all"
+    ? `${buildMonthTokenSequence(12)[0] || getCurrentMonthToken()}-01`
+    : chartStartToken;
+
+  const [usersResult, dailyMetricsResult, hourlyMetricsResult, appOpenUsersResult, promoCodeApplyUsersResult, dailyOpenUsersResult, sessionSummaryResult, recentSessionsResult, attemptsByUserResult, referralsByUserResult, totalReferredPlayersResult, playersBeforeChartResult] = await Promise.all([
     query(`
       SELECT
-        id,
-        created_at,
-        last_seen_at,
-        referred_by_user_id
+        COUNT(*)::int AS total_players_count,
+        COUNT(*) FILTER (WHERE last_seen_at >= NOW() - INTERVAL '15 minutes')::int AS currently_online_players_count
       FROM app_users
     `),
+    query(
+      `
+        SELECT
+          date::text AS key,
+          metric,
+          value::bigint
+        FROM analytics_daily
+        ${chartWhere.whereClause}
+          ${chartWhere.whereClause ? "AND" : "WHERE"} metric = ANY($${chartParamsWithMetrics.length}::text[])
+        ORDER BY date ASC
+      `,
+      chartParamsWithMetrics,
+    ),
+    hourlyDateToken
+      ? query(
+        `
+          SELECT
+            CONCAT(date::text, '-', LPAD(hour::text, 2, '0')) AS key,
+            metric,
+            value::bigint
+          FROM analytics_hourly
+          WHERE date = $1::date
+            AND metric = ANY($2::text[])
+          ORDER BY hour ASC
+        `,
+        [hourlyDateToken, metricNames],
+      )
+      : Promise.resolve({ rows: [] }),
+    query(
+      `
+        SELECT COUNT(DISTINCT user_id)::int AS count
+        FROM analytics_metric_users
+        ${uniquePresenceRangeWhere.whereClause}
+          ${uniquePresenceRangeWhere.whereClause ? "AND" : "WHERE"} metric = $${uniquePresenceRangeWhere.params.length + 1}
+      `,
+      [...uniquePresenceRangeWhere.params, ANALYTICS_USER_PRESENCE_METRICS.appOpen],
+    ),
+    query(
+      `
+        SELECT COUNT(DISTINCT user_id)::int AS count
+        FROM analytics_metric_users
+        ${uniquePresenceRangeWhere.whereClause}
+          ${uniquePresenceRangeWhere.whereClause ? "AND" : "WHERE"} metric = $${uniquePresenceRangeWhere.params.length + 1}
+      `,
+      [...uniquePresenceRangeWhere.params, ANALYTICS_USER_PRESENCE_METRICS.promoCodeApply],
+    ),
+    query(
+      `
+        SELECT
+          date::text AS date_token,
+          COUNT(*)::int AS value
+        FROM analytics_metric_users
+        ${rangeWhere.whereClause}
+          ${rangeWhere.whereClause ? "AND" : "WHERE"} metric = $${rangeWhere.params.length + 1}
+        GROUP BY date
+        ORDER BY date ASC
+      `,
+      [...rangeWhere.params, ANALYTICS_USER_PRESENCE_METRICS.appOpen],
+    ),
+    query(
+      `
+        SELECT
+          COUNT(*)::int AS sessions_started_count,
+          COUNT(*) FILTER (WHERE finished_at IS NOT NULL)::int AS finished_sessions_count,
+          COUNT(DISTINCT user_id)::int AS entered_game_count,
+          COUNT(DISTINCT user_id) FILTER (WHERE finished_at IS NOT NULL)::int AS finished_players_count,
+          COALESCE(ROUND(AVG(duration_seconds)) FILTER (WHERE finished_at IS NOT NULL), 0)::int AS average_completion_seconds
+        FROM game_sessions
+        ${sessionStartWhere.whereClause}
+      `,
+      sessionStartWhere.params,
+    ),
+    query(
+      `
+        SELECT
+          session_id,
+          user_id,
+          started_at,
+          finished_at,
+          duration_seconds
+        FROM game_sessions
+        ${recentSessionsWhere.whereClause}
+        ORDER BY started_at DESC
+        LIMIT 20
+      `,
+      recentSessionsWhere.params,
+    ),
+    query(
+      `
+        SELECT
+          user_id,
+          COALESCE(SUM(value), 0)::int AS total
+        FROM analytics_daily_user_metrics
+        ${rangeWhere.whereClause}
+          ${rangeWhere.whereClause ? "AND" : "WHERE"} metric = $${rangeWhere.params.length + 1}
+        GROUP BY user_id
+      `,
+      [...rangeWhere.params, ANALYTICS_USER_METRICS.spinConsumed],
+    ),
+    query(
+      `
+        SELECT
+          user_id,
+          COALESCE(SUM(value), 0)::int AS total
+        FROM analytics_daily_user_metrics
+        ${rangeWhere.whereClause}
+          ${rangeWhere.whereClause ? "AND" : "WHERE"} metric = $${rangeWhere.params.length + 1}
+        GROUP BY user_id
+      `,
+      [...rangeWhere.params, ANALYTICS_USER_METRICS.referralsInvited],
+    ),
     query(`
-      SELECT
-        id,
-        user_id,
-        session_id,
-        event_name,
-        created_at
-      FROM game_event_logs
+      SELECT COUNT(*)::int AS total_referred_players_count
+      FROM app_users
+      WHERE referred_by_user_id IS NOT NULL
     `),
-    query(`
-      SELECT
-        user_id,
-        delta,
-        reason,
-        created_at
-      FROM user_attempt_transactions
-    `),
+    playerSeriesStartToken
+      ? query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM app_users
+          WHERE (created_at AT TIME ZONE $2)::date < $1::date
+        `,
+        [playerSeriesStartToken, ANALYTICS_TIMEZONE],
+      )
+      : Promise.resolve({ rows: [{ count: 0 }] }),
   ]);
 
-  const users = usersResult.rows.map((row) => ({
-    id: Number(row.id),
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-    referredByUserId: row.referred_by_user_id ? Number(row.referred_by_user_id) : null,
-    dateToken: toDateToken(row.created_at),
+  const dailyMetricRows = dailyMetricsResult.rows.map((row) => ({
+    key: String(row.key || "").trim(),
+    metric: String(row.metric || "").trim(),
+    value: Number(row.value || 0),
   }));
-  const logs = logsResult.rows.map((row) => ({
-    id: Number(row.id),
-    userId: Number(row.user_id),
-    sessionId: row.session_id || "",
-    eventName: row.event_name || "",
-    createdAt: row.created_at,
-    dateToken: toDateToken(row.created_at),
-    hourToken: toHourToken(row.created_at),
-    monthToken: toMonthToken(row.created_at),
+  const hourlyMetricRows = hourlyMetricsResult.rows.map((row) => ({
+    key: String(row.key || "").trim(),
+    metric: String(row.metric || "").trim(),
+    value: Number(row.value || 0),
   }));
-  const attemptTransactions = attemptsResult.rows.map((row) => ({
-    userId: Number(row.user_id),
-    delta: Number(row.delta || 0),
-    reason: row.reason || "",
-    createdAt: row.created_at,
-    dateToken: toDateToken(row.created_at),
-  }));
-
-  const inRangeUsers = users.filter((user) =>
-    isTokenInRange(user.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-  const openEventsInRange = logs.filter((log) =>
-    APP_OPEN_EVENT_NAMES.has(log.eventName)
-    && isTokenInRange(log.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-  const promoCodeApplyEventsInRange = logs.filter((log) =>
-    log.eventName === PROMO_CODE_APPLY_EVENT_NAME
-    && isTokenInRange(log.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-
-  const sessionsMap = new Map();
-
-  for (const log of logs) {
-    if (!log.sessionId) {
-      continue;
-    }
-
-    const sessionKey = `${log.userId}:${log.sessionId}`;
-    const currentSession = sessionsMap.get(sessionKey);
-
-    if (!currentSession) {
-      sessionsMap.set(sessionKey, {
-        userId: log.userId,
-        sessionId: log.sessionId,
-        startedAt: log.createdAt,
-        finishedAt: log.eventName === "spin_result" ? log.createdAt : null,
-        hasFinished: log.eventName === "spin_result",
-      });
-      continue;
-    }
-
-    if (new Date(log.createdAt).getTime() < new Date(currentSession.startedAt).getTime()) {
-      currentSession.startedAt = log.createdAt;
-    }
-
-    if (log.eventName === "spin_result") {
-      currentSession.hasFinished = true;
-
-      if (
-        !currentSession.finishedAt
-        || new Date(log.createdAt).getTime() > new Date(currentSession.finishedAt).getTime()
-      ) {
-        currentSession.finishedAt = log.createdAt;
-      }
-    }
-  }
-
-  const allSessions = [...sessionsMap.values()].map((session) => ({
-    ...session,
-    startedDateToken: toDateToken(session.startedAt),
-    finishedDateToken: session.finishedAt ? toDateToken(session.finishedAt) : "",
-    startedHourToken: toHourToken(session.startedAt),
-    finishedHourToken: session.finishedAt ? toHourToken(session.finishedAt) : "",
-    startedMonthToken: toMonthToken(session.startedAt),
-    finishedMonthToken: session.finishedAt ? toMonthToken(session.finishedAt) : "",
-    durationSeconds: session.hasFinished && session.finishedAt
-      ? Math.max(0, Math.round((new Date(session.finishedAt).getTime() - new Date(session.startedAt).getTime()) / 1000))
-      : 0,
-  }));
-
-  const inRangeStartedSessions = allSessions.filter((session) =>
-    isTokenInRange(session.startedDateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-  const finishedSessionsFromStartedRange = inRangeStartedSessions.filter((session) => session.hasFinished);
-  const chartStartedSessions = allSessions.filter((session) =>
-    isTokenInRange(session.startedDateToken, rangeContext.chartStartToken, rangeContext.chartEndToken),
-  );
-  const chartFinishedSessions = allSessions.filter((session) =>
-    session.hasFinished
-    && isTokenInRange(session.finishedDateToken, rangeContext.chartStartToken, rangeContext.chartEndToken),
-  );
-
-  const inRangeSpinTransactions = attemptTransactions.filter((item) =>
-    item.reason === "spin_consumed"
-    && isTokenInRange(item.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-  const attemptsByUser = new Map();
-
-  for (const transaction of inRangeSpinTransactions) {
-    attemptsByUser.set(transaction.userId, (attemptsByUser.get(transaction.userId) || 0) + Math.abs(transaction.delta || 0));
-  }
-
-  const inRangeReferralUsers = users.filter((user) =>
-    Boolean(user.referredByUserId)
-    && isTokenInRange(user.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
-  );
-  const referralsByUser = new Map();
-
-  for (const user of inRangeReferralUsers) {
-    referralsByUser.set(user.referredByUserId, (referralsByUser.get(user.referredByUserId) || 0) + 1);
-  }
-
-  const uniqueOpenUsersByDay = new Map();
-
-  for (const log of openEventsInRange) {
-    if (!uniqueOpenUsersByDay.has(log.dateToken)) {
-      uniqueOpenUsersByDay.set(log.dateToken, new Set());
-    }
-
-    uniqueOpenUsersByDay.get(log.dateToken).add(log.userId);
-  }
-
-  const dailyUniqueVisitCounts = [...uniqueOpenUsersByDay.values()].map((item) => item.size);
-  const totalUniqueDailyVisitsCount = dailyUniqueVisitCounts.reduce((sum, count) => sum + count, 0);
-  const averageDauCount = dailyUniqueVisitCounts.length > 0
-    ? Math.round(totalUniqueDailyVisitsCount / dailyUniqueVisitCounts.length)
-    : 0;
-
-  const newPlayersSeries = buildSeries(
-    users.filter((user) => isTokenInRange(user.dateToken, rangeContext.chartStartToken, rangeContext.chartEndToken)),
+  const seriesSourceRows = rangeContext.effectiveRange === "today" ? hourlyMetricRows : dailyMetricRows;
+  const newPlayersSeries = buildSeriesFromAggregateRows(
+    seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.newPlayers),
     rangeContext.effectiveRange,
-    (item) => {
-      if (rangeContext.effectiveRange === "today") {
-        return toHourToken(item.createdAt);
-      }
-
-      if (rangeContext.effectiveRange === "all") {
-        return toMonthToken(item.createdAt);
-      }
-
-      return item.dateToken;
-    },
-    rangeContext.chartStartToken,
-    rangeContext.chartEndToken,
+    chartStartToken,
+    chartEndToken,
   );
-  const playersBeforeChartStartCount = users.filter((user) =>
-    rangeContext.chartStartToken && user.dateToken && user.dateToken < rangeContext.chartStartToken,
-  ).length;
-  let runningPlayersCount = playersBeforeChartStartCount;
+  const sessionsStartedSeries = buildSeriesFromAggregateRows(
+    seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.sessionsStarted),
+    rangeContext.effectiveRange,
+    chartStartToken,
+    chartEndToken,
+  );
+  const sessionsFinishedSeries = buildSeriesFromAggregateRows(
+    seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.sessionsFinished),
+    rangeContext.effectiveRange,
+    chartStartToken,
+    chartEndToken,
+  );
+  let runningPlayersCount = Number(playersBeforeChartResult.rows[0]?.count || 0);
   const totalPlayersSeries = newPlayersSeries.map((point) => {
     runningPlayersCount += Number(point.value || 0);
 
@@ -761,40 +795,18 @@ export async function getAnalyticsOverview(payload = {}) {
       value: runningPlayersCount,
     };
   });
-  const sessionsStartedSeries = buildSeries(
-    chartStartedSessions,
-    rangeContext.effectiveRange,
-    (item) => {
-      if (rangeContext.effectiveRange === "today") {
-        return item.startedHourToken;
-      }
-
-      if (rangeContext.effectiveRange === "all") {
-        return item.startedMonthToken;
-      }
-
-      return item.startedDateToken;
-    },
-    rangeContext.chartStartToken,
-    rangeContext.chartEndToken,
-  );
-  const sessionsFinishedSeries = buildSeries(
-    chartFinishedSessions,
-    rangeContext.effectiveRange,
-    (item) => {
-      if (rangeContext.effectiveRange === "today") {
-        return item.finishedHourToken;
-      }
-
-      if (rangeContext.effectiveRange === "all") {
-        return item.finishedMonthToken;
-      }
-
-      return item.finishedDateToken;
-    },
-    rangeContext.chartStartToken,
-    rangeContext.chartEndToken,
-  );
+  const attemptsByUser = attemptsByUserResult.rows.map((row) => Number(row.total || 0));
+  const referralsByUser = referralsByUserResult.rows.map((row) => Number(row.total || 0));
+  const dailyUniqueVisitCounts = dailyOpenUsersResult.rows.map((row) => Number(row.value || 0));
+  const totalUniqueDailyVisitsCount = dailyUniqueVisitCounts.reduce((sum, count) => sum + count, 0);
+  const averageDauCount = dailyUniqueVisitCounts.length > 0
+    ? Math.round(totalUniqueDailyVisitsCount / dailyUniqueVisitCounts.length)
+    : 0;
+  const summaryRow = sessionSummaryResult.rows[0] || {};
+  const dailyMetricSum = (metricName) =>
+    dailyMetricRows
+      .filter((row) => row.metric === metricName && isTokenInRange(row.key, rangeContext.rangeStartToken, rangeContext.rangeEndToken))
+      .reduce((sum, row) => sum + Number(row.value || 0), 0);
 
   return {
     ...emptyOverview,
@@ -806,38 +818,33 @@ export async function getAnalyticsOverview(payload = {}) {
     },
     summary: {
       ...emptyOverview.summary,
-      totalPlayersCount: users.length,
-      newPlayersCount: inRangeUsers.length,
-      appOpenedCount: new Set(openEventsInRange.map((item) => item.userId)).size,
+      totalPlayersCount: Number(usersResult.rows[0]?.total_players_count || 0),
+      newPlayersCount: dailyMetricSum(ANALYTICS_METRICS.newPlayers),
+      appOpenedCount: Number(appOpenUsersResult.rows[0]?.count || 0),
       subscribedPlayersCount: 0,
       totalUniqueDailyVisitsCount,
       averageDauCount,
-      sessionsStartedCount: inRangeStartedSessions.length,
-      finishedSessionsCount: finishedSessionsFromStartedRange.length,
-      playersWithFinishedGameCount: new Set(finishedSessionsFromStartedRange.map((item) => item.userId)).size,
-      currentlyOnlinePlayersCount: users.filter((user) => isOnline(user.lastSeenAt)).length,
-      averageCompletionSeconds: finishedSessionsFromStartedRange.length > 0
-        ? Math.round(
-          finishedSessionsFromStartedRange.reduce((sum, item) => sum + Number(item.durationSeconds || 0), 0)
-          / finishedSessionsFromStartedRange.length,
-        )
-        : 0,
-      referralsInPeriodCount: inRangeReferralUsers.length,
-      totalReferredPlayersCount: users.filter((user) => Boolean(user.referredByUserId)).length,
+      sessionsStartedCount: Number(summaryRow.sessions_started_count || 0),
+      finishedSessionsCount: Number(summaryRow.finished_sessions_count || 0),
+      playersWithFinishedGameCount: Number(summaryRow.finished_players_count || 0),
+      currentlyOnlinePlayersCount: Number(usersResult.rows[0]?.currently_online_players_count || 0),
+      averageCompletionSeconds: Number(summaryRow.average_completion_seconds || 0),
+      referralsInPeriodCount: dailyMetricSum(ANALYTICS_METRICS.referralsCreated),
+      totalReferredPlayersCount: Number(totalReferredPlayersResult.rows[0]?.total_referred_players_count || 0),
       passedSubscriptionStageCount: 0,
       notSubscribedBeforeCount: 0,
       subscribedAfterNotSubscribedCount: 0,
-      enteredGameCount: new Set(inRangeStartedSessions.map((item) => item.userId)).size,
-      attemptedOneTimePlayersCount: [...attemptsByUser.values()].filter((count) => count >= 1).length,
-      attemptedThreeTimesPlayersCount: [...attemptsByUser.values()].filter((count) => count >= 3).length,
-      attemptedFiveTimesPlayersCount: [...attemptsByUser.values()].filter((count) => count >= 5).length,
-      attemptedTenTimesPlayersCount: [...attemptsByUser.values()].filter((count) => count >= 10).length,
-      referredOneFriendPlayersCount: [...referralsByUser.values()].filter((count) => count >= 1).length,
-      referredThreeFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 3).length,
-      referredFiveFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 5).length,
-      referredTenFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 10).length,
-      promoCodeApplyClicksCount: promoCodeApplyEventsInRange.length,
-      promoCodeApplyUsersCount: new Set(promoCodeApplyEventsInRange.map((item) => item.userId)).size,
+      enteredGameCount: Number(summaryRow.entered_game_count || 0),
+      attemptedOneTimePlayersCount: attemptsByUser.filter((count) => count >= 1).length,
+      attemptedThreeTimesPlayersCount: attemptsByUser.filter((count) => count >= 3).length,
+      attemptedFiveTimesPlayersCount: attemptsByUser.filter((count) => count >= 5).length,
+      attemptedTenTimesPlayersCount: attemptsByUser.filter((count) => count >= 10).length,
+      referredOneFriendPlayersCount: referralsByUser.filter((count) => count >= 1).length,
+      referredThreeFriendsPlayersCount: referralsByUser.filter((count) => count >= 3).length,
+      referredFiveFriendsPlayersCount: referralsByUser.filter((count) => count >= 5).length,
+      referredTenFriendsPlayersCount: referralsByUser.filter((count) => count >= 10).length,
+      promoCodeApplyClicksCount: dailyMetricSum(ANALYTICS_METRICS.promoCodeApplyClicks),
+      promoCodeApplyUsersCount: Number(promoCodeApplyUsersResult.rows[0]?.count || 0),
     },
     series: {
       newPlayers: newPlayersSeries,
@@ -845,17 +852,13 @@ export async function getAnalyticsOverview(payload = {}) {
       sessionsStarted: sessionsStartedSeries,
       sessionsFinished: sessionsFinishedSeries,
     },
-    recentSessions: inRangeStartedSessions
-      .slice()
-      .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime())
-      .slice(0, 20)
-      .map((session) => ({
-        id: session.sessionId,
-        playerId: session.userId,
-        startedAt: session.startedAt,
-        finishedAt: session.finishedAt,
-        durationSeconds: session.durationSeconds,
-        status: session.hasFinished ? "finished" : "active",
+    recentSessions: recentSessionsResult.rows.map((session) => ({
+      id: session.session_id,
+      playerId: Number(session.user_id),
+      startedAt: session.started_at,
+      finishedAt: session.finished_at,
+      durationSeconds: Number(session.duration_seconds || 0),
+      status: session.finished_at ? "finished" : "active",
       })),
   };
 }
@@ -987,24 +990,13 @@ export async function getPlayerAnalyticsDetails(payload = {}) {
   ]);
   const recentSessionsResult = await query(
     `
-      WITH session_events AS (
-        SELECT
-          user_id,
-          session_id,
-          MIN(created_at) AS started_at,
-          MAX(created_at) AS finished_at,
-          BOOL_OR(event_name = 'spin_result') AS has_finished
-        FROM game_event_logs
-        WHERE user_id = $1 AND session_id <> ''
-        GROUP BY user_id, session_id
-      )
       SELECT
         session_id,
         started_at,
         finished_at,
-        has_finished,
-        COALESCE(EXTRACT(EPOCH FROM finished_at - started_at), 0)::int AS duration_seconds
-      FROM session_events
+        duration_seconds
+      FROM game_sessions
+      WHERE user_id = $1
       ORDER BY started_at DESC
       LIMIT 20
     `,
@@ -1051,7 +1043,7 @@ export async function getPlayerAnalyticsDetails(payload = {}) {
     },
     recentSessions: recentSessionsResult.rows.map((row) => ({
       id: row.session_id,
-      status: row.has_finished ? "finished" : "active",
+      status: row.finished_at ? "finished" : "active",
       foundSneakersCount: 0,
       remainingSeconds: 0,
       startedAt: row.started_at,
@@ -1070,12 +1062,11 @@ export async function getPlayerLogs(payload = {}) {
       SELECT
         id,
         user_id,
-        session_id,
-        event_name,
+        action,
         source,
-        details,
+        payload,
         created_at
-      FROM game_event_logs
+      FROM user_events
       WHERE user_id = $1
       ORDER BY created_at DESC, id DESC
       LIMIT $2
@@ -1087,10 +1078,10 @@ export async function getPlayerLogs(payload = {}) {
     logs: result.rows.map((row) => ({
       id: Number(row.id),
       playerId: Number(row.user_id),
-      gameSessionId: row.session_id || "",
-      action: row.event_name,
+      gameSessionId: String(row.payload?.sessionId || row.payload?.session_id || ""),
+      action: row.action,
       source: row.source,
-      details: row.details && typeof row.details === "object" ? row.details : {},
+      details: row.payload && typeof row.payload === "object" ? row.payload : {},
       createdAt: row.created_at,
     })),
   };
