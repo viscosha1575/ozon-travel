@@ -56,6 +56,7 @@ services:
       REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://${DOMAIN}}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://${DOMAIN}}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
       MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
       UPLOADS_DIR: /app/uploads
