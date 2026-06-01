@@ -943,11 +943,6 @@ body {
   line-height: 1.05;
   text-align: center;
   letter-spacing: 0.3px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .game-prizes-list {
@@ -1032,6 +1027,11 @@ body {
   letter-spacing: 0.24px;
   white-space: pre-line;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .game-prize-card-date {
