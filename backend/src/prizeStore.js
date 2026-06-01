@@ -1281,6 +1281,7 @@ async function listAwardedPrizesForUser(userId) {
     `
       SELECT
         awarded_prizes.id,
+        awarded_prizes.prize_id,
         awarded_prizes.title AS my_prize_title,
         awarded_prizes.promo_code,
         awarded_prizes.image,
@@ -1300,6 +1301,7 @@ async function listAwardedPrizesForUser(userId) {
 
   return result.rows.map((row) => ({
     id: Number(row.id),
+    positionId: row.prize_id != null ? Number(row.prize_id) : null,
     title: row.prize_title || row.my_prize_title,
     myPrizeText: row.my_prize_title || row.prize_title || "",
     promoCode: row.promo_code,
@@ -1475,6 +1477,7 @@ export async function getGameBootstrap(userInfo = {}) {
     rouletteItems: orderedRoulettePrizes.map(buildFrontendPrize),
     myPrizes: myPrizes.map((item) => ({
       id: item.id,
+      positionId: item.positionId,
       image: item.image?.previewUrl || "",
       title: item.title,
       myPrizeText: item.myPrizeText,
@@ -1617,6 +1620,7 @@ export async function spinPrize(userInfo = {}) {
       `
         SELECT
           awarded_prizes.id,
+          awarded_prizes.prize_id,
           awarded_prizes.title AS my_prize_title,
           awarded_prizes.promo_code,
           awarded_prizes.image,
@@ -1635,6 +1639,7 @@ export async function spinPrize(userInfo = {}) {
     );
     const myPrizes = myPrizesResult.rows.map((row) => ({
       id: Number(row.id),
+      positionId: row.prize_id != null ? Number(row.prize_id) : null,
       image: normalizeStoredImage(row.image)?.previewUrl || "",
       title: row.prize_title || row.my_prize_title,
       myPrizeText: row.my_prize_title || row.prize_title || "",

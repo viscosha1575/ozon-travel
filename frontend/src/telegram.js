@@ -191,6 +191,27 @@ export function getMiniApp() {
   return null
 }
 
+export function openExternalLink(url) {
+  const normalizedUrl = String(url || '').trim()
+
+  if (!normalizedUrl || typeof window === 'undefined') {
+    return
+  }
+
+  const miniApp = getMiniApp()
+
+  if (typeof miniApp?.openLink === 'function') {
+    try {
+      miniApp.openLink(normalizedUrl)
+      return
+    } catch (error) {
+      console.warn('Failed to open external link with mini app SDK', error)
+    }
+  }
+
+  window.location.assign(normalizedUrl)
+}
+
 export function getMiniAppInitData() {
   if (isTelegramMiniApp()) {
     return String(getTelegramWebApp()?.initData || extractTelegramInitDataFromLocation() || '')

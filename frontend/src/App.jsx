@@ -1,9 +1,10 @@
 import { memo, startTransition, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
+import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { isTelegramMiniApp } from "./telegram.js"
+import { isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -151,27 +152,6 @@ function buildSupportLink(contact) {
 const PersistentGameScreen = memo(GameScreen)
 const IMPORTANT_INFO_TITLE = "Условия акции"
 
-function openExternalLink(url) {
-  const normalizedUrl = String(url || "").trim()
-
-  if (!normalizedUrl || typeof window === "undefined") {
-    return
-  }
-
-  const miniApp = window.Telegram?.WebApp ?? window.WebApp ?? null
-
-  if (typeof miniApp?.openLink === "function") {
-    try {
-      miniApp.openLink(normalizedUrl)
-      return
-    } catch (error) {
-      console.warn("Failed to open external link with mini app SDK", error)
-    }
-  }
-
-  window.location.assign(normalizedUrl)
-}
-
 function App() {
   const isTelegramHost = isTelegramMiniApp()
   const [activeScreen, setActiveScreen] = useState(0)
@@ -284,7 +264,7 @@ function App() {
 
         try {
           bootstrapResponse = await getJson("/game/bootstrap")
-          assetVersion = Date.now()
+          assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
           bootstrapResponse = {
             ...bootstrapResponse,
             assetVersion,

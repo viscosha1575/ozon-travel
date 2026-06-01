@@ -1,9 +1,11 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
+import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "../embeddedPage.js"
 import {
   getMiniApp,
+  openExternalLink,
   getMiniAppViewportHeight,
   getMiniAppViewportWidth,
 } from "../telegram.js"
@@ -40,6 +42,7 @@ const REFERRAL_SHARE_MESSAGE = [
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
 const IMPORTANT_INFO_TITLE = "Условия акции"
 const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?__rr=1"
+const DEFAULT_ROULETTE_IMAGE_PATH = "/game/bags/case.webp"
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
 const TOP_BANNER_ACTIONS = [
@@ -160,21 +163,36 @@ function readBootstrapCache() {
   }
 
   try {
-    window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
+    const rawValue = window.sessionStorage.getItem(BOOTSTRAP_CACHE_KEY)
+
+    if (!rawValue) {
+      return null
+    }
+
+    return JSON.parse(rawValue)
   } catch {
-    // Ignore sessionStorage failures.
+    try {
+      window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
+    } catch {
+      // Ignore sessionStorage failures.
+    }
   }
 
   return null
 }
 
-function writeBootstrapCache() {
+function writeBootstrapCache(payload) {
   if (typeof window === "undefined") {
     return
   }
 
   try {
-    window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
+    if (!payload || typeof payload !== "object") {
+      window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
+      return
+    }
+
+    window.sessionStorage.setItem(BOOTSTRAP_CACHE_KEY, JSON.stringify(payload))
   } catch {
     // Ignore sessionStorage failures.
   }
@@ -336,8 +354,8 @@ function getTrackWindowSteps(rouletteItemsLength) {
   return Math.max(rouletteItemsLength + TRACK_TAIL_BUFFER, TRACK_CENTER_OFFSET + TRACK_TAIL_BUFFER + 6)
 }
 
-function getAssetVersion() {
-  return Date.now()
+function getAssetVersion(payload) {
+  return buildBootstrapAssetVersion(payload)
 }
 
 function getRandomLoopCount(min, max) {
@@ -534,6 +552,7 @@ export default function GameScreen({
   const [isResultCopied, setIsResultCopied] = useState(false)
   const [isResultCopyToastVisible, setIsResultCopyToastVisible] = useState(false)
   const [resultRevealPhase, setResultRevealPhase] = useState("idle")
+  const [resultEntrySource, setResultEntrySource] = useState("spin")
   const [resultBagFlight, setResultBagFlight] = useState(null)
   const [centerBagIndex, setCenterBagIndex] = useState(0)
   const [trackItems, setTrackItems] = useState(initialTrackItems)
@@ -560,6 +579,7 @@ export default function GameScreen({
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
+  const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
 
   const resetResultState = useCallback(() => {
     cancelAnimationFrame(resultAnimationFrameRef.current)
@@ -843,7 +863,7 @@ export default function GameScreen({
       activeRouletteItems.findIndex((item) => normalizeEntityId(item.id) === normalizedTargetPositionId)
     )
     const matchedRouletteItem = activeRouletteItems[targetBagIndex] || null
-    const assetVersion = matchedRouletteItem?.assetVersion || getAssetVersion()
+    const assetVersion = matchedRouletteItem?.assetVersion || getAssetVersion(spinResponse)
     const nextResult = spinResponse?.result
       ? {
         ...spinResponse.result,
@@ -963,6 +983,7 @@ export default function GameScreen({
               setResultPrize(nextResultPrize)
               setMyPrizes(spinState.myPrizes)
               setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
+              setResultEntrySource("spin")
               setResultRevealPhase(resultOriginRect ? "bag-enter" : "sheet-enter")
               setResultBagFlight(
                 resultOriginRect && nextResultBag
@@ -1146,6 +1167,7 @@ export default function GameScreen({
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
+    setResultEntrySource("spin")
     clearTimeout(resultRevealTimeoutRef.current)
     resetResultState()
     resetCarousel(centerBagIndexRef.current)
@@ -1223,21 +1245,11 @@ export default function GameScreen({
       chanceValue: prize.chanceValue || "1x",
       type: prize.type || "Приз",
     }
-    const resultOriginRect = measureContainedImageRect(centerSlotImageRef.current)
-      || measureRectSnapshot(centerSlotMediaRef.current)
-
     setResultBag(nextResultBag)
     setResultPrize(buildResultPrize(prizeResult, nextResultBag))
-    setResultBagFlight(
-      resultOriginRect && nextResultBag
-        ? {
-          path: nextResultBag.path,
-          label: nextResultBag.label,
-          originRect: resultOriginRect,
-        }
-        : null
-    )
-    setResultRevealPhase(resultOriginRect ? "bag-enter" : "sheet-enter")
+    setResultBagFlight(null)
+    setResultEntrySource("collection")
+    setResultRevealPhase("sheet-enter")
   }
 
   const handleOpenTravelApp = () => {
@@ -1247,18 +1259,22 @@ export default function GameScreen({
       source: "result_prize",
     })
 
-    if (typeof window !== "undefined") {
-      window.location.assign(OZON_TRAVEL_APP_URL)
+    openExternalLink(OZON_TRAVEL_APP_URL)
+  }
+
+  const handleCarouselSlotImageError = (event) => {
+    const imageNode = event.currentTarget
+
+    if (!imageNode || imageNode.dataset.fallbackApplied === "true") {
+      return
     }
+
+    imageNode.dataset.fallbackApplied = "true"
+    imageNode.src = DEFAULT_ROULETTE_IMAGE_PATH
   }
 
   const handleCopyResultCode = async () => {
     if (!resultPrize?.promoCode) {
-      return
-    }
-
-    if (isResultCopied) {
-      handleOpenTravelApp()
       return
     }
 
@@ -1269,7 +1285,7 @@ export default function GameScreen({
       setIsResultCopyToastVisible(true)
       resultCopyToastTimeoutRef.current = window.setTimeout(() => {
         setIsResultCopyToastVisible(false)
-      }, RESULT_COPY_TOAST_DURATION)
+      }, 3000)
       void trackGameEvent("promo_code_copied", {
         prizeId: resultBag?.id ?? null,
         codeLength: String(resultPrize.promoCode).length,
@@ -1280,14 +1296,14 @@ export default function GameScreen({
       setIsResultCopyToastVisible(true)
       resultCopyToastTimeoutRef.current = window.setTimeout(() => {
         setIsResultCopyToastVisible(false)
-      }, RESULT_COPY_TOAST_DURATION)
+      }, 3000)
     }
   }
 
   const loadGameBootstrap = useCallback(async () => {
     try {
       const response = await getJson("/game/bootstrap")
-      const assetVersion = getAssetVersion()
+      const assetVersion = getAssetVersion(response)
       applyBootstrapResponse(response, assetVersion, "game_screen")
     } catch (error) {
       console.warn("Game bootstrap failed", error)
@@ -1402,7 +1418,12 @@ export default function GameScreen({
         const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * stepRef.current)
         setTrackTranslate(baseTranslate)
         virtualTranslateRef.current = baseTranslate
+        setCarouselMotionTransition("none")
         applyTrackStyles(baseTranslate)
+
+        if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+          scheduleIdleSpinRetry()
+        }
       }
     }
 
@@ -1770,6 +1791,7 @@ export default function GameScreen({
                           aria-hidden="true"
                           fetchPriority="low"
                           loading="eager"
+                          onError={handleCarouselSlotImageError}
                         />
                       </div>
                     </div>
@@ -1792,7 +1814,7 @@ export default function GameScreen({
           </div>
         </div>
         <section
-          className={`game-top-banner ${isSpinActive || resultBag ? "is-hidden" : ""}`}
+          className={`game-top-banner ${isSpinActive || resultBag || isGiftOverlayVisible ? "is-hidden" : ""}`}
           aria-label="Игровая панель"
         >
           <div className="game-top-banner-section game-top-banner-section--primary">
@@ -1824,7 +1846,7 @@ export default function GameScreen({
             />
           </div>
         </section>
-        <div className={`game-controls ${isSpinActive || resultBag ? "is-hidden" : ""}`}>
+        <div className={`game-controls ${isSpinActive || resultBag || isGiftOverlayVisible ? "is-hidden" : ""}`}>
           <button
             type="button"
             className={`game-spin-button ${hasAvailableAttempts ? "" : "game-spin-button--single"}`.trim()}
@@ -2023,7 +2045,11 @@ export default function GameScreen({
         ) : null}
         {resultBag ? (
           <section
-            className={`game-result ${isResultSheetVisible ? "is-sheet-visible" : "is-bag-entering"}`}
+            className={[
+              "game-result",
+              isResultSheetVisible ? "is-sheet-visible" : "is-bag-entering",
+              resultEntrySource === "collection" ? "is-collection-entering" : "",
+            ].filter(Boolean).join(" ")}
             aria-label="Результат приза"
           >
             <div className="game-result-hero">
@@ -2070,22 +2096,24 @@ export default function GameScreen({
                     <button
                       type="button"
                       className={`game-result-code ${isResultCopied ? "is-copied" : ""}`.trim()}
-                      onClick={handleCopyResultCode}
+                      onClick={isResultCopied ? handleOpenTravelApp : handleCopyResultCode}
                     >
                       <span className="game-result-code-text">
-                        {isResultCopied ? "Перейти в приложение" : resultPrize.promoCode}
+                        {isResultCopied ? "Применить промокод" : resultPrize.promoCode}
                       </span>
-                      <img
-                        src={isResultCopied ? "/intro/subscribe.webp" : "/game/icons/copy.svg"}
-                        alt=""
-                        className="game-result-code-icon"
-                        aria-hidden="true"
-                      />
+                      {!isResultCopied ? (
+                        <img
+                          src="/game/icons/copy.svg"
+                          alt=""
+                          className="game-result-code-icon"
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </button>
                   ) : null}
                   <button
                     type="button"
-                    className="game-result-primary-action"
+                    className={`game-result-primary-action ${isResultCopied && resultPrize?.promoCode ? "is-secondary" : ""}`.trim()}
                     onClick={handleBackToGame}
                   >
                     К Ленте призов
@@ -2114,7 +2142,12 @@ export default function GameScreen({
         {isResultCopyToastVisible ? (
           <div className="game-result-copy-toast" role="status" aria-live="polite">
             <span className="game-result-copy-toast-text">Скопировано</span>
-            <span className="game-result-copy-toast-check" aria-hidden="true">✓</span>
+            <img
+              src="/game/icons/done.svg"
+              alt=""
+              className="game-result-copy-toast-check"
+              aria-hidden="true"
+            />
           </div>
         ) : null}
         {embeddedPage ? (

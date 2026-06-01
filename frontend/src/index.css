@@ -1193,6 +1193,10 @@ body {
   overflow: visible;
 }
 
+.game-result.is-collection-entering .game-result-bag-visual {
+  animation: game-result-bag-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .game-result-bag-visual.is-hidden {
   opacity: 0;
 }
@@ -1335,11 +1339,15 @@ body {
   gap: clamp(10px, 1.659svh, 14px);
   background: rgba(0, 91, 255, 0.12);
   color: rgba(0, 91, 255, 1);
+  transition:
+    background 180ms ease,
+    color 180ms ease;
 }
 
 .game-result-code.is-copied {
-  gap: 8px;
-  background: rgba(0, 91, 255, 0.12);
+  gap: 0;
+  background: var(--bg-action-primary);
+  color: #fff;
 }
 
 .game-result-code-text {
@@ -1355,17 +1363,17 @@ body {
 
 .game-result-copy-toast {
   position: fixed;
-  top: calc(var(--app-safe-top) + 8px);
+  top: calc(var(--app-safe-top) + 25px);
   left: 50%;
   z-index: 40;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 8px 14px;
+  padding: 5.5px 12px 5.5px 24px;
+  box-sizing: border-box;
+  gap: 6px;
   border-radius: 999px;
-  background: rgba(7, 7, 7, 0.94);
+  background: #070707;
   color: #fff;
   transform: translateX(-50%);
   box-shadow: 0 12px 24px rgba(7, 7, 7, 0.18);
@@ -1373,29 +1381,28 @@ body {
 
 .game-result-copy-toast-text {
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
-  font-size: var(--font-body-sm);
-  font-weight: var(--font-weight-regular);
-  line-height: 1.2;
-  letter-spacing: 0.13px;
+  font-size: calc(var(--font-title) * 0.8);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
 .game-result-copy-toast-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  color: #fff;
-  font-size: var(--font-caption);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
+  display: block;
+  width: 28.8px;
+  height: 28.8px;
+  object-fit: contain;
 }
 
 .game-result-primary-action {
   background: var(--bg-action-primary);
   color: #fff;
+}
+
+.game-result-primary-action.is-secondary {
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
 }
 
 @media (max-height: 760px) {
@@ -1742,6 +1749,27 @@ body {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes game-result-bag-grow-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(0);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.12);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(1.08);
   }
 }
 
