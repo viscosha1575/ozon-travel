@@ -249,7 +249,7 @@ export default function ChancesPage() {
                             )}
                           </Flex>
                           <Stack spacing="4px">
-                            <Text color={textColor} fontSize="13px" fontWeight="700" lineHeight="1.3" noOfLines={2}>
+                            <Text color={textColor} fontSize="13px" fontWeight="700" lineHeight="1.3" whiteSpace="pre-line">
                               {item.myPrizeText || item.title}
                             </Text>
                             <Text color={textColorSecondary} fontSize="11px">

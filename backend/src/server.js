@@ -30,6 +30,7 @@ import {
   listChances,
   listPrizes,
   spinPrize,
+  updatePrizeEnabled,
   updateChance,
   updatePrize,
 } from "./prizeStore.js";
@@ -379,6 +380,11 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/prizes/update") {
       res.json(await updatePrize(body));
+      return;
+    }
+
+    if (path === "/api/prizes/toggle-enabled") {
+      res.json(await updatePrizeEnabled(body));
       return;
     }
 

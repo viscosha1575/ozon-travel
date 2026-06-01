@@ -1300,6 +1300,13 @@ export default function GameScreen({
   }
 
   const handleOpenTravelApp = () => {
+    if (isResultCopied && resultPrize?.promoCode) {
+      void trackGameEvent("promo_code_apply_clicked", {
+        prizeId: resultBag?.id ?? null,
+        codeLength: String(resultPrize.promoCode).length,
+      })
+    }
+
     void trackGameEvent("external_link_opened", {
       actionId: "travel_app",
       url: OZON_TRAVEL_APP_URL,

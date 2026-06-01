@@ -19,11 +19,15 @@ function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeMultilineText(value) {
+  return String(value || "").replace(/\r\n/g, "\n").trim();
+}
+
 function normalizeRouletteDescriptions(value) {
   return Array.from(
     new Set(
       Array.isArray(value)
-        ? value.map((item) => String(item || "").trim()).filter(Boolean)
+        ? value.map((item) => normalizeMultilineText(item)).filter(Boolean)
         : [],
     ),
   );
@@ -31,7 +35,7 @@ function normalizeRouletteDescriptions(value) {
 
 function collectPrizeDescriptionOptions(prize = {}) {
   const variants = normalizeRouletteDescriptions(prize.rouletteDescriptions);
-  const fallbackDescription = String(prize.rouletteDescription || "").trim();
+  const fallbackDescription = normalizeMultilineText(prize.rouletteDescription);
 
   if (fallbackDescription && !variants.includes(fallbackDescription)) {
     variants.unshift(fallbackDescription);
@@ -47,7 +51,7 @@ function collectEffectivePrizeDescriptions(prize = {}) {
     return variants;
   }
 
-  const fallbackDescription = String(prize.rouletteDescription || "").trim();
+  const fallbackDescription = normalizeMultilineText(prize.rouletteDescription);
 
   return fallbackDescription ? [fallbackDescription] : [];
 }
@@ -208,6 +212,7 @@ function mapPrizeRow(row) {
     chanceValue: row.chance_value,
     hasUserLimit: row.has_user_limit,
     userLimitCount: Number(row.user_limit_count || 0),
+    isEnabled: Boolean(row.is_enabled),
     activeFrom: row.active_from
       ? new Date(row.active_from).toISOString().slice(0, 10)
       : "",
@@ -246,6 +251,7 @@ async function getAllPrizes(client = null) {
       chance_value,
       has_user_limit,
       user_limit_count,
+      is_enabled,
       active_from,
       active_to,
       code_release_start,
@@ -354,8 +360,8 @@ function validatePrizePayload(payload = {}) {
   const codeReleaseStart = parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
   const codeReleaseEnd = parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
   const rouletteImage = payload.rouletteImage ?? null;
-  const myPrizeText = String(payload.myPrizeText || "").trim();
-  const incomingRouletteDescription = String(payload.rouletteDescription || "").trim();
+  const myPrizeText = normalizeMultilineText(payload.myPrizeText);
+  const incomingRouletteDescription = normalizeMultilineText(payload.rouletteDescription);
   const rouletteDescriptions = normalizeRouletteDescriptions(payload.rouletteDescriptions);
   const rouletteDescription = incomingRouletteDescription || rouletteDescriptions[0] || "";
 
@@ -512,6 +518,7 @@ export async function createPrize(payload = {}) {
             chance_value,
             has_user_limit,
             user_limit_count,
+            is_enabled,
             active_from,
             active_to,
             code_release_start,
@@ -523,7 +530,7 @@ export async function createPrize(payload = {}) {
             updated_at
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22::jsonb, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21, $22, $23::jsonb, NOW()
           )
         `,
         [
@@ -541,6 +548,7 @@ export async function createPrize(payload = {}) {
           nextPrize.chanceValue,
           nextPrize.hasUserLimit,
           nextPrize.userLimitCount,
+          true,
           nextPrize.activeFrom,
           nextPrize.activeTo,
           nextPrize.codeReleaseStart,
@@ -1084,6 +1092,37 @@ export async function deleteManyPrizes(payload = {}) {
   };
 }
 
+export async function updatePrizeEnabled(payload = {}) {
+  const id = Number(payload.id);
+  const isEnabled = Boolean(payload.isEnabled);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const result = await query(
+    `
+      UPDATE prize_positions
+      SET is_enabled = $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id
+    `,
+    [id, isEnabled],
+  );
+
+  if (!result.rowCount) {
+    throw new Error("Prize not found");
+  }
+
+  const items = await getAllPrizes();
+  const prize = items.find((item) => item.id === id);
+
+  return {
+    updated: true,
+    prize,
+  };
+}
+
 export async function listChances(payload = {}) {
   const search = normalizeSearch(payload.search);
   const allItems = await getAllPrizes();
@@ -1161,6 +1200,10 @@ export async function updateChance(payload = {}) {
 }
 
 function isPrizeActive(prize, todayValue) {
+  if (!prize.isEnabled) {
+    return false;
+  }
+
   if (prize.activeFrom && prize.activeFrom > todayValue) {
     return false;
   }
@@ -1455,8 +1498,9 @@ export async function getGameBootstrap(userInfo = {}) {
   const prizes = await getAllPrizes();
   const projectState = await getProjectState();
   const todayValue = getTodayValue();
-  const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
-  const prizePool = activePrizes.length ? activePrizes : prizes;
+  const enabledPrizes = prizes.filter((item) => item.isEnabled);
+  const activePrizes = enabledPrizes.filter((item) => isPrizeActive(item, todayValue));
+  const prizePool = activePrizes.length ? activePrizes : enabledPrizes;
   const mergedPrizePool = mergeNonPrizePositions(prizePool, { randomizeDescription: true });
   const orderedRoulettePrizes = arrangeRoulettePrizes(mergedPrizePool);
   const myPrizes = await listAwardedPrizesForUser(user.id);
@@ -1497,8 +1541,9 @@ export async function spinPrize(userInfo = {}) {
     await ensureDailyAttemptGrant(rawUser.id, client);
     const prizes = await getAllPrizes(client);
     const todayValue = getTodayValue();
-    const activePrizes = prizes.filter((item) => isPrizeActive(item, todayValue));
-    const prizePool = mergeNonPrizePositions(activePrizes.length ? activePrizes : prizes, {
+    const enabledPrizes = prizes.filter((item) => item.isEnabled);
+    const activePrizes = enabledPrizes.filter((item) => isPrizeActive(item, todayValue));
+    const prizePool = mergeNonPrizePositions(activePrizes.length ? activePrizes : enabledPrizes, {
       randomizeDescription: true,
     });
     const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);

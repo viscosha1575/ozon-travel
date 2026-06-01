@@ -140,6 +140,7 @@ function createMockPrize({
   rouletteImage = null,
   myPrizeText = "",
   rouletteDescription = "",
+  isEnabled = true,
 }) {
   return {
     id,
@@ -166,6 +167,7 @@ function createMockPrize({
     rouletteImage,
     myPrizeText,
     rouletteDescription,
+    isEnabled,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -459,6 +461,9 @@ const mockState = {
     createMockLog({ id: 1011, playerId: 10, gameSessionId: 110, action: "start", details: { source: "unity" }, hoursAgoValue: 101 }),
     createMockLog({ id: 1012, playerId: 11, gameSessionId: 111, action: "pause", details: { count: 1 }, hoursAgoValue: 121 }),
     createMockLog({ id: 1013, playerId: 12, gameSessionId: 112, action: "finish", details: { reason: "time-ended" }, hoursAgoValue: 147 }),
+    createMockLog({ id: 1014, playerId: 1, gameSessionId: 101, source: "frontend", action: "promo_code_apply_clicked", details: { prizeId: 3501, codeLength: 20 }, hoursAgoValue: 1.4 }),
+    createMockLog({ id: 1015, playerId: 5, gameSessionId: 105, source: "frontend", action: "promo_code_apply_clicked", details: { prizeId: 3502, codeLength: 20 }, hoursAgoValue: 27 }),
+    createMockLog({ id: 1016, playerId: 1, gameSessionId: 113, source: "frontend", action: "promo_code_apply_clicked", details: { prizeId: 3501, codeLength: 20 }, hoursAgoValue: 168 }),
   ],
   utmVisits: [
     { id: 2001, playerId: 1, utmSlug: "test", wasExistingPlayer: false, createdAt: hoursAgo(3) },
@@ -978,6 +983,29 @@ function toggleProjectFinished() {
   };
 }
 
+function togglePrizeEnabled(payload = {}) {
+  const id = Number(payload?.id);
+  const isEnabled = Boolean(payload?.isEnabled);
+
+  if (!id) {
+    throw new Error("Prize id is required");
+  }
+
+  const prize = mockState.prizes.find((item) => item.id === id);
+
+  if (!prize) {
+    throw new Error("Prize not found");
+  }
+
+  prize.isEnabled = isEnabled;
+  prize.updatedAt = new Date().toISOString();
+
+  return {
+    updated: true,
+    prize,
+  };
+}
+
 function parseChanceWeight(value) {
   const normalizedValue = String(value || "")
     .trim()
@@ -1044,6 +1072,10 @@ function buildChancesResponse(payload = {}) {
   };
 }
 
+function normalizeMultilineText(value) {
+  return String(value || "").replace(/\r\n/g, "\n").trim();
+}
+
 function createPrize(payload = {}) {
   const title = String(payload?.title || "").trim();
   const category = String(payload?.category || "").trim();
@@ -1064,8 +1096,8 @@ function createPrize(payload = {}) {
   const codeReleaseStart = String(payload?.codeReleaseStart || "").trim();
   const codeReleaseEnd = String(payload?.codeReleaseEnd || "").trim();
   const rouletteImage = payload?.rouletteImage ?? null;
-  const myPrizeText = String(payload?.myPrizeText || "").trim();
-  const rouletteDescription = String(payload?.rouletteDescription || "").trim();
+  const myPrizeText = normalizeMultilineText(payload?.myPrizeText);
+  const rouletteDescription = normalizeMultilineText(payload?.rouletteDescription);
 
   if (!title) {
     throw new Error("Prize title is required");
@@ -1177,8 +1209,8 @@ function updatePrize(payload = {}) {
   const codeReleaseStart = String(payload?.codeReleaseStart || "").trim();
   const codeReleaseEnd = String(payload?.codeReleaseEnd || "").trim();
   const rouletteImage = payload?.rouletteImage ?? null;
-  const myPrizeText = String(payload?.myPrizeText || "").trim();
-  const rouletteDescription = String(payload?.rouletteDescription || "").trim();
+  const myPrizeText = normalizeMultilineText(payload?.myPrizeText);
+  const rouletteDescription = normalizeMultilineText(payload?.rouletteDescription);
 
   if (!id) {
     throw new Error("Prize id is required");
@@ -1833,12 +1865,15 @@ function buildAnalyticsOverview(payload = {}) {
   const chartRangeEnd = rangeEnd;
   const players = mockState.players.slice();
   const sessions = mockState.sessions.slice();
+  const logs = mockState.logs.slice();
   const inRangePlayers = players.filter((player) => isInRange(player.createdAt, rangeStart, rangeEnd));
   const inRangeSessions = sessions.filter((session) => isInRange(session.startedAt, rangeStart, rangeEnd));
+  const inRangeLogs = logs.filter((log) => isInRange(log.createdAt, rangeStart, rangeEnd));
   const chartInRangePlayers = players.filter((player) => isInRange(player.createdAt, chartRangeStart, chartRangeEnd));
   const chartInRangeSessions = sessions.filter((session) => isInRange(session.startedAt, chartRangeStart, chartRangeEnd));
   const chartFinishedInRangeSessions = chartInRangeSessions.filter((session) => session.status === "finished");
   const finishedInRangeSessions = inRangeSessions.filter((session) => session.status === "finished");
+  const promoCodeApplyLogs = inRangeLogs.filter((log) => log.action === "promo_code_apply_clicked");
   const inRangeSessionPlayers = new Set(inRangeSessions.map((session) => session.playerId));
   const sessionsByPlayer = new Map();
   const playersWithThreePairs = new Set(
@@ -1950,6 +1985,8 @@ function buildAnalyticsOverview(payload = {}) {
       referredThreeFriendsPlayersCount: referralCounts.filter((count) => count >= 3).length,
       referredFiveFriendsPlayersCount: referralCounts.filter((count) => count >= 5).length,
       referredTenFriendsPlayersCount: referralCounts.filter((count) => count >= 10).length,
+      promoCodeApplyClicksCount: promoCodeApplyLogs.length,
+      promoCodeApplyUsersCount: new Set(promoCodeApplyLogs.map((log) => log.playerId)).size,
       ozonTravelTransitionsCount: 0,
     },
     series: {
@@ -2171,6 +2208,10 @@ export function resolveMockAdminResponse(path, body = {}) {
 
   if (path === "/api/prizes/update") {
     return updatePrize(body);
+  }
+
+  if (path === "/api/prizes/toggle-enabled") {
+    return togglePrizeEnabled(body);
   }
 
   if (path === "/api/prizes/delete") {

@@ -103,6 +103,8 @@ const EMPTY_ANALYTICS = {
     referredThreeFriendsPlayersCount: 0,
     referredFiveFriendsPlayersCount: 0,
     referredTenFriendsPlayersCount: 0,
+    promoCodeApplyClicksCount: 0,
+    promoCodeApplyUsersCount: 0,
     ozonTravelTransitionsCount: 0,
   },
 };
@@ -647,6 +649,16 @@ export default function AnalyticsPage() {
       key: "averageDauCount",
       label: "Средний DAU",
       value: formatNumber(summary.averageDauCount),
+    },
+    {
+      key: "promoCodeApplyClicksCount",
+      label: "Нажатия на «Применить промокод»",
+      value: formatNumber(summary.promoCodeApplyClicksCount),
+    },
+    {
+      key: "promoCodeApplyUsersCount",
+      label: "Уникальные пользователи по кнопке промокода",
+      value: formatNumber(summary.promoCodeApplyUsersCount),
     },
   ]), [summary]);
 

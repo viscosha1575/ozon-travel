@@ -53,6 +53,7 @@ async function ensureSchema() {
       chance_value TEXT NOT NULL DEFAULT '1x',
       has_user_limit BOOLEAN NOT NULL DEFAULT TRUE,
       user_limit_count INTEGER NOT NULL DEFAULT 0,
+      is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       active_from DATE NULL,
       active_to DATE NULL,
       roulette_image JSONB NULL,
@@ -166,6 +167,11 @@ async function ensureSchema() {
   await query(`
     ALTER TABLE prize_positions
     ADD COLUMN IF NOT EXISTS code_release_end TIMESTAMPTZ NULL
+  `);
+
+  await query(`
+    ALTER TABLE prize_positions
+    ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT TRUE
   `);
 
   await query(`

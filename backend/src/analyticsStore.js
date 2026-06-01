@@ -9,6 +9,7 @@ import {
 
 const ANALYTICS_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Moscow").trim() || "Europe/Moscow";
 const APP_OPEN_EVENT_NAMES = new Set(["app_open", "bootstrap_loaded", "game_bootstrap_loaded"]);
+const PROMO_CODE_APPLY_EVENT_NAME = "promo_code_apply_clicked";
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -342,6 +343,8 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
       referredThreeFriendsPlayersCount: 0,
       referredFiveFriendsPlayersCount: 0,
       referredTenFriendsPlayersCount: 0,
+      promoCodeApplyClicksCount: 0,
+      promoCodeApplyUsersCount: 0,
       ozonTravelTransitionsCount: 0,
     },
     series: {
@@ -626,6 +629,10 @@ export async function getAnalyticsOverview(payload = {}) {
     APP_OPEN_EVENT_NAMES.has(log.eventName)
     && isTokenInRange(log.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
   );
+  const promoCodeApplyEventsInRange = logs.filter((log) =>
+    log.eventName === PROMO_CODE_APPLY_EVENT_NAME
+    && isTokenInRange(log.dateToken, rangeContext.rangeStartToken, rangeContext.rangeEndToken),
+  );
 
   const sessionsMap = new Map();
 
@@ -829,6 +836,8 @@ export async function getAnalyticsOverview(payload = {}) {
       referredThreeFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 3).length,
       referredFiveFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 5).length,
       referredTenFriendsPlayersCount: [...referralsByUser.values()].filter((count) => count >= 10).length,
+      promoCodeApplyClicksCount: promoCodeApplyEventsInRange.length,
+      promoCodeApplyUsersCount: new Set(promoCodeApplyEventsInRange.map((item) => item.userId)).size,
     },
     series: {
       newPlayers: newPlayersSeries,

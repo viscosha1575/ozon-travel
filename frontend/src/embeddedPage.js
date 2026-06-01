@@ -87,20 +87,22 @@ function buildHeadInjection(url, title) {
         justify-content: center;
         width: min(272px, calc(100vw - 40px));
         height: 60px;
-        padding: 0 16px;
+        padding: 8px 18px;
         border: 0;
         border-radius: 14px;
-        background: rgba(0, 91, 255, 1);
+        background: linear-gradient(180deg, #1d69f8 0%, #155cf0 100%);
         color: #fff;
         font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
         font-size: var(--app-button-font-size);
         font-weight: var(--font-weight-semibold);
         line-height: 1;
-        letter-spacing: 0;
+        letter-spacing: 0.17px;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         transform: translateX(-50%);
-        box-shadow: 0 10px 24px rgba(0, 91, 255, 0.18);
+        box-shadow:
+          0 14px 28px rgba(21, 92, 240, 0.24),
+          inset 0 1px 0 rgba(255, 255, 255, 0.16);
       }
 
       img,

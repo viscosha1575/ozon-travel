@@ -36,7 +36,7 @@ import {
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { MdAdd, MdCardGiftcard, MdDelete, MdDoNotDisturbAlt, MdEdit, MdFlag } from "react-icons/md";
+import { MdAdd, MdCardGiftcard, MdDoNotDisturbAlt, MdEdit, MdFlag } from "react-icons/md";
 import * as XLSX from "xlsx";
 import Card from "components/card/Card";
 import ImageUploader from "components/editor/ImageUploader";
@@ -501,9 +501,7 @@ export default function PromoCodesPage() {
   const [response, setResponse] = useState(EMPTY_RESPONSE);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [deletingPrizeId, setDeletingPrizeId] = useState(null);
-  const [deletingMany, setDeletingMany] = useState(false);
-  const [selectedPrizeIds, setSelectedPrizeIds] = useState([]);
+  const [togglingPrizeId, setTogglingPrizeId] = useState(null);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [editingPrizeId, setEditingPrizeId] = useState(null);
@@ -611,11 +609,6 @@ export default function PromoCodesPage() {
       cancelled = true;
     };
   }, [deferredSearch, categoryFilter, promoCodeTypeFilter]);
-
-  useEffect(() => {
-    const visibleIds = new Set(response.items.map((item) => item.id));
-    setSelectedPrizeIds((current) => current.filter((id) => visibleIds.has(id)));
-  }, [response.items]);
 
   useEffect(() => {
     if (!Object.keys(formValidation.fields).length) {
@@ -924,105 +917,37 @@ export default function PromoCodesPage() {
     }
   }
 
-  async function handleDeletePrize(item) {
-    if (!item?.id) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Удалить позицию «${item.title || `#${item.id}`}»?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingPrizeId(item.id);
-    setError("");
-    setSuccessMessage("");
-
-    try {
-      const result = await postJson("/api/prizes/delete", {
-        id: item.id,
-      });
-
-      await reloadPrizes();
-      setSuccessMessage(`Позиция «${result?.title || item.title}» удалена.`);
-      setSelectedPrizeIds((current) => current.filter((id) => id !== item.id));
-
-      if (editingPrizeId === item.id) {
-        setEditingPrizeId(null);
-        setForm(createInitialPrizeForm());
-        setFormValidation(createEmptyValidationState());
-        setPromoCodesUploadError("");
-        createPrizeModal.onClose();
-        nonPrizeModal.onClose();
-      }
-    } catch (requestError) {
-      setError(requestError.message || "Не удалось удалить приз");
-    } finally {
-      setDeletingPrizeId(null);
-    }
-  }
-
-  function handleTogglePrizeSelection(prizeId, checked) {
-    setSelectedPrizeIds((current) => {
-      if (checked) {
-        return current.includes(prizeId) ? current : [...current, prizeId];
-      }
-
-      return current.filter((id) => id !== prizeId);
-    });
-  }
-
-  function handleToggleSelectAll(checked) {
+  async function handleTogglePrizeEnabled(item, checked) {
     if (!checked) {
-      setSelectedPrizeIds([]);
-      return;
+      const confirmed = window.confirm(`Действительно хотите выключить приз «${item.title}»?`);
+
+      if (!confirmed) {
+        return;
+      }
     }
 
-    setSelectedPrizeIds(response.items.map((item) => item.id));
-  }
-
-  async function handleDeleteSelectedPrizes() {
-    if (!selectedPrizeIds.length) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Удалить выбранные позиции: ${selectedPrizeIds.length} шт.?`);
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingMany(true);
+    setTogglingPrizeId(item.id);
     setError("");
     setSuccessMessage("");
 
     try {
-      const result = await postJson("/api/prizes/delete-many", {
-        ids: selectedPrizeIds,
+      const result = await postJson("/api/prizes/toggle-enabled", {
+        id: item.id,
+        isEnabled: checked,
       });
 
       await reloadPrizes();
-      setSelectedPrizeIds([]);
-      setSuccessMessage(`Удалено позиций: ${result?.deletedCount || selectedPrizeIds.length}.`);
-
-      if (editingPrizeId && selectedPrizeIds.includes(editingPrizeId)) {
-        setEditingPrizeId(null);
-        setForm(createInitialPrizeForm());
-        setFormValidation(createEmptyValidationState());
-        setPromoCodesUploadError("");
-        createPrizeModal.onClose();
-        nonPrizeModal.onClose();
-      }
+      setSuccessMessage(
+        checked
+          ? `Позиция «${result?.prize?.title || item.title}» включена.`
+          : `Позиция «${result?.prize?.title || item.title}» выключена.`,
+      );
     } catch (requestError) {
-      setError(requestError.message || "Не удалось удалить выбранные призы");
+      setError(requestError.message || "Не удалось изменить статус приза");
     } finally {
-      setDeletingMany(false);
+      setTogglingPrizeId(null);
     }
   }
-
-  const allVisibleSelected = response.items.length > 0 && selectedPrizeIds.length === response.items.length;
-  const partiallySelected = selectedPrizeIds.length > 0 && selectedPrizeIds.length < response.items.length;
 
   return (
     <Box pt={{ base: "0px", md: "80px", xl: "80px" }}>
@@ -1158,26 +1083,6 @@ export default function PromoCodesPage() {
                   <Icon as={MdAdd} boxSize="24px" />
                 </Button>
               </Tooltip>
-              <Tooltip hasArrow placement="top" label="Удалить выбранные">
-                <Button
-                  h="56px"
-                  w="56px"
-                  minW="56px"
-                  flex="0 0 56px"
-                  variant="outline"
-                  colorScheme="red"
-                  borderRadius="20px"
-                  fontSize="sm"
-                  fontWeight="700"
-                  aria-label="Удалить выбранные"
-                  isDisabled={!selectedPrizeIds.length}
-                  isLoading={deletingMany}
-                  loadingText=""
-                  onClick={() => void handleDeleteSelectedPrizes()}
-                >
-                  <Icon as={MdDelete} boxSize="22px" />
-                </Button>
-              </Tooltip>
             </Flex>
           </Flex>
         </Card>
@@ -1204,14 +1109,7 @@ export default function PromoCodesPage() {
               <Table variant="simple">
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} ps="6px">
-                      <Checkbox
-                        colorScheme="brandScheme"
-                        isChecked={allVisibleSelected}
-                        isIndeterminate={partiallySelected}
-                        onChange={(event) => handleToggleSelectAll(event.target.checked)}
-                      />
-                    </Th>
+                    <Th color={textColorSecondary} ps="6px">Включен</Th>
                     <Th color={textColorSecondary}>Название</Th>
                     <Th color={textColorSecondary}>Тип</Th>
                     <Th color={textColorSecondary}>Категория</Th>
@@ -1224,12 +1122,13 @@ export default function PromoCodesPage() {
                 </Thead>
                 <Tbody>
                   {response.items.length > 0 ? response.items.map((item) => (
-                    <Tr key={item.id}>
+                    <Tr key={item.id} opacity={item.isEnabled ? 1 : 0.56}>
                       <Td borderColor={borderColor} ps="6px">
                         <Checkbox
                           colorScheme="brandScheme"
-                          isChecked={selectedPrizeIds.includes(item.id)}
-                          onChange={(event) => handleTogglePrizeSelection(item.id, event.target.checked)}
+                          isChecked={Boolean(item.isEnabled)}
+                          isDisabled={togglingPrizeId === item.id}
+                          onChange={(event) => void handleTogglePrizeEnabled(item, event.target.checked)}
                         />
                       </Td>
                       <Td borderColor={borderColor}>
@@ -1261,7 +1160,7 @@ export default function PromoCodesPage() {
                             )}
                           </Flex>
                           <Stack spacing="4px">
-                            <Text color={textColor} fontSize="sm" fontWeight="700">
+                            <Text color={textColor} fontSize="sm" fontWeight="700" whiteSpace="pre-line">
                               {item.myPrizeText || item.title}
                             </Text>
                             <Text color={textColorSecondary} fontSize="xs">
@@ -1338,7 +1237,7 @@ export default function PromoCodesPage() {
                           <Button
                             variant="lightBrand"
                             size="sm"
-                            minW="108px"
+                            minW="128px"
                             h="38px"
                             leftIcon={<Icon as={MdEdit} boxSize="16px" />}
                             fontSize="sm"
@@ -1346,21 +1245,6 @@ export default function PromoCodesPage() {
                             onClick={() => handleOpenEditModal(item)}
                           >
                             Изменить
-                          </Button>
-                          <Button
-                            variant="outline"
-                            colorScheme="red"
-                            size="sm"
-                            minW="108px"
-                            h="38px"
-                            leftIcon={<Icon as={MdDelete} boxSize="16px" />}
-                            fontSize="sm"
-                            fontWeight="700"
-                            isLoading={deletingPrizeId === item.id}
-                            loadingText="Удаляем"
-                            onClick={() => void handleDeletePrize(item)}
-                          >
-                            Удалить
                           </Button>
                         </Flex>
                       </Td>
@@ -1860,13 +1744,17 @@ export default function PromoCodesPage() {
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Текст для Мои призы
                     </FormLabel>
-                    <Input
-                      h="52px"
-                      borderRadius="16px"
+                    <Textarea
+                      minH="140px"
+                      borderRadius="20px"
+                      resize="vertical"
                       value={form.myPrizeText}
                       onChange={(event) => setForm((current) => ({ ...current, myPrizeText: event.target.value }))}
                       placeholder="Например: Скидка 800 ₽"
                     />
+                    <Text mt="8px" color={textColorSecondary} fontSize="xs">
+                      Переносы строки сохраняются. Используйте Enter, чтобы разбить текст на несколько строк.
+                    </Text>
                   </FormControl>
 
                   <FormControl isInvalid={Boolean(formValidation.fields.rouletteDescription)}>
