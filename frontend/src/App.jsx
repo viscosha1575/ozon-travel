@@ -13,6 +13,9 @@ const SUBSCRIPTION_CHANNEL_URL = String(
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
+const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
+const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
+const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
 const GAME_SCENE_ASSETS = [
   "/game/center.webp",
   "/game/left-triangle.svg",
@@ -175,6 +178,12 @@ function buildSupportLink(contact) {
 const PersistentGameScreen = memo(GameScreen)
 const IMPORTANT_INFO_TITLE = "Условия акции"
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function App() {
   const isTelegramHost = isTelegramMiniApp()
   const isMaxHost = isMaxMiniApp()
@@ -203,6 +212,46 @@ function App() {
   const [debugLastError, setDebugLastError] = useState("")
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
+
+  const pollSubscriptionStatus = async ({
+    attempts,
+    delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+    reason = "unknown",
+    onProgress,
+  }) => {
+    const totalAttempts = Math.max(1, Number(attempts) || 1)
+    let lastResponse = null
+
+    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+      onProgress?.(attempt, totalAttempts)
+
+      const subscriptionStatus = await getJson("/game/subscription-status")
+      const isSubscribed = Boolean(subscriptionStatus?.user?.subscribedToChannel)
+      lastResponse = subscriptionStatus
+
+      if (isSubscribed || attempt >= totalAttempts || !isMaxHost) {
+        return {
+          isSubscribed,
+          subscriptionStatus,
+          attemptsUsed: attempt,
+        }
+      }
+
+      console.info("MAX subscription not visible yet, retrying", {
+        attempt,
+        totalAttempts,
+        delayMs,
+        reason,
+      })
+      await wait(delayMs)
+    }
+
+    return {
+      isSubscribed: Boolean(lastResponse?.user?.subscribedToChannel),
+      subscriptionStatus: lastResponse,
+      attemptsUsed: totalAttempts,
+    }
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -240,7 +289,15 @@ function App() {
         setDebugSubscriptionStatus("pending")
 
         try {
-          const subscriptionStatus = await getJson("/game/subscription-status")
+          const { subscriptionStatus } = await pollSubscriptionStatus({
+            attempts: isMaxHost ? MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
+            reason: "initial",
+            onProgress: (attempt, totalAttempts) => {
+              setDebugSubscriptionStatus(
+                totalAttempts > 1 ? `pending:${attempt}/${totalAttempts}` : "pending",
+              )
+            },
+          })
 
           if (isCancelled) {
             return
@@ -279,7 +336,7 @@ function App() {
     return () => {
       isCancelled = true
     }
-  }, [isTelegramHost])
+  }, [isMaxHost, isTelegramHost])
 
   useEffect(() => {
     if (INTRO_DISABLED || isProjectFinished === true) {
@@ -474,8 +531,15 @@ function App() {
     setDebugLastError("")
 
     try {
-      const subscriptionStatus = await getJson("/game/subscription-status")
-      const isSubscribed = Boolean(subscriptionStatus?.user?.subscribedToChannel)
+      const { subscriptionStatus, isSubscribed } = await pollSubscriptionStatus({
+        attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
+        reason: "manual",
+        onProgress: (attempt, totalAttempts) => {
+          setDebugSubscriptionStatus(
+            totalAttempts > 1 ? `pending:${attempt}/${totalAttempts}` : "pending",
+          )
+        },
+      })
 
       setIsUserSubscribed(isSubscribed)
       setDebugSubscriptionStatus(`ok:${isSubscribed ? "subscribed" : "not-subscribed"}`)

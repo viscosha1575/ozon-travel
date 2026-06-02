@@ -77,6 +77,9 @@ const subscriptionMessage = [
 
 const subscriptionRetryMessage =
   'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите «Проверить подписку» еще раз.';
+const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000;
+const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
+const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
 
 const menuMessage = [
   'Пора ловить призы!',
@@ -174,6 +177,40 @@ function extractUser(ctx) {
   };
 }
 
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function checkSubscriptionWithRetry(userId, {
+  source = 'unknown',
+  attempts = 1,
+  delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+} = {}) {
+  const totalAttempts = Math.max(1, Number(attempts) || 1);
+  let isSubscribed = false;
+
+  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+    isSubscribed = await refreshSubscriptionStatus(userId, { source });
+
+    if (isSubscribed || attempt >= totalAttempts) {
+      return isSubscribed;
+    }
+
+    logger.info('MAX subscription not visible yet, retrying', {
+      userId,
+      source,
+      attempt,
+      totalAttempts,
+      delayMs,
+    });
+    await wait(delayMs);
+  }
+
+  return isSubscribed;
+}
+
 async function registerUser(ctx, { logEntry = true } = {}) {
   const { userId, username, firstName, lastName } = extractUser(ctx);
   const rawStartParam = getMessageText(ctx).trim().split(/\s+/)[1] || '';
@@ -238,8 +275,9 @@ async function sendStartStep(ctx) {
   }
 
   try {
-    const isSubscribed = await refreshSubscriptionStatus(userId, {
+    const isSubscribed = await checkSubscriptionWithRetry(userId, {
       source: 'start',
+      attempts: MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS,
     });
 
     if (isSubscribed) {
@@ -335,8 +373,9 @@ bot.action('check_subscription', async (ctx) => {
       eventName: 'check_subscription',
     });
 
-    const isSubscribed = await refreshSubscriptionStatus(userId, {
+    const isSubscribed = await checkSubscriptionWithRetry(userId, {
       source: 'callback',
+      attempts: MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS,
     });
 
     await ctx.answerOnCallback({
