@@ -4,7 +4,7 @@ import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -177,6 +177,8 @@ const IMPORTANT_INFO_TITLE = "Условия акции"
 
 function App() {
   const isTelegramHost = isTelegramMiniApp()
+  const isMaxHost = isMaxMiniApp()
+  const isMiniAppHost = isTelegramHost || isMaxHost
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -388,7 +390,7 @@ function App() {
     })
     setIsGameLaunchPending(true)
 
-    if (isTelegramHost) {
+    if (isMiniAppHost) {
       startTransition(() => {
         setIsGameActive(true)
       })
@@ -425,7 +427,7 @@ function App() {
     }
 
     if (currentScreen.id === "subscription-failed") {
-      if (isTelegramHost) {
+      if (isMiniAppHost) {
         handleStartGame()
         return
       }
