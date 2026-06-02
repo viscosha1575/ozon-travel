@@ -277,7 +277,7 @@ async function sendStartStep(ctx) {
   try {
     const isSubscribed = await checkSubscriptionWithRetry(userId, {
       source: 'start',
-      attempts: MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS,
+      attempts: 1,
     });
 
     if (isSubscribed) {
@@ -289,11 +289,6 @@ async function sendStartStep(ctx) {
       userId,
       error: error.response?.data || error.message,
     });
-  }
-
-  if (registrationResult?.user?.subscribedToChannel && MAX_SUBSCRIPTION_CHECK_MODE === 'mock') {
-    await sendGameMenu(ctx);
-    return;
   }
 
   await safeReply(ctx, welcomeMessage, {
@@ -356,6 +351,7 @@ bot.action('show_support', async (ctx) => {
 
 bot.action('check_subscription', async (ctx) => {
   const { userId } = extractUser(ctx);
+  let callbackAcknowledged = false;
 
   try {
     const registered = await registerUser(ctx, { logEntry: false });
@@ -373,15 +369,14 @@ bot.action('check_subscription', async (ctx) => {
       eventName: 'check_subscription',
     });
 
+    await ctx.answerOnCallback({
+      notification: 'Проверяем, подождите пару секунд',
+    });
+    callbackAcknowledged = true;
+
     const isSubscribed = await checkSubscriptionWithRetry(userId, {
       source: 'callback',
       attempts: MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS,
-    });
-
-    await ctx.answerOnCallback({
-      notification: isSubscribed
-        ? 'Подписка подтверждена'
-        : 'Пока у тебя нет подписки на канал',
     });
 
     if (isSubscribed) {
@@ -407,8 +402,15 @@ bot.action('check_subscription', async (ctx) => {
       error: error.response?.data || error.message,
     });
 
-    await ctx.answerOnCallback({
-      notification: 'Не удалось проверить подписку',
-    });
+    if (!callbackAcknowledged) {
+      await ctx.answerOnCallback({
+        notification: 'Не удалось проверить подписку',
+      });
+      return;
+    }
+
+    await safeReply(ctx, 'Не удалось проверить подписку. Попробуйте ещё раз через пару секунд.', {
+      attachments: [subscriptionKeyboard],
+    }, 'check_subscription:error');
   }
 });
