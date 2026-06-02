@@ -4,7 +4,7 @@ import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { getMiniAppInitData, getMiniAppHost, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { getMiniAppInitData, getMiniAppHost, getMiniAppUser, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -181,6 +181,7 @@ function App() {
   const isMiniAppHost = isTelegramHost || isMaxHost
   const miniAppHost = getMiniAppHost()
   const miniAppInitData = getMiniAppInitData()
+  const miniAppUser = getMiniAppUser()
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -197,6 +198,9 @@ function App() {
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
   const [embeddedPage, setEmbeddedPage] = useState(null)
+  const [debugOpenStatus, setDebugOpenStatus] = useState("idle")
+  const [debugSubscriptionStatus, setDebugSubscriptionStatus] = useState("idle")
+  const [debugLastError, setDebugLastError] = useState("")
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
 
@@ -212,6 +216,8 @@ function App() {
 
     const initApp = async () => {
       try {
+        setDebugOpenStatus("pending")
+        setDebugLastError("")
         const response = await postJson("/game/open", {
           entryScreen: INTRO_DISABLED ? "game" : "intro",
           trackOpen: shouldTrackOpen,
@@ -224,12 +230,14 @@ function App() {
 
         setIsProjectFinished(projectFinished)
         setShouldShowControlsGuide(Boolean(response?.shouldShowControlsGuide))
+        setDebugOpenStatus(`ok:${response?.user?.subscribedToChannel ? "subscribed" : "not-subscribed"}`)
 
         if (projectFinished || isTelegramHost) {
           return
         }
 
         setIsInitialSubscriptionStatusPending(true)
+        setDebugSubscriptionStatus("pending")
 
         try {
           const subscriptionStatus = await getJson("/game/subscription-status")
@@ -239,9 +247,12 @@ function App() {
           }
 
           setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
+          setDebugSubscriptionStatus(`ok:${subscriptionStatus?.user?.subscribedToChannel ? "subscribed" : "not-subscribed"}`)
         } catch (error) {
           if (!isCancelled) {
             console.warn("Initial subscription status refresh failed", error)
+            setDebugSubscriptionStatus(`error:${error?.code || error?.message || "unknown"}`)
+            setDebugLastError(String(error?.message || error?.code || "subscription-status failed"))
           }
         } finally {
           if (!isCancelled) {
@@ -258,6 +269,8 @@ function App() {
         setIsInitialSubscriptionStatusPending(false)
         setShouldShowControlsGuide(false)
         setIsProjectFinished(false)
+        setDebugOpenStatus(`error:${error?.code || error?.message || "unknown"}`)
+        setDebugLastError(String(error?.message || error?.code || "game/open failed"))
       }
     }
 
@@ -457,12 +470,15 @@ function App() {
     }
 
     setIsSubscriptionCheckPending(true)
+    setDebugSubscriptionStatus("pending")
+    setDebugLastError("")
 
     try {
       const subscriptionStatus = await getJson("/game/subscription-status")
       const isSubscribed = Boolean(subscriptionStatus?.user?.subscribedToChannel)
 
       setIsUserSubscribed(isSubscribed)
+      setDebugSubscriptionStatus(`ok:${isSubscribed ? "subscribed" : "not-subscribed"}`)
 
       if (isSubscribed) {
         handleStartGame()
@@ -473,6 +489,8 @@ function App() {
       }
     } catch (error) {
       console.warn("Subscription status refresh failed", error)
+      setDebugSubscriptionStatus(`error:${error?.code || error?.message || "unknown"}`)
+      setDebugLastError(String(error?.message || error?.code || "subscription-status failed"))
     } finally {
       setIsSubscriptionCheckPending(false)
     }
@@ -654,8 +672,14 @@ function App() {
         <div className="app-debug-overlay-title">MINI APP DEBUG</div>
         <div className="app-debug-overlay-meta">
           <span>host: {miniAppHost || "unknown"}</span>
+          <span>userId: {miniAppUser?.platformUserId || "empty"}</span>
           <span>subscribed: {subscriptionDebugLabel}</span>
+          <span>open: {debugOpenStatus}</span>
+          <span>sub-check: {debugSubscriptionStatus}</span>
         </div>
+        {debugLastError ? (
+          <div className="app-debug-overlay-error">{debugLastError}</div>
+        ) : null}
         <pre className="app-debug-overlay-value">{miniAppInitData || "empty"}</pre>
       </aside>
       <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
