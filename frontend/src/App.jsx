@@ -191,6 +191,7 @@ function App() {
   const [shouldShowControlsGuide, setShouldShowControlsGuide] = useState(false)
   const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
+  const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
   const [embeddedPage, setEmbeddedPage] = useState(null)
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
@@ -336,6 +337,7 @@ function App() {
     if (!isProjectFinished) {
       setProjectFinishedMyPrizes([])
       setIsProjectFinishedPrizesOpen(false)
+      setProjectFinishedOverlay(null)
       return
     }
 
@@ -480,6 +482,7 @@ function App() {
     embeddedPageRequestRef.current += 1
     setEmbeddedPage(null)
     setIsProjectFinishedPrizesOpen(false)
+    setProjectFinishedOverlay(null)
     setProjectFinishedMyPrizes([])
     setIsGameLaunchPending(false)
     setIsGameActive(false)
@@ -488,6 +491,46 @@ function App() {
 
   const handleCloseProjectFinishedPrizes = () => {
     setIsProjectFinishedPrizesOpen(false)
+  }
+
+  const handleOpenProjectFinishedOverlay = (overlayId) => {
+    if (!overlayId) {
+      return
+    }
+
+    void trackGameEvent("overlay_opened", {
+      overlayId,
+      source: "project_finished",
+      myPrizesCount: overlayId === "gift" ? projectFinishedMyPrizes.length : undefined,
+    })
+    setProjectFinishedOverlay(overlayId)
+  }
+
+  const handleCloseProjectFinishedOverlay = () => {
+    if (!projectFinishedOverlay) {
+      return
+    }
+
+    void trackGameEvent("overlay_closed", {
+      overlayId: projectFinishedOverlay,
+      source: "project_finished",
+    })
+    setProjectFinishedOverlay(null)
+  }
+
+  const handleProjectFinishedSupportClick = () => {
+    const supportLink = buildSupportLink(SUPPORT_CONTACT)
+
+    if (!supportLink) {
+      return
+    }
+
+    void trackGameEvent("external_link_opened", {
+      actionId: "support",
+      url: supportLink,
+      source: "project_finished",
+    })
+    openExternalLink(supportLink)
   }
 
   const handleOpenEmbeddedPage = (title, url, source) => {
@@ -569,17 +612,7 @@ function App() {
 
   const handleProjectFinishedBannerAction = (actionId) => {
     if (actionId === "question") {
-      const supportLink = buildSupportLink(SUPPORT_CONTACT)
-      if (!supportLink) {
-        return
-      }
-
-      void trackGameEvent("external_link_opened", {
-        actionId,
-        url: supportLink,
-        source: "project_finished",
-      })
-      openExternalLink(supportLink)
+      handleOpenProjectFinishedOverlay("question")
       return
     }
 
@@ -589,11 +622,6 @@ function App() {
     }
 
     if (actionId === "gift") {
-      void trackGameEvent("overlay_opened", {
-        overlayId: actionId,
-        source: "project_finished",
-        myPrizesCount: projectFinishedMyPrizes.length,
-      })
       setIsProjectFinishedPrizesOpen(true)
       return
     }
@@ -730,6 +758,42 @@ function App() {
                     >
                       Закрыть
                     </button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
+            {projectFinishedOverlay === "question" ? (
+              <div
+                className="game-overlay is-opening"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="project-finished-question-title"
+              >
+                <div className="game-overlay-backdrop" />
+                <section className="game-overlay-sheet">
+                  <div className="game-overlay-sheet-inner">
+                    <h2 id="project-finished-question-title" className="game-overlay-title">
+                      Возникли вопросы?
+                    </h2>
+                    <p className="game-overlay-description">
+                      Обратитесь в наш чат поддержки в МАКС
+                    </p>
+                    <div className="game-overlay-actions">
+                      <button
+                        type="button"
+                        className="game-overlay-action game-overlay-action--primary"
+                        onClick={handleProjectFinishedSupportClick}
+                      >
+                        Написать в поддержку
+                      </button>
+                      <button
+                        type="button"
+                        className="game-overlay-action game-overlay-action--secondary"
+                        onClick={handleCloseProjectFinishedOverlay}
+                      >
+                        Назад
+                      </button>
+                    </div>
                   </div>
                 </section>
               </div>
