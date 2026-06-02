@@ -257,6 +257,7 @@ export function resolveMiniAppUser(req) {
   if (platform === "max") {
     const validationResult = validateMaxInitData(headerValue);
     const maxUser = validationResult.valid ? validationResult.data?.user : null;
+    const headerUser = parseUserHeaders(req);
 
     if (maxUser?.id) {
       return {
@@ -270,6 +271,23 @@ export function resolveMiniAppUser(req) {
         startParam: String(validationResult.data?.startParam || "").trim(),
         sessionId,
         isResolved: true,
+      };
+    }
+
+    if (headerUser?.platformUserId) {
+      return {
+        externalId: buildPlatformExternalId(platform, headerUser.platformUserId),
+        platform,
+        platformUserId: headerUser.platformUserId,
+        username: headerUser.username,
+        firstName: headerUser.firstName,
+        lastName: headerUser.lastName,
+        languageCode: headerUser.languageCode,
+        startParam: "",
+        sessionId,
+        isResolved: true,
+        usedHeaderFallback: true,
+        errorCode: validationResult.errorCode || "MAX_INIT_DATA_INVALID",
       };
     }
 
