@@ -8,4 +8,13 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-docker compose up -d --build --remove-orphans
+APP_SERVICES=(
+  backend
+  frontend
+  admin
+  max-bot
+  worker
+)
+
+docker compose rm -sf "${APP_SERVICES[@]}" || true
+docker compose up -d --build --remove-orphans "${APP_SERVICES[@]}"
