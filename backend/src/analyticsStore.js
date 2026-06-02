@@ -695,7 +695,7 @@ export async function getAnalyticsOverview(payload = {}) {
           COUNT(*) FILTER (WHERE finished_at IS NOT NULL)::int AS finished_sessions_count,
           COUNT(DISTINCT user_id)::int AS entered_game_count,
           COUNT(DISTINCT user_id) FILTER (WHERE finished_at IS NOT NULL)::int AS finished_players_count,
-          COALESCE(ROUND(AVG(duration_seconds)) FILTER (WHERE finished_at IS NOT NULL), 0)::int AS average_completion_seconds
+          COALESCE(ROUND(AVG(duration_seconds) FILTER (WHERE finished_at IS NOT NULL)), 0)::int AS average_completion_seconds
         FROM game_sessions
         ${sessionStartWhere.whereClause}
       `,
