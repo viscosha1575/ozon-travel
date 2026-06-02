@@ -68,11 +68,14 @@ services:
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
       MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel_official}
       MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      MAX_INTERNAL_SUBSCRIPTION_CHECK_URL: ${MAX_INTERNAL_SUBSCRIPTION_CHECK_URL:-http://max-bot:3011/internal/subscription/check}
+      MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS: ${MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS:-15000}
       MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
       TEST_PUSH_WAIT_TIMEOUT_MS: ${TEST_PUSH_WAIT_TIMEOUT_MS:-120000}
       UPLOADS_DIR: /app/uploads
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
     volumes:
       - backend_uploads:/app/uploads
     labels:

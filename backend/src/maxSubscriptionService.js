@@ -1,72 +1,25 @@
-import { Bot } from "@maxhub/max-bot-api";
 import { setUserSubscriptionStatus } from "./userStore.js";
 
 const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MODE || "api")
   .trim()
   .toLowerCase();
-const MAX_CHANNEL_URL = String(process.env.MAX_CHANNEL_URL || "https://max.ru/ozontravel_official")
-  .trim();
-const MAX_CHANNEL_CHAT_ID = Number(process.env.MAX_CHANNEL_CHAT_ID) || null;
-const MAX_BOT_TOKEN = String(process.env.MAX_BOT_TOKEN || "").trim();
+const MAX_INTERNAL_SUBSCRIPTION_CHECK_URL = String(
+  process.env.MAX_INTERNAL_SUBSCRIPTION_CHECK_URL || "http://max-bot:3011/internal/subscription/check",
+).trim();
+const MAX_INTERNAL_SUBSCRIPTION_CHECK_TOKEN = String(
+  process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || "",
+).trim();
+const MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS = Math.max(
+  1000,
+  Math.round(Number(process.env.MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS || 15000) || 15000),
+);
 
-let cachedChannelChatId = MAX_CHANNEL_CHAT_ID;
-let cachedMaxBotApi = null;
-
-function normalizeMaxChatLink(value) {
-  const normalizedValue = String(value || "").trim();
-
-  if (!normalizedValue) {
-    return "";
-  }
-
+async function parseJsonSafely(response) {
   try {
-    const parsedUrl = new URL(normalizedValue);
-
-    if (parsedUrl.hostname !== "max.ru") {
-      return normalizedValue;
-    }
-
-    return parsedUrl.pathname.replace(/^\/+/, "").split("/")[0] || "";
+    return await response.json();
   } catch {
-    return normalizedValue
-      .replace(/^https?:\/\/max\.ru\/?/i, "")
-      .replace(/^\/+/, "")
-      .split("/")[0]
-      .trim();
+    return {};
   }
-}
-
-function getMaxBotApi() {
-  if (!MAX_BOT_TOKEN) {
-    return null;
-  }
-
-  if (!cachedMaxBotApi) {
-    cachedMaxBotApi = new Bot(MAX_BOT_TOKEN).api;
-  }
-
-  return cachedMaxBotApi;
-}
-
-async function resolveChannelChatId(api) {
-  if (cachedChannelChatId) {
-    return cachedChannelChatId;
-  }
-
-  const channelLink = normalizeMaxChatLink(MAX_CHANNEL_URL);
-
-  if (!channelLink) {
-    throw new Error(`MAX channel link is empty: ${MAX_CHANNEL_URL}`);
-  }
-
-  const chat = await api.getChatByLink(channelLink);
-  cachedChannelChatId = Number(chat?.chat_id) || null;
-
-  if (!cachedChannelChatId) {
-    throw new Error(`Failed to resolve MAX channel chat id for ${MAX_CHANNEL_URL}`);
-  }
-
-  return cachedChannelChatId;
 }
 
 async function checkMaxChannelSubscription(platformUserId) {
@@ -74,20 +27,43 @@ async function checkMaxChannelSubscription(platformUserId) {
     return true;
   }
 
-  const api = getMaxBotApi();
-
-  if (!api) {
+  if (!MAX_INTERNAL_SUBSCRIPTION_CHECK_URL) {
     return null;
   }
 
-  const channelChatId = await resolveChannelChatId(api);
-  const response = await api.getChatMembers(channelChatId, {
-    user_ids: [Number(platformUserId)],
-    count: 1,
-  });
-  const members = Array.isArray(response?.members) ? response.members : [];
+  if (!MAX_INTERNAL_SUBSCRIPTION_CHECK_TOKEN) {
+    return null;
+  }
 
-  return members.some((member) => String(member.user_id) === String(platformUserId));
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS);
+
+  const response = await fetch(MAX_INTERNAL_SUBSCRIPTION_CHECK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-broadcast-token": MAX_INTERNAL_SUBSCRIPTION_CHECK_TOKEN,
+    },
+    body: JSON.stringify({
+      userId: String(platformUserId || "").trim(),
+    }),
+    signal: controller.signal,
+  }).finally(() => {
+    clearTimeout(timeoutId);
+  });
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data?.message || `Internal subscription check failed with ${response.status}`);
+  }
+
+  if (typeof data?.subscribed !== "boolean") {
+    return null;
+  }
+
+  return data.subscribed;
 }
 
 export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackValue = false) {
