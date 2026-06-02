@@ -4,7 +4,7 @@ import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { getMiniAppInitData, getMiniAppHost, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -179,6 +179,8 @@ function App() {
   const isTelegramHost = isTelegramMiniApp()
   const isMaxHost = isMaxMiniApp()
   const isMiniAppHost = isTelegramHost || isMaxHost
+  const miniAppHost = getMiniAppHost()
+  const miniAppInitData = getMiniAppInitData()
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -638,9 +640,24 @@ function App() {
 
   const isProjectStateResolved = INTRO_DISABLED || isProjectFinished !== null
   const isPrimaryActionDisabled = currentScreen.id === "intro" && !isTelegramHost && isInitialSubscriptionStatusPending
+  const subscriptionDebugLabel = isInitialSubscriptionStatusPending || isSubscriptionCheckPending
+    ? "checking"
+    : isUserSubscribed === true
+      ? "true"
+      : isUserSubscribed === false
+        ? "false"
+        : "unknown"
 
   return (
     <main className="app-shell" aria-label="Application shell">
+      <aside className="app-debug-overlay" aria-label="Mini app debug">
+        <div className="app-debug-overlay-title">MINI APP DEBUG</div>
+        <div className="app-debug-overlay-meta">
+          <span>host: {miniAppHost || "unknown"}</span>
+          <span>subscribed: {subscriptionDebugLabel}</span>
+        </div>
+        <pre className="app-debug-overlay-value">{miniAppInitData || "empty"}</pre>
+      </aside>
       <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
         <PersistentGameScreen
           bootstrapSeed={prefetchedGameBootstrap}
