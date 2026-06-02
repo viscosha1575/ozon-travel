@@ -159,18 +159,6 @@ body {
   line-height: 1.2;
 }
 
-.app-debug-overlay-value {
-  margin: 0;
-  max-height: min(28svh, 220px);
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #001a34;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .app-debug-overlay-error {
   color: #c53d13;
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
