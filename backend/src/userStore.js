@@ -264,36 +264,34 @@ async function ensureDailyAttemptGrantInternal(executor, userId) {
 
 async function getAttemptSummaryInternal(executor, userId) {
   const todayValue = getMoscowDateValue();
-  const [balanceResult, referralResult, todayGrantResult] = await Promise.all([
-    executor.query(
-      `
-        SELECT COALESCE(SUM(delta), 0)::int AS available_attempts
+  const balanceResult = await executor.query(
+    `
+      SELECT COALESCE(SUM(delta), 0)::int AS available_attempts
+      FROM user_attempt_transactions
+      WHERE user_id = $1
+    `,
+    [userId],
+  );
+  const referralResult = await executor.query(
+    `
+      SELECT COUNT(*)::int AS invited_referrals_count
+      FROM app_users
+      WHERE referred_by_user_id = $1
+    `,
+    [userId],
+  );
+  const todayGrantResult = await executor.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
         FROM user_attempt_transactions
         WHERE user_id = $1
-      `,
-      [userId],
-    ),
-    executor.query(
-      `
-        SELECT COUNT(*)::int AS invited_referrals_count
-        FROM app_users
-        WHERE referred_by_user_id = $1
-      `,
-      [userId],
-    ),
-    executor.query(
-      `
-        SELECT EXISTS (
-          SELECT 1
-          FROM user_attempt_transactions
-          WHERE user_id = $1
-            AND reason = 'daily_login_attempt'
-            AND attempt_date = $2
-        ) AS granted_today
-      `,
-      [userId, todayValue],
-    ),
-  ]);
+          AND reason = 'daily_login_attempt'
+          AND attempt_date = $2
+      ) AS granted_today
+    `,
+    [userId, todayValue],
+  );
 
   return {
     availableAttempts: Number(balanceResult.rows[0]?.available_attempts || 0),

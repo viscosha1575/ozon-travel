@@ -211,6 +211,7 @@ function App() {
   const [debugLastError, setDebugLastError] = useState("")
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
+  const canOpenGame = isTelegramHost || isUserSubscribed === true
 
   const pollSubscriptionStatus = async ({
     attempts,
@@ -432,14 +433,14 @@ function App() {
   }, [isProjectFinished])
 
   useEffect(() => {
-    if (!isGameLaunchPending || !isGameSceneReady) {
+    if (!isGameLaunchPending || !isGameSceneReady || !canOpenGame) {
       return
     }
 
     startTransition(() => {
       setIsGameActive(true)
     })
-  }, [isGameLaunchPending, isGameSceneReady])
+  }, [canOpenGame, isGameLaunchPending, isGameSceneReady])
 
   useEffect(() => {
     if (INTRO_DISABLED || isProjectFinished === true || isProjectFinished === null) {
@@ -454,6 +455,13 @@ function App() {
   const handleStartGame = () => {
     if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
+    }
+
+    if (!canOpenGame) {
+      setIsGameLaunchPending(false)
+      setIsGameActive(false)
+      setActiveScreen(1)
+      return
     }
 
     void trackGameEvent("intro_start_clicked", {
@@ -498,11 +506,6 @@ function App() {
     }
 
     if (currentScreen.id === "subscription-failed") {
-      if (isMiniAppHost) {
-        handleStartGame()
-        return
-      }
-
       setActiveScreen(1)
       handleSubscriptionAction()
       return
