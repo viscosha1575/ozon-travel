@@ -186,7 +186,20 @@ function validateMaxInitData(initData = "") {
 }
 
 function parseUserHeaders(req) {
-  const platformUserId = String(req.headers["x-mini-app-user-id"] || "").trim();
+  const decodeHeaderValue = (value) => {
+    const normalizedValue = String(value || "").trim();
+
+    if (!normalizedValue) {
+      return "";
+    }
+
+    try {
+      return decodeURIComponent(normalizedValue);
+    } catch {
+      return normalizedValue;
+    }
+  };
+  const platformUserId = decodeHeaderValue(req.headers["x-mini-app-user-id"]);
 
   if (!platformUserId) {
     return null;
@@ -194,10 +207,10 @@ function parseUserHeaders(req) {
 
   return {
     platformUserId,
-    username: String(req.headers["x-mini-app-username"] || "").trim(),
-    firstName: String(req.headers["x-mini-app-first-name"] || "").trim(),
-    lastName: String(req.headers["x-mini-app-last-name"] || "").trim(),
-    languageCode: String(req.headers["x-mini-app-language-code"] || "").trim(),
+    username: decodeHeaderValue(req.headers["x-mini-app-username"]),
+    firstName: decodeHeaderValue(req.headers["x-mini-app-first-name"]),
+    lastName: decodeHeaderValue(req.headers["x-mini-app-last-name"]),
+    languageCode: decodeHeaderValue(req.headers["x-mini-app-language-code"]),
   };
 }
 

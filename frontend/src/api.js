@@ -10,6 +10,10 @@ const API_URL = String(
 const SESSION_STORAGE_KEY = "ozon-travel-client-session-id";
 let cachedClientSessionId = "";
 
+function encodeHeaderValue(value) {
+  return encodeURIComponent(String(value ?? ""));
+}
+
 function buildApiUrl(path) {
   return `${API_URL}${String(path || "").startsWith("/") ? path : `/${path}`}`;
 }
@@ -69,11 +73,11 @@ function buildHeaders(headers = {}) {
   }
 
   if (miniAppUser?.platformUserId) {
-    nextHeaders["X-Mini-App-User-Id"] = miniAppUser.platformUserId;
-    nextHeaders["X-Mini-App-Username"] = miniAppUser.username;
-    nextHeaders["X-Mini-App-First-Name"] = miniAppUser.firstName;
-    nextHeaders["X-Mini-App-Last-Name"] = miniAppUser.lastName;
-    nextHeaders["X-Mini-App-Language-Code"] = miniAppUser.languageCode;
+    nextHeaders["X-Mini-App-User-Id"] = encodeHeaderValue(miniAppUser.platformUserId);
+    nextHeaders["X-Mini-App-Username"] = encodeHeaderValue(miniAppUser.username);
+    nextHeaders["X-Mini-App-First-Name"] = encodeHeaderValue(miniAppUser.firstName);
+    nextHeaders["X-Mini-App-Last-Name"] = encodeHeaderValue(miniAppUser.lastName);
+    nextHeaders["X-Mini-App-Language-Code"] = encodeHeaderValue(miniAppUser.languageCode);
   }
 
   nextHeaders["X-Client-Session-Id"] = getClientSessionId();
