@@ -66,6 +66,8 @@ services:
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-https://${DOMAIN}}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-https://${DOMAIN}}
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
+      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel_official}
+      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
       MAX_BOT_PUBLIC_URL: ${MAX_BOT_PUBLIC_URL:-https://max.ru/ozontravel_lenta_bot}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
       TEST_PUSH_WAIT_TIMEOUT_MS: ${TEST_PUSH_WAIT_TIMEOUT_MS:-120000}
