@@ -188,8 +188,6 @@ function App() {
   const isTelegramHost = isTelegramMiniApp()
   const isMaxHost = isMaxMiniApp()
   const isMiniAppHost = isTelegramHost || isMaxHost
-  const miniAppHost = getMiniAppHost()
-  const miniAppUser = getMiniAppUser()
   const [activeScreen, setActiveScreen] = useState(0)
   const [isGameActive, setIsGameActive] = useState(INTRO_DISABLED)
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
@@ -206,9 +204,6 @@ function App() {
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
   const [embeddedPage, setEmbeddedPage] = useState(null)
-  const [debugOpenStatus, setDebugOpenStatus] = useState("idle")
-  const [debugSubscriptionStatus, setDebugSubscriptionStatus] = useState("idle")
-  const [debugLastError, setDebugLastError] = useState("")
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
   const canOpenGame = isTelegramHost || isUserSubscribed === true
@@ -265,8 +260,6 @@ function App() {
 
     const initApp = async () => {
       try {
-        setDebugOpenStatus("pending")
-        setDebugLastError("")
         const response = await postJson("/game/open", {
           entryScreen: INTRO_DISABLED ? "game" : "intro",
           trackOpen: shouldTrackOpen,
@@ -279,24 +272,17 @@ function App() {
 
         setIsProjectFinished(projectFinished)
         setShouldShowControlsGuide(Boolean(response?.shouldShowControlsGuide))
-        setDebugOpenStatus(`ok:${response?.user?.subscribedToChannel ? "subscribed" : "not-subscribed"}`)
 
         if (projectFinished || isTelegramHost) {
           return
         }
 
         setIsInitialSubscriptionStatusPending(true)
-        setDebugSubscriptionStatus("pending")
 
         try {
           const { subscriptionStatus } = await pollSubscriptionStatus({
             attempts: isMaxHost ? MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
             reason: "initial",
-            onProgress: (attempt, totalAttempts) => {
-              setDebugSubscriptionStatus(
-                totalAttempts > 1 ? `pending:${attempt}/${totalAttempts}` : "pending",
-              )
-            },
           })
 
           if (isCancelled) {
@@ -304,12 +290,9 @@ function App() {
           }
 
           setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
-          setDebugSubscriptionStatus(`ok:${subscriptionStatus?.user?.subscribedToChannel ? "subscribed" : "not-subscribed"}`)
         } catch (error) {
           if (!isCancelled) {
             console.warn("Initial subscription status refresh failed", error)
-            setDebugSubscriptionStatus(`error:${error?.code || error?.message || "unknown"}`)
-            setDebugLastError(String(error?.message || error?.code || "subscription-status failed"))
           }
         } finally {
           if (!isCancelled) {
@@ -326,8 +309,6 @@ function App() {
         setIsInitialSubscriptionStatusPending(false)
         setShouldShowControlsGuide(false)
         setIsProjectFinished(false)
-        setDebugOpenStatus(`error:${error?.code || error?.message || "unknown"}`)
-        setDebugLastError(String(error?.message || error?.code || "game/open failed"))
       }
     }
 
@@ -529,22 +510,14 @@ function App() {
     }
 
     setIsSubscriptionCheckPending(true)
-    setDebugSubscriptionStatus("pending")
-    setDebugLastError("")
 
     try {
       const { subscriptionStatus, isSubscribed } = await pollSubscriptionStatus({
         attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
         reason: "manual",
-        onProgress: (attempt, totalAttempts) => {
-          setDebugSubscriptionStatus(
-            totalAttempts > 1 ? `pending:${attempt}/${totalAttempts}` : "pending",
-          )
-        },
       })
 
       setIsUserSubscribed(isSubscribed)
-      setDebugSubscriptionStatus(`ok:${isSubscribed ? "subscribed" : "not-subscribed"}`)
 
       if (isSubscribed) {
         handleStartGame()
@@ -555,8 +528,6 @@ function App() {
       }
     } catch (error) {
       console.warn("Subscription status refresh failed", error)
-      setDebugSubscriptionStatus(`error:${error?.code || error?.message || "unknown"}`)
-      setDebugLastError(String(error?.message || error?.code || "subscription-status failed"))
     } finally {
       setIsSubscriptionCheckPending(false)
     }
@@ -724,29 +695,9 @@ function App() {
 
   const isProjectStateResolved = INTRO_DISABLED || isProjectFinished !== null
   const isPrimaryActionDisabled = currentScreen.id === "intro" && !isTelegramHost && isInitialSubscriptionStatusPending
-  const subscriptionDebugLabel = isInitialSubscriptionStatusPending || isSubscriptionCheckPending
-    ? "checking"
-    : isUserSubscribed === true
-      ? "true"
-      : isUserSubscribed === false
-        ? "false"
-        : "unknown"
 
   return (
     <main className="app-shell" aria-label="Application shell">
-      <aside className="app-debug-overlay" aria-label="Mini app debug">
-        <div className="app-debug-overlay-title">MINI APP DEBUG</div>
-        <div className="app-debug-overlay-meta">
-          <span>host: {miniAppHost || "unknown"}</span>
-          <span>userId: {miniAppUser?.platformUserId || "empty"}</span>
-          <span>subscribed: {subscriptionDebugLabel}</span>
-          <span>open: {debugOpenStatus}</span>
-          <span>sub-check: {debugSubscriptionStatus}</span>
-        </div>
-        {debugLastError ? (
-          <div className="app-debug-overlay-error">{debugLastError}</div>
-        ) : null}
-      </aside>
       <div className={`app-layer game-layer ${isGameActive ? "is-visible" : "is-hidden"}`} aria-hidden={!isGameActive}>
         <PersistentGameScreen
           bootstrapSeed={prefetchedGameBootstrap}
