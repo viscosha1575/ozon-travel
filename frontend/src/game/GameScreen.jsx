@@ -19,6 +19,7 @@ const SPIN_MAX_FULL_LOOPS = 4
 const SPIN_MIN_DURATION = 8400
 const SPIN_MAX_DURATION = 12800
 const SPIN_SCREENFULS_PER_SECOND = 0.58
+const SPIN_DISTANCE_SLOWDOWN_RATIO = 0.7
 const MOBILE_SPIN_DISTANCE_MULTIPLIER = 0.5
 const MOBILE_SPIN_DURATION_MULTIPLIER = 0.82
 const SLOT_GAP = 24
@@ -26,12 +27,15 @@ const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
 const TRACK_TAIL_BUFFER = 9
 const RESULT_REVEAL_DELAY = 72
-const RESULT_BAG_ANIMATION_DURATION = 1400
+const RESULT_BAG_ANIMATION_DURATION = 980
 const RESULT_BAG_ANIMATION_EASING = "cubic-bezier(0.18, 0.82, 0.22, 1)"
+const RESULT_COPY_TOAST_EXIT_DURATION = 460
+const RESULT_COPY_TOAST_VISIBLE_DURATION = 3000
+const CONTROLS_GUIDE_OPEN_DELAY = 420
 const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.3
 const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
-const IDLE_SPIN_CYCLE_DURATION = 18000
+const IDLE_SPIN_CYCLE_DURATION = 36000
 const RESULT_COPY_TOAST_DURATION = 2200
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
@@ -515,6 +519,7 @@ export default function GameScreen({
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
   allowBootstrapFetch = false,
+  isSceneVisible = false,
   shouldShowControlsGuide = false,
   onDevShowProjectFinished = null,
 }) {
@@ -570,6 +575,7 @@ export default function GameScreen({
   const [resultPrize, setResultPrize] = useState(null)
   const [isResultCopied, setIsResultCopied] = useState(false)
   const [isResultCopyToastVisible, setIsResultCopyToastVisible] = useState(false)
+  const [isResultCopyToastClosing, setIsResultCopyToastClosing] = useState(false)
   const [resultRevealPhase, setResultRevealPhase] = useState("idle")
   const [resultEntrySource, setResultEntrySource] = useState("spin")
   const [resultBagFlight, setResultBagFlight] = useState(null)
@@ -579,7 +585,6 @@ export default function GameScreen({
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [spinError, setSpinError] = useState("")
   const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
-  const [isDevBootstrapReloading, setIsDevBootstrapReloading] = useState(false)
   const [carouselDebug, setCarouselDebug] = useState(null)
   const [isCarouselDebugVisible, setIsCarouselDebugVisible] = useState(false)
   const isDevWidgetVisible = true
@@ -602,7 +607,7 @@ export default function GameScreen({
   )
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
-  const isResultSheetVisible = Boolean(resultBag) && resultRevealPhase !== "bag-enter"
+  const isResultSheetVisible = Boolean(resultBag)
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
   const isNonPrizeResult = (resultPrize?.type || resultBag?.type || "") === "Не приз"
   const resultBagFinalScaleMultiplier = isNonPrizeResult
@@ -627,8 +632,22 @@ export default function GameScreen({
       resultBagFlightRef.current.style.transform = ""
     }
     setIsResultCopyToastVisible(false)
+    setIsResultCopyToastClosing(false)
     setResultBagFlight(null)
     setResultRevealPhase("idle")
+  }, [])
+
+  const showResultCopyToast = useCallback(() => {
+    clearTimeout(resultCopyToastTimeoutRef.current)
+    setIsResultCopyToastClosing(false)
+    setIsResultCopyToastVisible(true)
+    resultCopyToastTimeoutRef.current = window.setTimeout(() => {
+      setIsResultCopyToastClosing(true)
+      resultCopyToastTimeoutRef.current = window.setTimeout(() => {
+        setIsResultCopyToastVisible(false)
+        setIsResultCopyToastClosing(false)
+      }, RESULT_COPY_TOAST_EXIT_DURATION)
+    }, RESULT_COPY_TOAST_VISIBLE_DURATION)
   }, [])
 
   const applyBootstrapResponse = useCallback((response, assetVersion, source = "game_screen") => {
@@ -928,9 +947,20 @@ export default function GameScreen({
     )
     const fullLoops = getRandomLoopCount(SPIN_MIN_FULL_LOOPS, SPIN_MAX_FULL_LOOPS)
     const baseLoopCycles = fullLoops + 1
-    const loopCycles = Math.max(
+    const baselineLoopCycles = Math.max(
       1,
       Math.round(baseLoopCycles * getSpinDistanceMultiplier()),
+    )
+    const baselineLoopSteps = baselineLoopCycles * activeRouletteItems.length
+    let baselineTotalSteps = baselineLoopSteps + targetProgressSteps
+
+    while (baselineTotalSteps <= currentProgressSteps) {
+      baselineTotalSteps += activeRouletteItems.length
+    }
+
+    const loopCycles = Math.max(
+      1,
+      Math.round(baselineLoopCycles * SPIN_DISTANCE_SLOWDOWN_RATIO),
     )
     const loopSteps = loopCycles * activeRouletteItems.length
     let totalSteps = loopSteps + targetProgressSteps
@@ -939,8 +969,14 @@ export default function GameScreen({
       totalSteps += activeRouletteItems.length
     }
 
-    const additionalSteps = totalSteps - currentProgressSteps
-    const durationMs = getSpinDurationMs(additionalSteps, step)
+    const baselineAdditionalSteps = baselineTotalSteps - currentProgressSteps
+    const durationMs = getSpinDurationMs(baselineAdditionalSteps, step)
+
+    const nextTrackItems = createTrackItems(
+      activeRouletteItems,
+      currentCenterBagIndex,
+      totalSteps,
+    )
 
     pendingSpinRef.current = {
       currentCenterBagIndex,
@@ -964,11 +1000,7 @@ export default function GameScreen({
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
-    setTrackItems(createTrackItems(
-      activeRouletteItems,
-      currentCenterBagIndex,
-      totalSteps,
-    ))
+    setTrackItems(nextTrackItems)
     const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + totalSteps) * step)
     setTrackTranslate(normalizedCurrentTranslate)
     virtualTranslateRef.current = normalizedCurrentTranslate
@@ -1335,22 +1367,14 @@ export default function GameScreen({
     try {
       await navigator.clipboard.writeText(resultPrize.promoCode)
       setIsResultCopied(true)
-      clearTimeout(resultCopyToastTimeoutRef.current)
-      setIsResultCopyToastVisible(true)
-      resultCopyToastTimeoutRef.current = window.setTimeout(() => {
-        setIsResultCopyToastVisible(false)
-      }, 3000)
+      showResultCopyToast()
       void trackGameEvent("promo_code_copied", {
         prizeId: resultBag?.id ?? null,
         codeLength: String(resultPrize.promoCode).length,
       })
     } catch {
       setIsResultCopied(true)
-      clearTimeout(resultCopyToastTimeoutRef.current)
-      setIsResultCopyToastVisible(true)
-      resultCopyToastTimeoutRef.current = window.setTimeout(() => {
-        setIsResultCopyToastVisible(false)
-      }, 3000)
+      showResultCopyToast()
     }
   }
 
@@ -1379,35 +1403,6 @@ export default function GameScreen({
       setIsDevWidgetOpen(false)
     } catch (error) {
       openErrorOverlay(error, "Не удалось начислить попытки")
-    }
-  }
-
-  const handleDevReloadBootstrap = async () => {
-    if (isDevBootstrapReloading) {
-      return
-    }
-
-    setIsDevBootstrapReloading(true)
-    clearIdleSpin()
-    pendingSpinRef.current = null
-    clearTimeout(overlayTimeoutRef.current)
-    clearTimeout(resultRevealTimeoutRef.current)
-    setActiveOverlay(null)
-    setRenderedOverlay(null)
-    setIsOverlayClosing(false)
-    setResultBag(null)
-    setResultPrize(null)
-    setIsResultCopied(false)
-    resetResultState()
-    isSpinActiveRef.current = false
-    setIsSpinActive(false)
-    setSpinError("")
-
-    try {
-      await loadGameBootstrap()
-      setIsDevWidgetOpen(false)
-    } finally {
-      setIsDevBootstrapReloading(false)
     }
   }
 
@@ -1548,7 +1543,9 @@ export default function GameScreen({
 
   useEffect(() => {
     if (
-      !shouldShowControlsGuide
+      !isSceneVisible
+      || !allowBootstrapFetch
+      || !shouldShowControlsGuide
       || hasOpenedControlsGuideRef.current
       || isSpinActive
       || Boolean(resultBag)
@@ -1568,14 +1565,16 @@ export default function GameScreen({
       void postJson("/game/controls-guide/seen", {}).catch((error) => {
         console.warn("Failed to persist controls guide state", error)
       })
-    }, 120)
+    }, CONTROLS_GUIDE_OPEN_DELAY)
 
     return () => {
       window.clearTimeout(openTimeoutId)
     }
   }, [
     activeOverlay,
+    allowBootstrapFetch,
     embeddedPage,
+    isSceneVisible,
     isSpinActive,
     renderedOverlay,
     resultBag,
@@ -1727,14 +1726,6 @@ export default function GameScreen({
           </button>
           {isDevWidgetOpen ? (
             <div className="game-dev-widget-panel">
-              <button
-                type="button"
-                className="game-dev-widget-action"
-                onClick={handleDevReloadBootstrap}
-                disabled={isDevBootstrapReloading}
-              >
-                {isDevBootstrapReloading ? "Обновляем" : "Обновить ленту"}
-              </button>
               <button
                 type="button"
                 className="game-dev-widget-action game-dev-widget-action--danger"
@@ -2138,7 +2129,8 @@ export default function GameScreen({
           <section
             className={[
               "game-result",
-              isResultSheetVisible ? "is-sheet-visible" : "is-bag-entering",
+              isResultSheetVisible ? "is-sheet-visible" : "",
+              isResultBagAnimating ? "is-bag-entering" : "",
               resultEntrySource === "collection" ? "is-collection-entering" : "",
             ].filter(Boolean).join(" ")}
             aria-label="Результат приза"
@@ -2234,7 +2226,11 @@ export default function GameScreen({
           </div>
         ) : null}
         {isResultCopyToastVisible ? (
-          <div className="game-result-copy-toast" role="status" aria-live="polite">
+          <div
+            className={`game-result-copy-toast ${isResultCopyToastClosing ? "is-closing" : "is-opening"}`.trim()}
+            role="status"
+            aria-live="polite"
+          >
             <span className="game-result-copy-toast-text">Скопировано</span>
             <img
               src="/game/icons/done.svg"

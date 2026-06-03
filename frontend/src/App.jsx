@@ -704,6 +704,7 @@ function App() {
           bootstrapAssetVersion={prefetchedGameAssetVersion}
           deferBootstrap={isGameBootstrapPreloading}
           allowBootstrapFetch={isGameActive}
+          isSceneVisible={isGameActive}
           shouldShowControlsGuide={shouldShowControlsGuide}
           onDevShowProjectFinished={handleDevShowProjectFinished}
         />
