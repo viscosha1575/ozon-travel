@@ -570,15 +570,7 @@ export default function PromoCodesPage() {
     form.codeReleaseEnd,
   );
   const isPromoCodeReleaseScheduleDisabled = Boolean(form.disablePromoCodeReleaseSchedule);
-  const hasStoredPromoCodeScheduleWindow = Boolean(form.codeReleaseStart) && Boolean(form.codeReleaseEnd);
-  const hasAnyPromoCodesLoaded = (
-    Number(form.availablePromoCodesCount || 0)
-    + Number(form.unavailablePromoCodesCount || 0)
-    + Number(form.claimedPromoCodesCount || 0)
-  ) > 0 || Boolean(form.promoCodesFile?.name) || form.promoCodes.length > 0;
-  const canOpenPromoCodeSchedule = Boolean(editingPrizeId)
-    && hasStoredPromoCodeScheduleWindow
-    && hasAnyPromoCodesLoaded;
+  const canOpenPromoCodeSchedule = Boolean(editingPrizeId);
   const promoCodesScheduleItems = promoCodesScheduleTab === "available"
     ? promoCodesScheduleResponse.availableItems
     : promoCodesScheduleTab === "waiting"
