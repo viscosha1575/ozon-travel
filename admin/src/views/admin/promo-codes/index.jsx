@@ -584,7 +584,7 @@ export default function PromoCodesPage() {
   const canReorderPrizes = !deferredSearch && !categoryFilter && !promoCodeTypeFilter;
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
-      return "Без лимита";
+      return "∞";
     }
 
     return formatNumber(value);
@@ -592,7 +592,7 @@ export default function PromoCodesPage() {
 
   function formatAvailableCount(item) {
     if (!item?.hasPrizeLimit) {
-      return "Без лимита";
+      return "∞";
     }
 
     return formatNumber(item?.availablePromoCodesCount || 0);
@@ -1245,20 +1245,20 @@ export default function PromoCodesPage() {
 
         <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
           <Skeleton isLoaded={!loading}>
-            <Box overflowX="auto">
-              <Table variant="simple">
+            <Box overflowX="hidden">
+              <Table variant="simple" size="sm" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} ps="6px">Порядок</Th>
-                    <Th color={textColorSecondary} ps="6px">Включен</Th>
-                    <Th color={textColorSecondary}>Название</Th>
-                    <Th color={textColorSecondary}>Тип</Th>
-                    <Th color={textColorSecondary}>Категория</Th>
-                    <Th color={textColorSecondary}>Тип промокода</Th>
-                    <Th color={textColorSecondary}>Всего призов</Th>
-                    <Th color={textColorSecondary}>Остаток</Th>
-                    <Th color={textColorSecondary}>Доступно</Th>
-                    <Th color={textColorSecondary}>Действие</Th>
+                    <Th color={textColorSecondary} w="7%" px="6px" fontSize="10px">Порядок</Th>
+                    <Th color={textColorSecondary} w="6%" px="6px" fontSize="10px">Вкл</Th>
+                    <Th color={textColorSecondary} w="22%" px="6px" fontSize="10px">Название</Th>
+                    <Th color={textColorSecondary} w="6%" px="6px" fontSize="10px">Тип</Th>
+                    <Th color={textColorSecondary} w="10%" px="6px" fontSize="10px">Категория</Th>
+                    <Th color={textColorSecondary} w="12%" px="6px" fontSize="10px">Тип промокода</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Всего</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Остаток</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Доступно</Th>
+                    <Th color={textColorSecondary} w="13%" px="6px" fontSize="10px">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1287,15 +1287,15 @@ export default function PromoCodesPage() {
                       }}
                       sx={dragOverPrizeId === item.id ? { bg: "rgba(43, 108, 176, 0.06)" } : undefined}
                     >
-                      <Td borderColor={borderColor} ps="6px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Flex align="center" gap="8px">
-                          <Icon as={MdDragIndicator} color={canReorderPrizes ? textColorSecondary : "transparent"} boxSize="18px" />
-                          <Text color={textColorSecondary} fontSize="sm" fontWeight="700">
+                          <Icon as={MdDragIndicator} color={canReorderPrizes ? textColorSecondary : "transparent"} boxSize="16px" />
+                          <Text color={textColorSecondary} fontSize="13px" fontWeight="700">
                             {formatNumber(item.sortOrder || 0)}
                           </Text>
                         </Flex>
                       </Td>
-                      <Td borderColor={borderColor} ps="6px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Checkbox
                           colorScheme="brandScheme"
                           isChecked={Boolean(item.isEnabled)}
@@ -1303,14 +1303,14 @@ export default function PromoCodesPage() {
                           onChange={(event) => void handleTogglePrizeEnabled(item, event.target.checked)}
                         />
                       </Td>
-                      <Td borderColor={borderColor}>
-                        <Flex align="center" gap="12px">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Flex align="center" gap="8px" minH="38px">
                           <Flex
-                            w="44px"
-                            h="44px"
+                            w="32px"
+                            h="32px"
                             align="center"
                             justify="center"
-                            borderRadius="14px"
+                            borderRadius="10px"
                             bg={categoryBadgeBg}
                             overflow="hidden"
                             flexShrink={0}
@@ -1332,87 +1332,87 @@ export default function PromoCodesPage() {
                             )}
                           </Flex>
                           <Stack spacing="4px">
-                            <Text color={textColor} fontSize="sm" fontWeight="700" whiteSpace="pre-line">
+                            <Text color={textColor} fontSize="13px" fontWeight="700" lineHeight="1.3" whiteSpace="pre-line">
                               {item.myPrizeText || item.title}
                             </Text>
-                            <Text color={textColorSecondary} fontSize="xs">
+                            <Text color={textColorSecondary} fontSize="11px">
                               ID: {item.id}
                             </Text>
                             {item.type === "Приз" && item.hasPrizeLimit ? (
-                              <Text color={textColorSecondary} fontSize="xs">
+                              <Text color={textColorSecondary} fontSize="11px" lineHeight="1.3">
                                 В пуле: {formatNumber(item.availablePromoCodesCount || 0)} | Ждут: {formatNumber(item.unavailablePromoCodesCount || 0)}
                               </Text>
                             ) : null}
                           </Stack>
                         </Flex>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Tooltip label={item.type} hasArrow placement="top">
                           <Flex
-                            w="36px"
-                            h="36px"
+                            w="28px"
+                            h="28px"
                             align="center"
                             justify="center"
-                            borderRadius="12px"
+                            borderRadius="9px"
                             bg={item.type === "Приз" ? "brand.50" : categoryBadgeBg}
                             color={item.type === "Приз" ? "brand.500" : textColorSecondary}
                           >
                             <Icon
                               as={item.type === "Приз" ? MdCardGiftcard : MdDoNotDisturbAlt}
-                              boxSize="18px"
+                              boxSize="16px"
                             />
                           </Flex>
                         </Tooltip>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         {item.category ? (
                           <Badge
                             bg={categoryBadgeBg}
                             color={categoryBadgeColor}
                             borderRadius="999px"
-                            px="10px"
-                            py="6px"
-                            fontSize="xs"
+                            px="7px"
+                            py="4px"
+                            fontSize="11px"
                             fontWeight="700"
                             whiteSpace="normal"
                           >
                             {item.category}
                           </Badge>
                         ) : (
-                          <Text color={textColorSecondary} fontSize="sm" fontWeight="600">
+                          <Text color={textColorSecondary} fontSize="13px" fontWeight="600">
                             —
                           </Text>
                         )}
                       </Td>
-                      <Td borderColor={borderColor}>
-                        <Text color={textColor} fontSize="sm" fontWeight="600">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={textColor} fontSize="11px" fontWeight="600" whiteSpace="normal" lineHeight="1.3">
                           {item.promoCodeType || "Нет типа"}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
-                        <Text color={totalValueColor} fontSize="sm" fontWeight="700">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={totalValueColor} fontSize="13px" fontWeight="700">
                           {formatPrizeCount(item, item.totalCount)}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
-                        <Text color={remainingValueColor} fontSize="sm" fontWeight="700">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={remainingValueColor} fontSize="13px" fontWeight="700">
                           {formatPrizeCount(item, item.remainingCount)}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
-                        <Text color={remainingValueColor} fontSize="sm" fontWeight="700">
+                      <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={remainingValueColor} fontSize="13px" fontWeight="700">
                           {formatAvailableCount(item)}
                         </Text>
                       </Td>
-                      <Td borderColor={borderColor}>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Flex gap="10px" wrap="wrap">
                           <Button
                             variant="lightBrand"
                             size="sm"
-                            minW="128px"
-                            h="38px"
-                            leftIcon={<Icon as={MdEdit} boxSize="16px" />}
-                            fontSize="sm"
+                            minW="110px"
+                            h="34px"
+                            leftIcon={<Icon as={MdEdit} boxSize="14px" />}
+                            fontSize="11px"
                             fontWeight="700"
                             onClick={() => handleOpenEditModal(item)}
                           >
@@ -1424,7 +1424,7 @@ export default function PromoCodesPage() {
                   )) : (
                     <Tr>
                       <Td borderColor={borderColor} colSpan={10}>
-                        <Text color={textColorSecondary} fontSize="sm" py="12px" textAlign="center">
+                        <Text color={textColorSecondary} fontSize="13px" py="12px" textAlign="center">
                           Призов пока нет.
                         </Text>
                       </Td>
