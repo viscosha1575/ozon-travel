@@ -75,6 +75,30 @@ export async function sendDailyAttemptReminder({ maxUserId }) {
   });
 }
 
+export async function sendDailyAttemptReminderCampaign({ recipientIds = [] }) {
+  const recipients = Array.isArray(recipientIds)
+    ? recipientIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+
+  return runWithConcurrency(recipients, MANUAL_PUSH_SEND_CONCURRENCY, async (recipientId) => {
+    try {
+      const response = await sendDailyAttemptReminder({ maxUserId: recipientId });
+
+      return {
+        ok: true,
+        recipientId,
+        messageId: Number(response?.messageId) || null,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        recipientId,
+        error: error?.response?.data?.message || error?.message || String(error),
+      };
+    }
+  });
+}
+
 export async function sendPushCampaign({
   recipientIds,
   html,

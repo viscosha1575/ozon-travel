@@ -19,6 +19,7 @@ import {
 import logger from "./logger.js";
 import {
   claimDailyAttemptReminderRecipients,
+  prepareDailyAttemptReminderBroadcastTest,
   finalizePushRevoke,
   finalizePushSend,
   grantDailyAttempts,
@@ -30,6 +31,7 @@ import {
 import {
   revokePushCampaign,
   sendDailyAttemptReminder,
+  sendDailyAttemptReminderCampaign,
   sendPushCampaign,
 } from "./services/broadcastService.js";
 
@@ -38,6 +40,7 @@ const SEND_QUEUE_NAME = WORKER_QUEUE_NAMES.notificationSend;
 const PUSH_QUEUE_NAME = WORKER_QUEUE_NAMES.pushControl;
 const JOB_GRANT_DAILY_ATTEMPTS = WORKER_JOB_NAMES.grantDailyAttempts;
 const JOB_DAILY_ATTEMPT_REMINDER = WORKER_JOB_NAMES.dailyAttemptReminder;
+const JOB_DAILY_ATTEMPT_REMINDER_BROADCAST_TEST = WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest;
 const JOB_PUSH_SEND = WORKER_JOB_NAMES.pushSend;
 const JOB_PUSH_REVOKE = WORKER_JOB_NAMES.pushRevoke;
 
@@ -284,6 +287,33 @@ async function start() {
         });
 
         return finalResult;
+      }
+
+      if (job.name === JOB_DAILY_ATTEMPT_REMINDER_BROADCAST_TEST) {
+        const prepared = await prepareDailyAttemptReminderBroadcastTest();
+        const recipients = Array.isArray(prepared?.recipients) ? prepared.recipients : [];
+
+        if (recipients.length === 0) {
+          throw new Error("Нет MAX-пользователей для тестовой reminder-рассылки");
+        }
+
+        const results = await sendDailyAttemptReminderCampaign({
+          recipientIds: recipients,
+        });
+        const deliveredCount = results.filter((item) => item?.ok).length;
+        const failedCount = results.length - deliveredCount;
+
+        logger.info("Daily attempt reminder broadcast test completed", {
+          recipientsCount: results.length,
+          deliveredCount,
+          failedCount,
+        });
+
+        return {
+          recipientsCount: results.length,
+          deliveredCount,
+          failedCount,
+        };
       }
 
       logger.warn("Unknown push job skipped", {

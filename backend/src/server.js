@@ -50,9 +50,11 @@ import {
 } from "./pushStore.js";
 import {
   claimDailyAttemptReminderRecipients,
+  getDailyAttemptReminderBroadcastRecipients,
   grantDailyAttemptsForAllUsers,
   markNotificationDeliveryFailed,
   markNotificationDeliverySent,
+  sendDailyAttemptReminderBroadcastTest,
 } from "./notificationStore.js";
 import { resolveMiniAppUser } from "./miniAppUser.js";
 import {
@@ -384,6 +386,14 @@ app.post("/api/internal/notifications/daily-attempt-reminder/claim", async (req,
   }
 });
 
+app.post("/api/internal/notifications/daily-attempt-reminder/test-broadcast/prepare", async (req, res, next) => {
+  try {
+    res.json(await getDailyAttemptReminderBroadcastRecipients());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/internal/notifications/deliveries/sent", async (req, res, next) => {
   const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
 
@@ -561,6 +571,11 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/pushes/send") {
       res.json(await sendPush(body));
+      return;
+    }
+
+    if (path === "/api/pushes/reminder-test/send") {
+      res.json(await sendDailyAttemptReminderBroadcastTest());
       return;
     }
 

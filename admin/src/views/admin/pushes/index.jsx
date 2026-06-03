@@ -539,6 +539,33 @@ export default function PushesPage() {
     }
   }
 
+  async function handleSendReminderBroadcastTest() {
+    const confirmed = window.confirm(
+      "Отправить reminder-пуш всем MAX-пользователям? Текст и кнопка будут такими же, как у автоматического пуша в 12:00 по Москве.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSendingPushAction("reminder:test");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/pushes/reminder-test/send", {});
+      setSuccessMessage(
+        result?.queued
+          ? `Тестовый reminder-пуш поставлен в очередь для ${formatNumber(result?.recipientsCount || 0)} MAX-пользователей.`
+          : "Тестовый reminder-пуш отправлен.",
+      );
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось отправить тестовый reminder-пуш");
+    } finally {
+      setSendingPushAction("");
+    }
+  }
+
   async function saveCurrentTemplate({ showSuccessMessage = true } = {}) {
     if (!canCreateDraft) {
       return null;
@@ -857,10 +884,22 @@ export default function PushesPage() {
                   Новая рассылка
                 </Text>
                 <Text color={textColorSecondary} fontSize="sm" mt="6px">
-                  Тестовая рассылка всегда отправляется только на MAX ID 169639251.
+                  Обычная тестовая рассылка всегда отправляется только на MAX ID 169639251.
                 </Text>
               </Box>
               <Flex wrap="wrap" gap="10px" justify={{ base: "stretch", lg: "flex-end" }}>
+                <Button
+                  variant="outline"
+                  borderRadius="16px"
+                  fontWeight="700"
+                  isLoading={sendingPushAction === "reminder:test"}
+                  loadingText="Шлём reminder"
+                  onClick={handleSendReminderBroadcastTest}
+                  colorScheme="orange"
+                  leftIcon={<Icon as={MdSend} boxSize="16px" />}
+                >
+                  Тест reminder всем MAX
+                </Button>
                 <Button
                   variant="outline"
                   borderRadius="16px"

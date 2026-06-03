@@ -1,4 +1,5 @@
 import { query } from "./db.js";
+import { enqueueDailyAttemptReminderBroadcastTestJob } from "./workerQueue.js";
 
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REMINDER_KEY = "daily_attempt_reminder";
@@ -150,6 +151,53 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       externalId: String(row.external_id || "").trim(),
       maxUserId: String(row.platform_user_id || "").trim(),
     })).filter((item) => item.maxUserId),
+  };
+}
+
+export async function getDailyAttemptReminderBroadcastRecipients() {
+  const result = await query(
+    `
+      SELECT platform_user_id
+      FROM app_users
+      WHERE platform = 'max'
+        AND COALESCE(platform_user_id, '') <> ''
+      ORDER BY id ASC
+    `,
+  );
+
+  const recipients = result.rows
+    .map((row) => String(row.platform_user_id || "").trim())
+    .filter(Boolean);
+
+  return {
+    ok: true,
+    recipients,
+    recipientsCount: recipients.length,
+  };
+}
+
+export async function sendDailyAttemptReminderBroadcastTest() {
+  const countResult = await query(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM app_users
+      WHERE platform = 'max'
+        AND COALESCE(platform_user_id, '') <> ''
+    `,
+  );
+  const recipientsCount = Number(countResult.rows[0]?.count || 0);
+
+  if (recipientsCount <= 0) {
+    throw new Error("Нет MAX-пользователей для тестовой reminder-рассылки");
+  }
+
+  const queueResult = await enqueueDailyAttemptReminderBroadcastTestJob();
+
+  return {
+    ok: true,
+    queued: true,
+    recipientsCount,
+    jobId: queueResult.jobId,
   };
 }
 

@@ -19,6 +19,14 @@ export async function claimDailyAttemptReminderRecipients({ reminderDate, limit 
   return response.data;
 }
 
+export async function prepareDailyAttemptReminderBroadcastTest() {
+  const response = await post("/api/internal/notifications/daily-attempt-reminder/test-broadcast/prepare", {
+    source: "worker",
+  });
+
+  return response.data;
+}
+
 export async function markDeliverySent({ deliveryId, messageId }) {
   const response = await post("/api/internal/notifications/deliveries/sent", {
     deliveryId,

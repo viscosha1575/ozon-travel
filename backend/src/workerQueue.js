@@ -87,3 +87,21 @@ export async function enqueuePushRevokeJob({ pushId }) {
 
   return { jobId: job.id };
 }
+
+export async function enqueueDailyAttemptReminderBroadcastTestJob() {
+  const queue = getPushQueue();
+  const job = await queue.add(
+    WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest,
+    {
+      type: WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest,
+    },
+    {
+      jobId: WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest,
+      removeOnComplete: true,
+      removeOnFail: 100,
+      attempts: 1,
+    },
+  );
+
+  return { jobId: job.id };
+}
