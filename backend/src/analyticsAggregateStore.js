@@ -1,7 +1,7 @@
 import { query, withTransaction } from "./db.js";
 
 const ANALYTICS_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Moscow").trim() || "Europe/Moscow";
-const ANALYTICS_VERSION = "2026-06-01-v1";
+const ANALYTICS_VERSION = "2026-06-03-v2";
 const APP_OPEN_EVENT_NAMES = new Set(["app_open", "bootstrap_loaded", "game_bootstrap_loaded"]);
 const PROMO_CODE_APPLY_EVENT_NAME = "promo_code_apply_clicked";
 const SESSION_FINISH_EVENT_NAME = "spin_result";
@@ -334,6 +334,8 @@ export async function trackNewUserAnalytics(executor, userRow, source = "system"
     source,
     "user_created",
     {
+      platform: String(userRow.platform || "").trim(),
+      platformUserId: String(userRow.platform_user_id || "").trim(),
       externalId: String(userRow.external_id || "").trim(),
       utmSlug: String(userRow.utm_slug || "").trim(),
       referredByUserId: userRow.referred_by_user_id ? Number(userRow.referred_by_user_id) : null,
@@ -464,12 +466,30 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
       'system',
       'user_created',
       jsonb_build_object(
+        'platform', platform,
+        'platformUserId', platform_user_id,
         'externalId', external_id,
         'utmSlug', utm_slug,
         'referredByUserId', referred_by_user_id
       ),
       created_at
     FROM app_users
+    ORDER BY id ASC
+  `);
+
+  await executor.query(`
+    INSERT INTO user_events (user_id, source, action, payload, created_at)
+    SELECT
+      user_id,
+      'system',
+      'referral_linked',
+      jsonb_build_object(
+        'invitedUserId', related_user_id
+      ),
+      created_at
+    FROM user_attempt_transactions
+    WHERE reason = 'referral_bonus'
+      AND related_user_id IS NOT NULL
     ORDER BY id ASC
   `);
 
@@ -546,8 +566,9 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
         (created_at AT TIME ZONE $1)::date AS date,
         '${ANALYTICS_METRICS.referralsCreated}',
         COUNT(*)::bigint
-      FROM app_users
-      WHERE referred_by_user_id IS NOT NULL
+      FROM user_attempt_transactions
+      WHERE reason = 'referral_bonus'
+        AND related_user_id IS NOT NULL
       GROUP BY 1
       ON CONFLICT (date, metric)
       DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
@@ -560,11 +581,12 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
       INSERT INTO analytics_daily_user_metrics (date, user_id, metric, value)
       SELECT
         (created_at AT TIME ZONE $1)::date AS date,
-        referred_by_user_id AS user_id,
+        user_id,
         '${ANALYTICS_USER_METRICS.referralsInvited}',
         COUNT(*)::bigint AS value
-      FROM app_users
-      WHERE referred_by_user_id IS NOT NULL
+      FROM user_attempt_transactions
+      WHERE reason = 'referral_bonus'
+        AND related_user_id IS NOT NULL
       GROUP BY 1, 2
       ON CONFLICT (date, user_id, metric)
       DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()

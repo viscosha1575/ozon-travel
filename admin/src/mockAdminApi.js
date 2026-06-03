@@ -28,6 +28,8 @@ function createMockPlayer({
 }) {
   return {
     id,
+    platform: "telegram",
+    platformUserId: String(900000 + id),
     telegramUserId: 900000 + id,
     username,
     firstName,

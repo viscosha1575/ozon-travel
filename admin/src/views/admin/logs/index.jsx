@@ -224,7 +224,7 @@ export default function LogsPage() {
                   fontSize="sm"
                   fontWeight="500"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск по игроку, Telegram ID или действию"
+                  placeholder="Поиск по игроку, user ID или действию"
                   ps="44px"
                   value={search}
                   _hover={{ borderColor: "transparent" }}

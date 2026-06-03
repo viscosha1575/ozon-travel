@@ -27,10 +27,12 @@ import {
   appendPrizePromoCodes,
   clearPrizePromoCodes,
   getPrizePromoCodeSchedule,
+  reorderPrizes,
   getGameBootstrap,
   listChances,
   listPrizes,
   spinPrize,
+  updatePrizePromoCodeAvailability,
   updatePrizeEnabled,
   updateChance,
   updatePrize,
@@ -337,11 +339,9 @@ app.post("/api/logs/create", async (req, res, next) => {
       throw error;
     }
 
-    const externalId = platform === "telegram"
-      ? platformUserId
-      : `${platform}:${platformUserId}`;
     const response = await logGameEvent({
-      externalId,
+      platform,
+      platformUserId,
       username: String(body?.platformNickname || body?.username || "").trim(),
       firstName: String(body?.firstName || "").trim(),
       lastName: String(body?.lastName || "").trim(),
@@ -491,6 +491,16 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
 
     if (path === "/api/prizes/promo-codes/append") {
       res.json(await appendPrizePromoCodes(body));
+      return;
+    }
+
+    if (path === "/api/prizes/promo-codes/update-availability") {
+      res.json(await updatePrizePromoCodeAvailability(body));
+      return;
+    }
+
+    if (path === "/api/prizes/reorder") {
+      res.json(await reorderPrizes(body));
       return;
     }
 

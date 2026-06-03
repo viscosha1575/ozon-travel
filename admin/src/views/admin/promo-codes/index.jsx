@@ -36,7 +36,7 @@ import {
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { MdAdd, MdCardGiftcard, MdDoNotDisturbAlt, MdEdit, MdFlag } from "react-icons/md";
+import { MdAdd, MdCardGiftcard, MdDoNotDisturbAlt, MdDragIndicator, MdEdit, MdFlag } from "react-icons/md";
 import * as XLSX from "xlsx";
 import Card from "components/card/Card";
 import ImageUploader from "components/editor/ImageUploader";
@@ -63,6 +63,7 @@ const PROMO_CODE_TYPE_OPTIONS = [
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
 const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
+const PROMO_CODE_SCHEDULE_PAGE_SIZE = 5;
 const PROMO_CODE_SCHEDULE_TABS = [
   { id: "available", label: "Доступны" },
   { id: "waiting", label: "В ожидании" },
@@ -91,6 +92,26 @@ function formatDateTimeLabel(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatDateTimeInputValue(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 function splitPromoCodes(rawValue) {
@@ -302,7 +323,9 @@ const EMPTY_RESPONSE = {
     totalPrizesCount: 0,
     totalUnitsCount: 0,
     totalRemainingCount: 0,
+    totalAwardedCount: 0,
   },
+  awardedPrizeStats: [],
 };
 
 const EMPTY_PROMO_CODE_SCHEDULE_RESPONSE = {
@@ -515,6 +538,12 @@ export default function PromoCodesPage() {
   const [promoCodesScheduleLoading, setPromoCodesScheduleLoading] = useState(false);
   const [promoCodesScheduleError, setPromoCodesScheduleError] = useState("");
   const [promoCodesScheduleTab, setPromoCodesScheduleTab] = useState(PROMO_CODE_SCHEDULE_TABS[0].id);
+  const [promoCodesSchedulePage, setPromoCodesSchedulePage] = useState(1);
+  const [promoCodesScheduleDrafts, setPromoCodesScheduleDrafts] = useState({});
+  const [updatingPromoCodeId, setUpdatingPromoCodeId] = useState(null);
+  const [draggedPrizeId, setDraggedPrizeId] = useState(null);
+  const [dragOverPrizeId, setDragOverPrizeId] = useState(null);
+  const [reorderingPrizeIds, setReorderingPrizeIds] = useState([]);
   const promoCodesInputRef = useRef(null);
   const promoCodesAppendInputRef = useRef(null);
 
@@ -555,6 +584,12 @@ export default function PromoCodesPage() {
     : promoCodesScheduleTab === "waiting"
       ? promoCodesScheduleResponse.waitingItems
       : promoCodesScheduleResponse.claimedItems;
+  const promoCodesScheduleTotalPages = Math.max(1, Math.ceil(promoCodesScheduleItems.length / PROMO_CODE_SCHEDULE_PAGE_SIZE));
+  const promoCodesScheduleVisibleItems = promoCodesScheduleItems.slice(
+    (promoCodesSchedulePage - 1) * PROMO_CODE_SCHEDULE_PAGE_SIZE,
+    promoCodesSchedulePage * PROMO_CODE_SCHEDULE_PAGE_SIZE,
+  );
+  const canReorderPrizes = !deferredSearch && !categoryFilter && !promoCodeTypeFilter;
   function formatPrizeCount(item, value) {
     if (!item?.hasPrizeLimit) {
       return "Без лимита";
@@ -589,6 +624,7 @@ export default function PromoCodesPage() {
           setResponse({
             items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
+            awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
           });
           setProjectFinished(Boolean(nextResponse?.projectFinished));
         }
@@ -622,6 +658,12 @@ export default function PromoCodesPage() {
     }
   }, [form, formValidation]);
 
+  useEffect(() => {
+    if (promoCodesSchedulePage > promoCodesScheduleTotalPages) {
+      setPromoCodesSchedulePage(promoCodesScheduleTotalPages);
+    }
+  }, [promoCodesSchedulePage, promoCodesScheduleTotalPages]);
+
   async function reloadPrizes() {
     const nextResponse = await postJson("/api/prizes/list", {
       search: deferredSearch,
@@ -632,6 +674,7 @@ export default function PromoCodesPage() {
     setResponse({
       items: Array.isArray(nextResponse?.items) ? nextResponse.items : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
+      awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
     });
     setProjectFinished(Boolean(nextResponse?.projectFinished));
   }
@@ -885,6 +928,9 @@ export default function PromoCodesPage() {
     setPromoCodesScheduleError("");
     setPromoCodesScheduleLoading(false);
     setPromoCodesScheduleTab(PROMO_CODE_SCHEDULE_TABS[0].id);
+    setPromoCodesSchedulePage(1);
+    setPromoCodesScheduleDrafts({});
+    setUpdatingPromoCodeId(null);
   }
 
   async function handleOpenPromoCodesSchedule() {
@@ -895,6 +941,7 @@ export default function PromoCodesPage() {
     setPromoCodesScheduleLoading(true);
     setPromoCodesScheduleError("");
     setPromoCodesScheduleTab(PROMO_CODE_SCHEDULE_TABS[0].id);
+    setPromoCodesSchedulePage(1);
     promoCodesScheduleModal.onOpen();
 
     try {
@@ -909,6 +956,12 @@ export default function PromoCodesPage() {
         waitingItems: Array.isArray(result?.waitingItems) ? result.waitingItems : [],
         claimedItems: Array.isArray(result?.claimedItems) ? result.claimedItems : [],
       });
+      const nextDrafts = {};
+      [...(Array.isArray(result?.availableItems) ? result.availableItems : []), ...(Array.isArray(result?.waitingItems) ? result.waitingItems : [])]
+        .forEach((item) => {
+          nextDrafts[item.id] = formatDateTimeInputValue(item.availableFrom);
+        });
+      setPromoCodesScheduleDrafts(nextDrafts);
     } catch (requestError) {
       setPromoCodesScheduleResponse(EMPTY_PROMO_CODE_SCHEDULE_RESPONSE);
       setPromoCodesScheduleError(requestError.message || "Не удалось загрузить расписание промокодов");
@@ -946,6 +999,101 @@ export default function PromoCodesPage() {
       setError(requestError.message || "Не удалось изменить статус приза");
     } finally {
       setTogglingPrizeId(null);
+    }
+  }
+
+  async function handleReorderPrizes(nextIds) {
+    if (!Array.isArray(nextIds) || nextIds.length === 0) {
+      return;
+    }
+
+    setReorderingPrizeIds(nextIds);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/prizes/reorder", {
+        ids: nextIds,
+      });
+
+      setResponse((current) => ({
+        ...current,
+        items: Array.isArray(result?.items) ? result.items : current.items,
+      }));
+      await reloadPrizes();
+      setSuccessMessage("Порядок призов сохранен.");
+    } catch (requestError) {
+      setError(requestError.message || "Не удалось сохранить порядок призов");
+    } finally {
+      setDraggedPrizeId(null);
+      setDragOverPrizeId(null);
+      setReorderingPrizeIds([]);
+    }
+  }
+
+  function handlePrizeDragStart(prizeId) {
+    if (!canReorderPrizes || reorderingPrizeIds.length > 0) {
+      return;
+    }
+
+    setDraggedPrizeId(prizeId);
+  }
+
+  function handlePrizeDrop(targetPrizeId) {
+    if (!canReorderPrizes || !draggedPrizeId || draggedPrizeId === targetPrizeId || reorderingPrizeIds.length > 0) {
+      setDraggedPrizeId(null);
+      setDragOverPrizeId(null);
+      return;
+    }
+
+    const currentIds = response.items.map((item) => Number(item.id));
+    const fromIndex = currentIds.indexOf(Number(draggedPrizeId));
+    const toIndex = currentIds.indexOf(Number(targetPrizeId));
+
+    if (fromIndex === -1 || toIndex === -1) {
+      setDraggedPrizeId(null);
+      setDragOverPrizeId(null);
+      return;
+    }
+
+    const nextIds = currentIds.slice();
+    const [movedId] = nextIds.splice(fromIndex, 1);
+    nextIds.splice(toIndex, 0, movedId);
+    void handleReorderPrizes(nextIds);
+  }
+
+  async function handleSavePromoCodeAvailability(item) {
+    setUpdatingPromoCodeId(item.id);
+    setPromoCodesScheduleError("");
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const result = await postJson("/api/prizes/promo-codes/update-availability", {
+        id: editingPrizeId,
+        promoCodeId: item.id,
+        availableFrom: String(promoCodesScheduleDrafts[item.id] || "").trim(),
+      });
+
+      setPromoCodesScheduleResponse({
+        prize: result?.prize ?? null,
+        summary: result?.summary ?? EMPTY_PROMO_CODE_SCHEDULE_RESPONSE.summary,
+        availableItems: Array.isArray(result?.availableItems) ? result.availableItems : [],
+        waitingItems: Array.isArray(result?.waitingItems) ? result.waitingItems : [],
+        claimedItems: Array.isArray(result?.claimedItems) ? result.claimedItems : [],
+      });
+      const nextDrafts = {};
+      [...(Array.isArray(result?.availableItems) ? result.availableItems : []), ...(Array.isArray(result?.waitingItems) ? result.waitingItems : [])]
+        .forEach((scheduleItem) => {
+          nextDrafts[scheduleItem.id] = formatDateTimeInputValue(scheduleItem.availableFrom);
+        });
+      setPromoCodesScheduleDrafts(nextDrafts);
+      await reloadPrizes();
+      setSuccessMessage(`Время выхода промокода «${item.code}» обновлено.`);
+    } catch (requestError) {
+      setPromoCodesScheduleError(requestError.message || "Не удалось обновить время выхода промокода");
+    } finally {
+      setUpdatingPromoCodeId(null);
     }
   }
 
@@ -1109,6 +1257,7 @@ export default function PromoCodesPage() {
               <Table variant="simple">
                 <Thead>
                   <Tr>
+                    <Th color={textColorSecondary} ps="6px">Порядок</Th>
                     <Th color={textColorSecondary} ps="6px">Включен</Th>
                     <Th color={textColorSecondary}>Название</Th>
                     <Th color={textColorSecondary}>Тип</Th>
@@ -1122,7 +1271,38 @@ export default function PromoCodesPage() {
                 </Thead>
                 <Tbody>
                   {response.items.length > 0 ? response.items.map((item) => (
-                    <Tr key={item.id} opacity={item.isEnabled ? 1 : 0.56}>
+                    <Tr
+                      key={item.id}
+                      opacity={item.isEnabled ? 1 : 0.56}
+                      draggable={canReorderPrizes && reorderingPrizeIds.length === 0}
+                      onDragStart={() => handlePrizeDragStart(item.id)}
+                      onDragOver={(event) => {
+                        if (!canReorderPrizes) {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        setDragOverPrizeId(item.id);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverPrizeId === item.id) {
+                          setDragOverPrizeId(null);
+                        }
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        handlePrizeDrop(item.id);
+                      }}
+                      sx={dragOverPrizeId === item.id ? { bg: "rgba(43, 108, 176, 0.06)" } : undefined}
+                    >
+                      <Td borderColor={borderColor} ps="6px">
+                        <Flex align="center" gap="8px">
+                          <Icon as={MdDragIndicator} color={canReorderPrizes ? textColorSecondary : "transparent"} boxSize="18px" />
+                          <Text color={textColorSecondary} fontSize="sm" fontWeight="700">
+                            {formatNumber(item.sortOrder || 0)}
+                          </Text>
+                        </Flex>
+                      </Td>
                       <Td borderColor={borderColor} ps="6px">
                         <Checkbox
                           colorScheme="brandScheme"
@@ -1251,7 +1431,7 @@ export default function PromoCodesPage() {
                     </Tr>
                   )) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={9}>
+                      <Td borderColor={borderColor} colSpan={10}>
                         <Text color={textColorSecondary} fontSize="sm" py="12px" textAlign="center">
                           Призов пока нет.
                         </Text>
@@ -1325,7 +1505,10 @@ export default function PromoCodesPage() {
                       variant={promoCodesScheduleTab === tab.id ? "brand" : "light"}
                       h="44px"
                       borderRadius="16px"
-                      onClick={() => setPromoCodesScheduleTab(tab.id)}
+                      onClick={() => {
+                        setPromoCodesScheduleTab(tab.id);
+                        setPromoCodesSchedulePage(1);
+                      }}
                     >
                       {tab.label}: {formatNumber(count)}
                     </Button>
@@ -1337,6 +1520,37 @@ export default function PromoCodesPage() {
                 Всего кодов в расписании: {formatNumber(promoCodesScheduleResponse.summary.totalCount)}
               </Text>
 
+              <Flex justify="space-between" align={{ base: "start", md: "center" }} direction={{ base: "column", md: "row" }} gap="10px">
+                <Text color={textColorSecondary} fontSize="sm">
+                  Показываем по {PROMO_CODE_SCHEDULE_PAGE_SIZE} промокодов на страницу.
+                </Text>
+                <Flex gap="8px" align="center">
+                  <Button
+                    type="button"
+                    variant="light"
+                    h="38px"
+                    minW="84px"
+                    isDisabled={promoCodesSchedulePage <= 1}
+                    onClick={() => setPromoCodesSchedulePage((current) => Math.max(1, current - 1))}
+                  >
+                    Назад
+                  </Button>
+                  <Text color={textColorSecondary} fontSize="sm" minW="96px" textAlign="center">
+                    {promoCodesSchedulePage} / {promoCodesScheduleTotalPages}
+                  </Text>
+                  <Button
+                    type="button"
+                    variant="light"
+                    h="38px"
+                    minW="84px"
+                    isDisabled={promoCodesSchedulePage >= promoCodesScheduleTotalPages}
+                    onClick={() => setPromoCodesSchedulePage((current) => Math.min(promoCodesScheduleTotalPages, current + 1))}
+                  >
+                    Вперед
+                  </Button>
+                </Flex>
+              </Flex>
+
               {promoCodesScheduleError ? (
                 <Text color="red.400" fontSize="sm">
                   {promoCodesScheduleError}
@@ -1345,7 +1559,7 @@ export default function PromoCodesPage() {
 
               <Skeleton isLoaded={!promoCodesScheduleLoading}>
                 <Stack spacing="12px">
-                  {promoCodesScheduleItems.length > 0 ? promoCodesScheduleItems.map((item) => (
+                  {promoCodesScheduleVisibleItems.length > 0 ? promoCodesScheduleVisibleItems.map((item) => (
                     <Box
                       key={`${promoCodesScheduleTab}-${item.id}-${item.code}`}
                       border="1px solid"
@@ -1371,6 +1585,32 @@ export default function PromoCodesPage() {
                             </Text>
                           ) : null}
                         </SimpleGrid>
+                        {promoCodesScheduleTab !== "claimed" ? (
+                          <Flex gap="10px" direction={{ base: "column", md: "row" }} align={{ base: "stretch", md: "end" }}>
+                            <FormControl>
+                              <FormLabel color={textColorSecondary} fontSize="xs" fontWeight="700" mb="6px">
+                                Вручную изменить время выхода в пул
+                              </FormLabel>
+                              <Input
+                                type="datetime-local"
+                                value={promoCodesScheduleDrafts[item.id] || ""}
+                                onChange={(event) => setPromoCodesScheduleDrafts((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value,
+                                }))}
+                              />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="brand"
+                              minW={{ base: "100%", md: "160px" }}
+                              isLoading={updatingPromoCodeId === item.id}
+                              onClick={() => void handleSavePromoCodeAvailability(item)}
+                            >
+                              Сохранить
+                            </Button>
+                          </Flex>
+                        ) : null}
                       </Stack>
                     </Box>
                   )) : (

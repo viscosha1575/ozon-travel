@@ -221,8 +221,9 @@ export default function RafflePage() {
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(
         winners.map((player) => ({
-          "Telegram ID": player.telegramUserId ?? "",
-          "Telegram Username": player.username ? `@${player.username}` : "",
+          Platform: player.platform ?? "",
+          "User ID": player.platformUserId ?? player.telegramUserId ?? "",
+          Username: player.username ? `@${player.username}` : "",
           "Code ID": player.codeId ?? "",
         })),
       );
@@ -269,7 +270,7 @@ export default function RafflePage() {
                   fontSize="sm"
                   fontWeight="500"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск по Telegram ID или username"
+                  placeholder="Поиск по user ID или username"
                   ps="44px"
                   value={search}
                   _hover={{ borderColor: "transparent" }}
@@ -345,8 +346,9 @@ export default function RafflePage() {
               <Table variant="simple">
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary}>Telegram ID</Th>
-                    <Th color={textColorSecondary}>Telegram username</Th>
+                    <Th color={textColorSecondary}>Platform</Th>
+                    <Th color={textColorSecondary}>User ID</Th>
+                    <Th color={textColorSecondary}>Username</Th>
                     <Th color={textColorSecondary}>Игрок</Th>
                     <Th color={textColorSecondary}>Статус</Th>
                     <Th color={textColorSecondary}>codeId</Th>
@@ -361,7 +363,12 @@ export default function RafflePage() {
                       <Tr key={player.id}>
                         <Td borderColor={borderColor}>
                           <Text color={textColor} fontSize="sm" fontWeight="700">
-                            {formatNullableText(player.telegramUserId)}
+                            {formatNullableText(player.platform)}
+                          </Text>
+                        </Td>
+                        <Td borderColor={borderColor}>
+                          <Text color={textColor} fontSize="sm" fontWeight="700">
+                            {formatNullableText(player.platformUserId ?? player.telegramUserId)}
                           </Text>
                         </Td>
                         <Td borderColor={borderColor}>

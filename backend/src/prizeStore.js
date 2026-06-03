@@ -154,6 +154,26 @@ function parseOptionalDateTime(value, fieldName) {
   return parsedDate.toISOString();
 }
 
+function formatDateTimeLabel(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function buildPromoCodeSchedule(codes, releaseStart, releaseEnd) {
   const normalizedCodes = Array.from(
     new Set(
@@ -207,6 +227,7 @@ function mapPrizeRow(row) {
     promoCodesFileName: row.promo_codes_file_name,
     promoCodes: Array.isArray(row.promo_codes) ? row.promo_codes : [],
     promoCodeValue: row.promo_code_value,
+    sortOrder: Number(row.sort_order || 0),
     totalCount: Number(row.total_count || 0),
     remainingCount: Number(row.remaining_count || 0),
     chanceValue: row.chance_value,
@@ -246,6 +267,7 @@ async function getAllPrizes(client = null) {
       promo_codes_file_name,
       promo_codes,
       promo_code_value,
+      sort_order,
       total_count,
       remaining_count,
       chance_value,
@@ -326,16 +348,57 @@ export async function listPrizes(payload = {}) {
     items = items.filter((item) => String(item.promoCodeType || "").trim() === promoCodeTypeFilter);
   }
 
-  items.sort((left, right) => left.title.localeCompare(right.title, "ru"));
+  items.sort((left, right) => {
+    const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    const titleDelta = String(left.title || "").localeCompare(String(right.title || ""), "ru");
+
+    if (titleDelta !== 0) {
+      return titleDelta;
+    }
+
+    return Number(left.id || 0) - Number(right.id || 0);
+  });
+
+  const awardedPrizeStatsResult = await query(
+    `
+      SELECT
+        prize_positions.id,
+        prize_positions.title,
+        prize_positions.my_prize_text,
+        prize_positions.type,
+        COUNT(awarded_prizes.id)::int AS awarded_count
+      FROM prize_positions
+      LEFT JOIN awarded_prizes
+        ON awarded_prizes.prize_id = prize_positions.id
+      GROUP BY prize_positions.id
+      ORDER BY awarded_count DESC, prize_positions.sort_order ASC, prize_positions.id ASC
+    `,
+  );
+
+  const awardedPrizeStats = awardedPrizeStatsResult.rows
+    .map((row) => ({
+      prizeId: Number(row.id),
+      title: String(row.my_prize_text || row.title || "").trim() || `Приз #${row.id}`,
+      type: String(row.type || "").trim(),
+      awardedCount: Number(row.awarded_count || 0),
+    }))
+    .filter((item) => item.awardedCount > 0);
 
   return {
     items,
     nonPrizeDescriptionOptions,
     projectFinished: projectState.projectFinished,
+    awardedPrizeStats,
     summary: {
       totalPrizesCount: items.length,
       totalUnitsCount: items.reduce((sum, item) => sum + Number(item.totalCount || 0), 0),
       totalRemainingCount: items.reduce((sum, item) => sum + Number(item.remainingCount || 0), 0),
+      totalAwardedCount: awardedPrizeStats.reduce((sum, item) => sum + Number(item.awardedCount || 0), 0),
     },
   };
 }
@@ -493,6 +556,8 @@ export async function createPrize(payload = {}) {
   const nextPrize = validatePrizePayload(payload);
   const nextIdResult = await query("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM prize_positions");
   const id = Number(nextIdResult.rows[0]?.id || 1);
+  const nextSortOrderResult = await query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS sort_order FROM prize_positions");
+  const sortOrder = Number(nextSortOrderResult.rows[0]?.sort_order || 1);
   let uploadedImage = null;
 
   try {
@@ -513,6 +578,7 @@ export async function createPrize(payload = {}) {
             promo_codes_file_name,
             promo_codes,
             promo_code_value,
+            sort_order,
             total_count,
             remaining_count,
             chance_value,
@@ -530,7 +596,7 @@ export async function createPrize(payload = {}) {
             updated_at
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21, $22, $23::jsonb, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::jsonb, $22, $23, $24::jsonb, NOW()
           )
         `,
         [
@@ -543,6 +609,7 @@ export async function createPrize(payload = {}) {
           nextPrize.promoCodesFileName,
           JSON.stringify(nextPrize.promoCodes),
           nextPrize.promoCodeValue,
+          sortOrder,
           0,
           0,
           nextPrize.chanceValue,
@@ -706,6 +773,51 @@ export async function updatePrize(payload = {}) {
   return {
     updated: true,
     prize,
+  };
+}
+
+export async function reorderPrizes(payload = {}) {
+  const ids = Array.isArray(payload.ids)
+    ? payload.ids.map((item) => Number(item) || 0).filter((item) => item > 0)
+    : [];
+
+  if (!ids.length) {
+    throw new Error("Prize ids are required");
+  }
+
+  await withTransaction(async (client) => {
+    const existingRows = await client.query(
+      `
+        SELECT id
+        FROM prize_positions
+        ORDER BY sort_order ASC, id ASC
+      `,
+    );
+    const existingIds = existingRows.rows.map((row) => Number(row.id)).filter((item) => item > 0);
+    const missingIds = existingIds.filter((id) => !ids.includes(id));
+    const nextOrderedIds = ids.concat(missingIds);
+
+    if (nextOrderedIds.length !== existingIds.length) {
+      throw new Error("Prize order payload is invalid");
+    }
+
+    for (let index = 0; index < nextOrderedIds.length; index += 1) {
+      await client.query(
+        `
+          UPDATE prize_positions
+          SET sort_order = $2, updated_at = NOW()
+          WHERE id = $1
+        `,
+        [nextOrderedIds[index], index + 1],
+      );
+    }
+  });
+
+  const response = await listPrizes({});
+
+  return {
+    updated: true,
+    items: response.items,
   };
 }
 
@@ -977,6 +1089,7 @@ export async function getPrizePromoCodeSchedule(payload = {}) {
       availableFrom: row.available_from ? new Date(row.available_from).toISOString() : null,
       claimedAt: row.claimed_at ? new Date(row.claimed_at).toISOString() : null,
       awardedAt: row.awarded_at ? new Date(row.awarded_at).toISOString() : null,
+      availableFromLabel: row.available_from ? formatDateTimeLabel(row.available_from) : "",
     };
 
     if (item.claimedAt) {
@@ -1011,6 +1124,55 @@ export async function getPrizePromoCodeSchedule(payload = {}) {
     waitingItems,
     claimedItems,
   };
+}
+
+export async function updatePrizePromoCodeAvailability(payload = {}) {
+  const prizeId = Number(payload.id);
+  const promoCodeId = Number(payload.promoCodeId);
+  const availableFrom = parseOptionalDateTime(payload.availableFrom, "availableFrom");
+
+  if (!prizeId) {
+    throw new Error("Prize id is required");
+  }
+
+  if (!promoCodeId) {
+    throw new Error("Promo code id is required");
+  }
+
+  await withTransaction(async (client) => {
+    const rowResult = await client.query(
+      `
+        SELECT id, claimed_at
+        FROM prize_promo_codes
+        WHERE id = $1
+          AND prize_id = $2
+        FOR UPDATE
+      `,
+      [promoCodeId, prizeId],
+    );
+    const promoCodeRow = rowResult.rows[0];
+
+    if (!promoCodeRow) {
+      throw new Error("Promo code not found");
+    }
+
+    if (promoCodeRow.claimed_at) {
+      throw new Error("Issued promo code availability cannot be changed");
+    }
+
+    await client.query(
+      `
+        UPDATE prize_promo_codes
+        SET available_from = $3::timestamptz,
+            updated_at = NOW()
+        WHERE id = $1
+          AND prize_id = $2
+      `,
+      [promoCodeId, prizeId, availableFrom],
+    );
+  });
+
+  return getPrizePromoCodeSchedule({ id: prizeId });
 }
 
 export async function deletePrize(payload = {}) {

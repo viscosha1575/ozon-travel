@@ -106,7 +106,12 @@ const EMPTY_ANALYTICS = {
     promoCodeApplyClicksCount: 0,
     promoCodeApplyUsersCount: 0,
     ozonTravelTransitionsCount: 0,
+    totalPrizesCount: 0,
+    totalUnitsCount: 0,
+    totalRemainingCount: 0,
+    totalAwardedCount: 0,
   },
+  awardedPrizeStats: [],
 };
 
 function formatNumber(value) {
@@ -495,6 +500,63 @@ export default function AnalyticsPage() {
   const chartOrange = useColorModeValue("orange.500", "orange.500");
   const chartGreen = useColorModeValue("green.500", "green.500");
   const chartBlue = useColorModeValue("blue.500", "blue.500");
+  const titleColor = useColorModeValue("navy.700", "white");
+  const textColorSecondary = useColorModeValue("secondaryGray.600", "secondaryGray.300");
+  const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
+  const remainingValueColor = useColorModeValue("green.500", "green.300");
+  const awardedPrizeChartStats = useMemo(
+    () => (Array.isArray(analytics.awardedPrizeStats) ? analytics.awardedPrizeStats.slice(0, 12) : []),
+    [analytics.awardedPrizeStats],
+  );
+  const awardedPrizeChartData = useMemo(() => [
+    {
+      name: "Выдано",
+      data: awardedPrizeChartStats.map((item) => Number(item.awardedCount || 0)),
+    },
+  ], [awardedPrizeChartStats]);
+  const awardedPrizeChartOptions = useMemo(() => ({
+    chart: {
+      toolbar: { show: false },
+      sparkline: { enabled: false },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 8,
+      },
+    },
+    dataLabels: {
+      enabled: true,
+    },
+    xaxis: {
+      categories: awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+      },
+    },
+    yaxis: {
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+      },
+    },
+    colors: ["#2B6CB0"],
+    grid: {
+      borderColor: "rgba(163, 174, 208, 0.18)",
+      strokeDashArray: 4,
+    },
+    tooltip: {
+      theme: "dark",
+    },
+    legend: {
+      show: false,
+    },
+  }), [awardedPrizeChartStats]);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,6 +586,7 @@ export default function AnalyticsPage() {
             ...EMPTY_ANALYTICS.summary,
             ...(response?.summary || {}),
           },
+          awardedPrizeStats: Array.isArray(response?.awardedPrizeStats) ? response.awardedPrizeStats : [],
         });
       } catch (requestError) {
         if (!cancelled) {
@@ -565,6 +628,7 @@ export default function AnalyticsPage() {
           ...EMPTY_ANALYTICS.summary,
           ...(response?.summary || {}),
         },
+        awardedPrizeStats: Array.isArray(response?.awardedPrizeStats) ? response.awardedPrizeStats : [],
       });
     } catch (requestError) {
       setError(requestError.message || "Не удалось обновить аналитику");
@@ -885,6 +949,52 @@ export default function AnalyticsPage() {
               primaryColor={chartGreen}
               secondaryColor={brandColor}
             />
+          </SimpleGrid>
+
+          <SimpleGrid columns={{ base: 1, xl: 2 }} gap="20px">
+            <Card p="24px">
+              <Stack spacing="6px" mb="18px">
+                <Text color={titleColor} fontSize="xl" fontWeight="700">
+                  Выданные призы
+                </Text>
+                <Text color={textColorSecondary} fontSize="sm">
+                  Всего выдано: {formatNumber(summary.totalAwardedCount || 0)}
+                </Text>
+              </Stack>
+              {awardedPrizeChartStats.length > 0 ? (
+                <Box h="380px">
+                  <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
+                </Box>
+              ) : (
+                <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
+                  <Text color={textColorSecondary} fontSize="sm" textAlign="center">
+                    Пока нет выданных призов для диаграммы.
+                  </Text>
+                </Box>
+              )}
+            </Card>
+
+            <Card p="24px">
+              <Stack spacing="14px">
+                <Text color={titleColor} fontSize="xl" fontWeight="700">
+                  Сводка по призам
+                </Text>
+                <SimpleGrid columns={{ base: 1, md: 3 }} gap="14px">
+                  <Box border="1px solid" borderColor={tableCardBorder} borderRadius="20px" p="16px">
+                    <Text color={textColorSecondary} fontSize="sm">Всего позиций</Text>
+                    <Text color={titleColor} fontSize="2xl" fontWeight="700">{formatNumber(summary.totalPrizesCount)}</Text>
+                  </Box>
+                  <Box border="1px solid" borderColor={tableCardBorder} borderRadius="20px" p="16px">
+                    <Text color={textColorSecondary} fontSize="sm">Всего призов</Text>
+                    <Text color={titleColor} fontSize="2xl" fontWeight="700">{formatNumber(summary.totalUnitsCount)}</Text>
+                  </Box>
+                  <Box border="1px solid" borderColor={tableCardBorder} borderRadius="20px" p="16px">
+                    <Text color={textColorSecondary} fontSize="sm">Остаток</Text>
+                    <Text color={remainingValueColor} fontSize="2xl" fontWeight="700">{formatNumber(summary.totalRemainingCount)}</Text>
+                  </Box>
+                </SimpleGrid>
+              </Stack>
+            </Card>
           </SimpleGrid>
 
           <SimpleGrid columns={{ base: 1, xl: 2 }} gap="20px">

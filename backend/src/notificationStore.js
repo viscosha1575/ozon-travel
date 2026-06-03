@@ -71,9 +71,10 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       WITH eligible AS (
         SELECT
           app_users.id,
-          app_users.external_id
+          app_users.external_id,
+          app_users.platform_user_id
         FROM app_users
-        WHERE app_users.external_id LIKE 'max:%'
+        WHERE app_users.platform = 'max'
           AND EXISTS (
             SELECT 1
             FROM user_attempt_transactions daily_grants
@@ -124,7 +125,8 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       SELECT
         inserted.id AS delivery_id,
         app_users.id AS user_id,
-        app_users.external_id
+        app_users.external_id,
+        app_users.platform_user_id
       FROM inserted
       JOIN app_users ON app_users.id = inserted.user_id
       ORDER BY inserted.id ASC
@@ -146,7 +148,7 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       deliveryId: Number(row.delivery_id),
       userId: Number(row.user_id),
       externalId: String(row.external_id || "").trim(),
-      maxUserId: String(row.external_id || "").replace(/^max:/, "").trim(),
+      maxUserId: String(row.platform_user_id || "").trim(),
     })).filter((item) => item.maxUserId),
   };
 }

@@ -16,6 +16,37 @@ function normalizePlatform(value) {
   return platform || "telegram";
 }
 
+function parseExternalId(value) {
+  const externalId = String(value || "").trim();
+
+  if (!externalId) {
+    return {
+      platform: "telegram",
+      platformUserId: "",
+      externalId: "",
+    };
+  }
+
+  const separatorIndex = externalId.indexOf(":");
+
+  if (separatorIndex <= 0) {
+    return {
+      platform: "telegram",
+      platformUserId: externalId,
+      externalId,
+    };
+  }
+
+  const platform = normalizePlatform(externalId.slice(0, separatorIndex));
+  const platformUserId = externalId.slice(separatorIndex + 1).trim();
+
+  return {
+    platform,
+    platformUserId,
+    externalId: buildPlatformExternalId(platform, platformUserId),
+  };
+}
+
 function buildPlatformExternalId(platform, platformUserId) {
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedPlatformUserId = String(platformUserId || "").trim();
@@ -31,8 +62,24 @@ function buildPlatformExternalId(platform, platformUserId) {
   return `${normalizedPlatform}:${normalizedPlatformUserId}`;
 }
 
-function buildReferralCode(externalId) {
-  return `OZONTRAVEL-${String(externalId || "")
+function resolveUserIdentity(userInfo = {}) {
+  const explicitPlatformUserId = String(userInfo.platformUserId || userInfo.userId || "").trim();
+
+  if (explicitPlatformUserId) {
+    const platform = normalizePlatform(userInfo.platform);
+
+    return {
+      platform,
+      platformUserId: explicitPlatformUserId,
+      externalId: buildPlatformExternalId(platform, explicitPlatformUserId),
+    };
+  }
+
+  return parseExternalId(userInfo.externalId);
+}
+
+function buildReferralCode(value) {
+  return `OZONTRAVEL-${String(value || "")
     .replace(/\W+/g, "")
     .slice(-6)
     .padStart(6, "0")}`;
@@ -59,10 +106,13 @@ function buildReferralLink(referralCode) {
 }
 
 async function upsertUser(executor, userInfo = {}) {
-  const platform = normalizePlatform(userInfo.platform);
-  const resolvedExternalId = String(userInfo.externalId || "").trim();
+  const {
+    platform,
+    platformUserId,
+    externalId: resolvedExternalId,
+  } = resolveUserIdentity(userInfo);
 
-  if (platform === "max" && !resolvedExternalId) {
+  if (platform === "max" && !platformUserId) {
     const error = new Error("Не удалось определить пользователя MAX");
     error.statusCode = 403;
     error.code = "MAX_USER_REQUIRED";
@@ -70,16 +120,19 @@ async function upsertUser(executor, userInfo = {}) {
   }
 
   const externalId = resolvedExternalId || "local-demo-user";
+  const resolvedPlatformUserId = platformUserId || "local-demo-user";
   const username = String(userInfo.username || "").trim();
   const firstName = String(userInfo.firstName || "").trim();
   const lastName = String(userInfo.lastName || "").trim();
   const languageCode = String(userInfo.languageCode || "").trim();
   const startParam = String(userInfo.startParam || "").trim();
   const parsedStartParam = parseStartParam(startParam);
-  const referralCode = buildReferralCode(externalId);
+  const referralCode = buildReferralCode(resolvedPlatformUserId);
   const result = await executor.query(
     `
       INSERT INTO app_users (
+        platform,
+        platform_user_id,
         external_id,
         username,
         first_name,
@@ -92,9 +145,10 @@ async function upsertUser(executor, userInfo = {}) {
         updated_at,
         last_seen_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, NOW(), NOW())
-      ON CONFLICT (external_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, NOW(), NOW())
+      ON CONFLICT (platform, platform_user_id)
       DO UPDATE SET
+        external_id = EXCLUDED.external_id,
         username = EXCLUDED.username,
         first_name = EXCLUDED.first_name,
         last_name = EXCLUDED.last_name,
@@ -112,6 +166,8 @@ async function upsertUser(executor, userInfo = {}) {
       RETURNING *, (xmax = 0) AS was_inserted
     `,
     [
+      platform,
+      resolvedPlatformUserId,
       externalId,
       username,
       firstName,
@@ -126,13 +182,86 @@ async function upsertUser(executor, userInfo = {}) {
   return result.rows[0];
 }
 
+async function grantReferralBonusIfEligible(executor, userRow) {
+  const userId = Number(userRow?.id) || 0;
+  const referrerId = Number(userRow?.referred_by_user_id) || 0;
+
+  if (!userId || !referrerId || referrerId === userId || !Boolean(userRow?.subscribed_to_channel)) {
+    return null;
+  }
+
+  const referrerResult = await executor.query(
+    `
+      SELECT id, referral_code
+      FROM app_users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [referrerId],
+  );
+  const referrer = referrerResult.rows[0];
+
+  if (!referrer || Number(referrer.id) === userId) {
+    return null;
+  }
+
+  const parsedStartParam = parseStartParam(userRow.start_param || "");
+  const referralCode = parsedStartParam.referralCode || String(referrer.referral_code || "").trim();
+  const referralBonusResult = await executor.query(
+    `
+      INSERT INTO user_attempt_transactions (
+        user_id,
+        delta,
+        reason,
+        related_user_id,
+        details
+      )
+      VALUES ($1, 1, 'referral_bonus', $2, $3::jsonb)
+      ON CONFLICT DO NOTHING
+      RETURNING created_at
+    `,
+    [
+      referrer.id,
+      userId,
+      JSON.stringify({
+        invitedUserId: userId,
+        invitedExternalId: userRow.external_id,
+        invitedPlatform: String(userRow.platform || "").trim(),
+        invitedPlatformUserId: String(userRow.platform_user_id || "").trim(),
+        referralCode,
+      }),
+    ],
+  );
+
+  if (!referralBonusResult.rowCount) {
+    return null;
+  }
+
+  await trackReferralLinkedAnalytics(
+    executor,
+    Number(referrer.id),
+    userId,
+    referralBonusResult.rows[0]?.created_at || userRow.updated_at || new Date().toISOString(),
+  );
+
+  return {
+    referrerId: Number(referrer.id),
+    invitedUserId: userId,
+  };
+}
+
 async function attachReferrer(executor, userRow) {
   const startParam = String(userRow.start_param || "").trim();
   const parsedStartParam = parseStartParam(startParam);
   const referralCodeFromStartParam = parsedStartParam.referralCode;
   const ownReferralCode = String(userRow.referral_code || "").trim();
 
-  if (!referralCodeFromStartParam || referralCodeFromStartParam === ownReferralCode || userRow.referred_by_user_id) {
+  if (userRow.referred_by_user_id) {
+    await grantReferralBonusIfEligible(executor, userRow);
+    return userRow;
+  }
+
+  if (!referralCodeFromStartParam || referralCodeFromStartParam === ownReferralCode) {
     return userRow;
   }
 
@@ -166,29 +295,7 @@ async function attachReferrer(executor, userRow) {
     return linkedUser;
   }
 
-  await executor.query(
-    `
-      INSERT INTO user_attempt_transactions (
-        user_id,
-        delta,
-        reason,
-        related_user_id,
-        details
-      )
-      VALUES ($1, 1, 'referral_bonus', $2, $3::jsonb)
-      ON CONFLICT DO NOTHING
-    `,
-    [
-      referrer.id,
-      linkedUser.id,
-      JSON.stringify({
-        invitedUserId: Number(linkedUser.id),
-        invitedExternalId: linkedUser.external_id,
-        referralCode: referralCodeFromStartParam,
-      }),
-    ],
-  );
-  await trackReferralLinkedAnalytics(executor, Number(referrer.id), Number(linkedUser.id), linkedUser.created_at || new Date().toISOString());
+  await grantReferralBonusIfEligible(executor, linkedUser);
 
   return linkedUser;
 }
@@ -275,8 +382,10 @@ async function getAttemptSummaryInternal(executor, userId) {
   const referralResult = await executor.query(
     `
       SELECT COUNT(*)::int AS invited_referrals_count
-      FROM app_users
-      WHERE referred_by_user_id = $1
+      FROM user_attempt_transactions
+      WHERE user_id = $1
+        AND reason = 'referral_bonus'
+        AND related_user_id IS NOT NULL
     `,
     [userId],
   );
@@ -303,10 +412,12 @@ async function getAttemptSummaryInternal(executor, userId) {
 async function getInvitedReferralIdsInternal(executor, userId) {
   const result = await executor.query(
     `
-      SELECT id
-      FROM app_users
-      WHERE referred_by_user_id = $1
-      ORDER BY created_at ASC, id ASC
+      SELECT related_user_id AS id
+      FROM user_attempt_transactions
+      WHERE user_id = $1
+        AND reason = 'referral_bonus'
+        AND related_user_id IS NOT NULL
+      ORDER BY created_at ASC, user_attempt_transactions.id ASC
     `,
     [userId],
   );
@@ -475,9 +586,9 @@ export async function deleteUserById(userId, client = null) {
 
 export async function createUserFromPlatform(payload = {}, client = null) {
   const platform = normalizePlatform(payload.platform);
-  const externalId = buildPlatformExternalId(platform, payload.platformUserId);
+  const platformUserId = String(payload.platformUserId || "").trim();
 
-  if (!externalId) {
+  if (!platformUserId) {
     const error = new Error("platformUserId is required");
     error.statusCode = 400;
     throw error;
@@ -485,7 +596,8 @@ export async function createUserFromPlatform(payload = {}, client = null) {
 
   const startParam = String(payload.startParam || payload.invitedByReferralCode || "").trim();
   const user = await getOrCreateUser({
-    externalId,
+    platform,
+    platformUserId,
     username: String(payload.platformNickname || payload.username || "").trim(),
     firstName: String(payload.firstName || "").trim(),
     lastName: String(payload.lastName || "").trim(),
@@ -504,8 +616,8 @@ export async function createUserFromPlatform(payload = {}, client = null) {
     ok: true,
     user: {
       id: Number(user.id),
-      platform,
-      platformUserId: String(payload.platformUserId).trim(),
+      platform: String(user.platform || platform).trim(),
+      platformUserId: String(user.platform_user_id || platformUserId).trim(),
       externalId: user.external_id,
       username: user.username || "",
       firstName: user.first_name || "",
@@ -516,45 +628,58 @@ export async function createUserFromPlatform(payload = {}, client = null) {
   };
 }
 
-export async function setUserSubscriptionStatus(payload = {}, client = null) {
+async function runSetUserSubscriptionStatus(executor, payload = {}) {
   const platform = normalizePlatform(payload.platform);
-  const externalId = buildPlatformExternalId(platform, payload.platformUserId);
-  const executor = client || { query };
+  const platformUserId = String(payload.platformUserId || "").trim();
 
-  if (!externalId) {
+  if (!platformUserId) {
     const error = new Error("platformUserId is required");
     error.statusCode = 400;
     throw error;
   }
 
   const user = await getOrCreateUser({
-    externalId,
+    platform,
+    platformUserId,
     username: String(payload.platformNickname || payload.username || "").trim(),
     firstName: String(payload.firstName || "").trim(),
     lastName: String(payload.lastName || "").trim(),
     languageCode: String(payload.languageCode || "").trim(),
     startParam: String(payload.startParam || payload.invitedByReferralCode || "").trim(),
-  }, client);
+  }, executor);
+  const wasSubscribed = Boolean(user.subscribed_to_channel);
 
   const result = await executor.query(
     `
       UPDATE app_users
       SET subscribed_to_channel = $2, updated_at = NOW(), last_seen_at = NOW()
       WHERE id = $1
-      RETURNING id, external_id, subscribed_to_channel
+      RETURNING *
     `,
     [Number(user.id), Boolean(payload.isSubscribed)],
   );
   const updatedUser = result.rows[0];
 
+  if (!wasSubscribed && Boolean(updatedUser?.subscribed_to_channel)) {
+    await grantReferralBonusIfEligible(executor, updatedUser);
+  }
+
   return {
     ok: true,
     user: {
       id: Number(updatedUser.id),
-      platform,
-      platformUserId: String(payload.platformUserId).trim(),
+      platform: String(updatedUser.platform || platform).trim(),
+      platformUserId: String(updatedUser.platform_user_id || platformUserId).trim(),
       externalId: updatedUser.external_id,
       subscribedToChannel: Boolean(updatedUser.subscribed_to_channel),
     },
   };
+}
+
+export async function setUserSubscriptionStatus(payload = {}, client = null) {
+  if (client) {
+    return runSetUserSubscriptionStatus(client, payload);
+  }
+
+  return withTransaction(async (transactionClient) => runSetUserSubscriptionStatus(transactionClient, payload));
 }

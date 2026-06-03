@@ -449,17 +449,20 @@ function mapPlayerRow(player, sessionStats = {}, logStats = {}, latestPrize = {}
 
   return {
     id: Number(player.id),
-    telegramUserId: player.external_id,
+    platform: String(player.platform || "telegram").trim() || "telegram",
+    platformUserId: String(player.platform_user_id || player.external_id || "").trim(),
+    telegramUserId: String(player.platform_user_id || player.external_id || "").trim(),
+    externalId: String(player.external_id || "").trim(),
     username: player.username || "",
     firstName: player.first_name || "",
     lastName: player.last_name || "",
     languageCode: player.language_code || "",
     referralCode: player.referral_code || "",
-    referredByCode: parsedStartParam.referralCode,
-    hasReferral: Boolean(parsedStartParam.referralCode),
+    referredByCode: String(player.referred_by_code || "").trim(),
+    hasReferral: Boolean(player.referred_by_user_id),
     utmSlug: player.utm_slug || parsedStartParam.utmSlug || "",
     referredByUserId: player.referred_by_user_id ? Number(player.referred_by_user_id) : null,
-    subscribedToChannel: false,
+    subscribedToChannel: Boolean(player.subscribed_to_channel),
     completedGame: finishedSessions > 0 || Boolean(latestPrize.promo_code),
     timeExpired: false,
     promoCode: latestPrize.promo_code || "",
@@ -492,19 +495,26 @@ async function getPlayerBaseMaps() {
   const [usersResult, sessionStatsResult, logStatsResult, latestPrizeResult, attemptsResult] = await Promise.all([
     query(`
       SELECT
-        id,
-        external_id,
-        username,
-        first_name,
-        last_name,
-        language_code,
-        start_param,
-        utm_slug,
-        referral_code,
-        created_at,
-        updated_at,
-        last_seen_at
+        app_users.id,
+        app_users.platform,
+        app_users.platform_user_id,
+        app_users.external_id,
+        app_users.username,
+        app_users.first_name,
+        app_users.last_name,
+        app_users.language_code,
+        app_users.start_param,
+        app_users.utm_slug,
+        app_users.referral_code,
+        app_users.referred_by_user_id,
+        referrer.referral_code AS referred_by_code,
+        app_users.subscribed_to_channel,
+        app_users.created_at,
+        app_users.updated_at,
+        app_users.last_seen_at
       FROM app_users
+      LEFT JOIN app_users AS referrer
+        ON referrer.id = app_users.referred_by_user_id
     `),
     query(`
       SELECT
@@ -622,7 +632,7 @@ export async function getAnalyticsOverview(payload = {}) {
     ? `${buildMonthTokenSequence(12)[0] || getCurrentMonthToken()}-01`
     : chartStartToken;
 
-  const [usersResult, dailyMetricsResult, hourlyMetricsResult, appOpenUsersResult, promoCodeApplyUsersResult, dailyOpenUsersResult, sessionSummaryResult, recentSessionsResult, attemptsByUserResult, referralsByUserResult, totalReferredPlayersResult, playersBeforeChartResult] = await Promise.all([
+  const [usersResult, dailyMetricsResult, hourlyMetricsResult, appOpenUsersResult, promoCodeApplyUsersResult, dailyOpenUsersResult, sessionSummaryResult, recentSessionsResult, attemptsByUserResult, referralsByUserResult, totalReferredPlayersResult, playersBeforeChartResult, prizesSummaryResult, awardedPrizeStatsResult] = await Promise.all([
     query(`
       SELECT
         COUNT(*)::int AS total_players_count,
@@ -742,8 +752,9 @@ export async function getAnalyticsOverview(payload = {}) {
     ),
     query(`
       SELECT COUNT(*)::int AS total_referred_players_count
-      FROM app_users
-      WHERE referred_by_user_id IS NOT NULL
+      FROM user_attempt_transactions
+      WHERE reason = 'referral_bonus'
+        AND related_user_id IS NOT NULL
     `),
     playerSeriesStartToken
       ? query(
@@ -755,6 +766,29 @@ export async function getAnalyticsOverview(payload = {}) {
         [playerSeriesStartToken, ANALYTICS_TIMEZONE],
       )
       : Promise.resolve({ rows: [{ count: 0 }] }),
+    query(`
+      SELECT
+        COUNT(*)::int AS total_prizes_count,
+        COALESCE(SUM(total_count), 0)::int AS total_units_count,
+        COALESCE(SUM(remaining_count), 0)::int AS total_remaining_count
+      FROM prize_positions
+    `),
+    query(
+      `
+        SELECT
+          prize_positions.id,
+          prize_positions.title,
+          prize_positions.my_prize_text,
+          prize_positions.type,
+          prize_positions.sort_order,
+          COUNT(awarded_prizes.id)::int AS awarded_count
+        FROM prize_positions
+        LEFT JOIN awarded_prizes
+          ON awarded_prizes.prize_id = prize_positions.id
+        GROUP BY prize_positions.id
+        ORDER BY awarded_count DESC, prize_positions.sort_order ASC, prize_positions.id ASC
+      `,
+    ),
   ]);
 
   const dailyMetricRows = dailyMetricsResult.rows.map((row) => ({
@@ -803,6 +837,16 @@ export async function getAnalyticsOverview(payload = {}) {
     ? Math.round(totalUniqueDailyVisitsCount / dailyUniqueVisitCounts.length)
     : 0;
   const summaryRow = sessionSummaryResult.rows[0] || {};
+  const prizesSummaryRow = prizesSummaryResult.rows[0] || {};
+  const awardedPrizeStats = awardedPrizeStatsResult.rows
+    .map((row) => ({
+      prizeId: Number(row.id),
+      title: String(row.my_prize_text || row.title || "").trim() || `Приз #${row.id}`,
+      type: String(row.type || "").trim(),
+      awardedCount: Number(row.awarded_count || 0),
+    }))
+    .filter((item) => item.awardedCount > 0);
+  const totalAwardedCount = awardedPrizeStats.reduce((sum, item) => sum + Number(item.awardedCount || 0), 0);
   const dailyMetricSum = (metricName) =>
     dailyMetricRows
       .filter((row) => row.metric === metricName && isTokenInRange(row.key, rangeContext.rangeStartToken, rangeContext.rangeEndToken))
@@ -845,7 +889,12 @@ export async function getAnalyticsOverview(payload = {}) {
       referredTenFriendsPlayersCount: referralsByUser.filter((count) => count >= 10).length,
       promoCodeApplyClicksCount: dailyMetricSum(ANALYTICS_METRICS.promoCodeApplyClicks),
       promoCodeApplyUsersCount: Number(promoCodeApplyUsersResult.rows[0]?.count || 0),
+      totalPrizesCount: Number(prizesSummaryRow.total_prizes_count || 0),
+      totalUnitsCount: Number(prizesSummaryRow.total_units_count || 0),
+      totalRemainingCount: Number(prizesSummaryRow.total_remaining_count || 0),
+      totalAwardedCount,
     },
+    awardedPrizeStats,
     series: {
       newPlayers: newPlayersSeries,
       totalPlayers: totalPlayersSeries,
@@ -922,7 +971,10 @@ export async function listPlayersAnalytics(payload = {}) {
     items = items.filter((player) => {
       const haystack = [
         player.id,
+        player.platform,
+        player.platformUserId,
         player.telegramUserId,
+        player.externalId,
         player.username,
         player.firstName,
         player.lastName,

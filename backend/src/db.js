@@ -48,6 +48,7 @@ async function ensureSchema() {
       promo_codes_file_name TEXT NOT NULL DEFAULT '',
       promo_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
       promo_code_value TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
       total_count INTEGER NOT NULL DEFAULT 0,
       remaining_count INTEGER NOT NULL DEFAULT 0,
       chance_value TEXT NOT NULL DEFAULT '1x',
@@ -68,6 +69,23 @@ async function ensureSchema() {
 
   await query(`
     ALTER TABLE prize_positions
+    ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await query(`
+    WITH ordered AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS next_sort_order
+      FROM prize_positions
+    )
+    UPDATE prize_positions
+    SET sort_order = ordered.next_sort_order
+    FROM ordered
+    WHERE ordered.id = prize_positions.id
+      AND (prize_positions.sort_order IS NULL OR prize_positions.sort_order <= 0)
+  `);
+
+  await query(`
+    ALTER TABLE prize_positions
     ADD COLUMN IF NOT EXISTS roulette_descriptions JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 
@@ -79,6 +97,8 @@ async function ensureSchema() {
   await query(`
     CREATE TABLE IF NOT EXISTS app_users (
       id BIGSERIAL PRIMARY KEY,
+      platform TEXT NOT NULL DEFAULT 'telegram',
+      platform_user_id TEXT NOT NULL DEFAULT '',
       external_id TEXT NOT NULL UNIQUE,
       username TEXT NOT NULL DEFAULT '',
       first_name TEXT NOT NULL DEFAULT '',
@@ -91,6 +111,16 @@ async function ensureSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'telegram'
+  `);
+
+  await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS platform_user_id TEXT NOT NULL DEFAULT ''
   `);
 
   await query(`
@@ -121,6 +151,40 @@ async function ensureSchema() {
   await query(`
     ALTER TABLE app_users
     ADD COLUMN IF NOT EXISTS utm_slug TEXT NOT NULL DEFAULT ''
+  `);
+
+  await query(`
+    UPDATE app_users
+    SET
+      platform = CASE
+        WHEN external_id LIKE 'max:%' THEN 'max'
+        ELSE 'telegram'
+      END,
+      platform_user_id = CASE
+        WHEN external_id LIKE 'max:%' THEN SUBSTRING(external_id FROM 5)
+        ELSE external_id
+      END
+    WHERE COALESCE(TRIM(platform_user_id), '') = ''
+       OR COALESCE(TRIM(platform), '') = ''
+       OR (
+         external_id LIKE 'max:%'
+         AND (
+           platform <> 'max'
+           OR platform_user_id <> SUBSTRING(external_id FROM 5)
+         )
+       )
+       OR (
+         external_id NOT LIKE 'max:%'
+         AND (
+           platform <> 'telegram'
+           OR platform_user_id <> external_id
+         )
+       )
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS app_users_platform_user_id_unique_idx
+    ON app_users (platform, platform_user_id)
   `);
 
   await query(`

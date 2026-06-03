@@ -491,6 +491,8 @@ export default function PushesPage() {
         selectedUsers: current.selectedUsers.concat({
           id: player.id,
           displayName: player.displayName,
+          platform: player.platform,
+          platformUserId: player.platformUserId,
           username: player.username,
           telegramUserId: player.telegramUserId,
         }),
@@ -962,7 +964,7 @@ export default function PushesPage() {
                           borderRadius="18px"
                           fontSize="sm"
                           fontWeight="500"
-                          placeholder="Найти по имени, username или MAX ID"
+                          placeholder="Найти по имени, username или user ID"
                           value={playerSearch}
                           onChange={(event) => setPlayerSearch(event.target.value)}
                         />
@@ -1018,7 +1020,7 @@ export default function PushesPage() {
                                     {player.displayName || player.username || `Игрок #${player.id}`}
                                   </Text>
                                   <Text color={textColorSecondary} fontSize="xs" noOfLines={1}>
-                                    @{player.username || "без username"} · MAX ID {player.telegramUserId || player.id}
+                                    @{player.username || "без username"} · {(player.platform || "telegram").toUpperCase()} ID {player.platformUserId || player.telegramUserId || player.id}
                                   </Text>
                                 </Box>
                                 <Button

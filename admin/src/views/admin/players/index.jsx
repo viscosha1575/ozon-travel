@@ -449,7 +449,7 @@ export default function PlayersPage() {
                   boxShadow={filterShadow}
                   fontSize="sm"
                   fontWeight="500"
-                  placeholder="Поиск по нику, username, Telegram ID"
+                  placeholder="Поиск по нику, username, platform, user ID"
                   ps="44px"
                   value={search}
                   onChange={(event) => {
@@ -597,13 +597,21 @@ export default function PlayersPage() {
                         </Text>
                       </Box>
 
-                      <SimpleGrid columns={{ base: 2, md: 4, xl: 5 }} spacing={{ base: "10px", md: "14px" }} flex="1" w="100%">
+                      <SimpleGrid columns={{ base: 2, md: 4, xl: 6 }} spacing={{ base: "10px", md: "14px" }} flex="1" w="100%">
                         <Box>
                           <Text color={textColorSecondary} fontSize={{ base: "10px", md: "xs" }} fontWeight="600" textTransform="uppercase" mb={{ base: "2px", md: "4px" }}>
-                            Telegram ID
+                            Платформа
                           </Text>
                           <Text color={textColor} fontSize={{ base: "sm", md: "lg" }} fontWeight="700" lineHeight="1.25">
-                            {player.telegramUserId || "—"}
+                            {player.platform || "—"}
+                          </Text>
+                        </Box>
+                        <Box>
+                          <Text color={textColorSecondary} fontSize={{ base: "10px", md: "xs" }} fontWeight="600" textTransform="uppercase" mb={{ base: "2px", md: "4px" }}>
+                            User ID
+                          </Text>
+                          <Text color={textColor} fontSize={{ base: "sm", md: "lg" }} fontWeight="700" lineHeight="1.25">
+                            {player.platformUserId || player.telegramUserId || "—"}
                           </Text>
                         </Box>
                         <Box>
@@ -771,7 +779,8 @@ export default function PlayersPage() {
 
                   <Card p="20px" bg={modalSubtleBg}>
                     <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} gap="16px">
-                      <InfoRow label="Telegram ID" value={selectedPlayer.telegramUserId || "—"} />
+                      <InfoRow label="Platform" value={selectedPlayer.platform || "—"} />
+                      <InfoRow label="User ID" value={selectedPlayer.platformUserId || selectedPlayer.telegramUserId || "—"} />
                       <InfoRow label="Имя" value={selectedPlayer.firstName || "—"} />
                       <InfoRow label="Фамилия" value={selectedPlayer.lastName || "—"} />
                       <InfoRow label="Referral code" value={selectedPlayer.referralCode || "—"} />

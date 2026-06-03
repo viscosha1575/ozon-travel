@@ -222,8 +222,10 @@ function sanitizeSelectedUsers(value) {
     items.push({
       id,
       displayName: String(rawUser?.displayName || "").trim(),
+      platform: String(rawUser?.platform || "").trim(),
+      platformUserId: String(rawUser?.platformUserId || rawUser?.telegramUserId || "").trim(),
       username: String(rawUser?.username || "").trim(),
-      telegramUserId: String(rawUser?.telegramUserId || "").trim(),
+      telegramUserId: String(rawUser?.platformUserId || rawUser?.telegramUserId || "").trim(),
     });
   }
 
@@ -377,7 +379,7 @@ async function countMaxRecipients(executor, audienceKey, selectedUsers) {
         SELECT COUNT(*)::int AS count
         FROM app_users
         WHERE id = ANY($1::bigint[])
-          AND external_id LIKE 'max:%'
+          AND platform = 'max'
       `,
       [ids],
     );
@@ -389,7 +391,7 @@ async function countMaxRecipients(executor, audienceKey, selectedUsers) {
     `
       SELECT COUNT(*)::int AS count
       FROM app_users
-      WHERE external_id LIKE 'max:%'
+      WHERE platform = 'max'
     `,
   );
 
@@ -406,33 +408,31 @@ async function resolveMaxRecipientIds(executor, push) {
 
     const result = await executor.query(
       `
-        SELECT external_id
+        SELECT platform_user_id
         FROM app_users
         WHERE id = ANY($1::bigint[])
-          AND external_id LIKE 'max:%'
+          AND platform = 'max'
         ORDER BY id ASC
       `,
       [ids],
     );
 
     return result.rows
-      .map((row) => String(row.external_id || "").trim())
-      .map((externalId) => externalId.replace(/^max:/, ""))
+      .map((row) => String(row.platform_user_id || "").trim())
       .filter(Boolean);
   }
 
   const result = await executor.query(
     `
-      SELECT external_id
+      SELECT platform_user_id
       FROM app_users
-      WHERE external_id LIKE 'max:%'
+      WHERE platform = 'max'
       ORDER BY id ASC
     `,
   );
 
   return result.rows
-    .map((row) => String(row.external_id || "").trim())
-    .map((externalId) => externalId.replace(/^max:/, ""))
+    .map((row) => String(row.platform_user_id || "").trim())
     .filter(Boolean);
 }
 
@@ -539,7 +539,7 @@ export async function listPushes(payload = {}) {
         item.audienceLabel,
         item.button?.text,
         item.button?.url,
-        ...item.selectedUsers.map((user) => [user.displayName, user.username, user.telegramUserId].join(" ")),
+        ...item.selectedUsers.map((user) => [user.displayName, user.username, user.platform, user.platformUserId, user.telegramUserId].join(" ")),
       ].join(" ").toLowerCase();
 
       return haystack.includes(search);
