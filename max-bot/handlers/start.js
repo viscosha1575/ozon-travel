@@ -33,7 +33,7 @@ function buildOpenAppButton(url) {
   if (!normalizedUrl) {
     return {
       type: 'open_app',
-      text: 'КРУТИТЬ ЛЕНТУ',
+      text: 'Крутить Ленту',
       web_app: fallbackWebApp,
     };
   }
@@ -44,7 +44,7 @@ function buildOpenAppButton(url) {
     const payload = String(parsedUrl.searchParams.get('startapp') || '').trim();
     const button = {
       type: 'open_app',
-      text: 'КРУТИТЬ ЛЕНТУ',
+      text: 'Крутить Ленту',
       web_app: webApp,
     };
 
@@ -56,7 +56,7 @@ function buildOpenAppButton(url) {
   } catch {
     return {
       type: 'open_app',
-      text: 'КРУТИТЬ ЛЕНТУ',
+      text: 'Крутить Ленту',
       web_app: normalizedUrl.replace(/^@/, '') || fallbackWebApp,
     };
   }
@@ -64,7 +64,7 @@ function buildOpenAppButton(url) {
 
 const gameMenuKeyboard = Keyboard.inlineKeyboard([
   [buildOpenAppButton(GAME_WEBAPP_URL)],
-  [Keyboard.button.callback('ПОДДЕРЖКА', 'show_support')],
+  [Keyboard.button.callback('Поддержка', 'show_support')],
 ]);
 
 const welcomeMessage = [
@@ -82,7 +82,7 @@ const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
 
 const menuMessage = [
-  'Пора ловить призы!',
+  'Всё готово для участия! Лови до 100 000 баллов Ozon и промокоды на путешествия!',
 ].join('\n');
 
 const supportMessage = [

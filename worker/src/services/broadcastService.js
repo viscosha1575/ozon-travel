@@ -10,7 +10,7 @@ import {
 } from "../config.js";
 
 const DAILY_ATTEMPT_REMINDER_TEXT = "Вам доступна новая попытка крутить Ленту призов!";
-const DAILY_ATTEMPT_REMINDER_BUTTON_TEXT = "КРУТИТЬ ЛЕНТУ";
+const DAILY_ATTEMPT_REMINDER_BUTTON_TEXT = "Крутить Ленту";
 
 async function runWithConcurrency(items, concurrency, run) {
   let cursor = 0;
