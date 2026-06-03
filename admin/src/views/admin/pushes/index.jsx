@@ -898,7 +898,7 @@ export default function PushesPage() {
                   colorScheme="orange"
                   leftIcon={<Icon as={MdSend} boxSize="16px" />}
                 >
-                  Тест reminder всем MAX
+                  Напоминание
                 </Button>
                 <Button
                   variant="outline"
