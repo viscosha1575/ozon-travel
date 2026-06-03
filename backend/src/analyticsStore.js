@@ -844,8 +844,7 @@ export async function getAnalyticsOverview(payload = {}) {
       title: String(row.my_prize_text || row.title || "").trim() || `Приз #${row.id}`,
       type: String(row.type || "").trim(),
       awardedCount: Number(row.awarded_count || 0),
-    }))
-    .filter((item) => item.awardedCount > 0);
+    }));
   const totalAwardedCount = awardedPrizeStats.reduce((sum, item) => sum + Number(item.awardedCount || 0), 0);
   const dailyMetricSum = (metricName) =>
     dailyMetricRows

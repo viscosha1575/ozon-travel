@@ -505,8 +505,12 @@ export default function AnalyticsPage() {
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
   const remainingValueColor = useColorModeValue("green.500", "green.300");
   const awardedPrizeChartStats = useMemo(
-    () => (Array.isArray(analytics.awardedPrizeStats) ? analytics.awardedPrizeStats.slice(0, 12) : []),
+    () => (Array.isArray(analytics.awardedPrizeStats) ? analytics.awardedPrizeStats : []),
     [analytics.awardedPrizeStats],
+  );
+  const awardedPrizeChartHeight = useMemo(
+    () => Math.max(380, awardedPrizeChartStats.length * 56),
+    [awardedPrizeChartStats.length],
   );
   const awardedPrizeChartData = useMemo(() => [
     {
@@ -530,11 +534,14 @@ export default function AnalyticsPage() {
     },
     xaxis: {
       categories: awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
+      axisBorder: {
+        show: false,
+      },
+      axisTicks: {
+        show: false,
+      },
       labels: {
-        style: {
-          colors: "#A3AED0",
-          fontSize: "12px",
-        },
+        show: false,
       },
     },
     yaxis: {
@@ -962,13 +969,13 @@ export default function AnalyticsPage() {
                 </Text>
               </Stack>
               {awardedPrizeChartStats.length > 0 ? (
-                <Box h="380px">
+                <Box h={`${awardedPrizeChartHeight}px`}>
                   <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
                 </Box>
               ) : (
                 <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
                   <Text color={textColorSecondary} fontSize="sm" textAlign="center">
-                    Пока нет выданных призов для диаграммы.
+                    Пока в базе нет призов для диаграммы.
                   </Text>
                 </Box>
               )}
