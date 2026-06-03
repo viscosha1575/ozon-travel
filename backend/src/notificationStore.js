@@ -110,12 +110,12 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
           updated_at
         )
         SELECT
-          $1,
+          $1::text,
           $2::date,
           eligible.id,
           'queued',
           jsonb_build_object(
-            'source', $5,
+            'source', $5::text,
             'externalId', eligible.external_id
           ),
           NOW()
