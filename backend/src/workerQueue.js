@@ -54,7 +54,7 @@ export async function enqueuePushSendJob({ pushId, mode, waitUntilFinished = fal
       mode: normalizedMode,
     },
     {
-      jobId: `push-send:${normalizedMode}:${Number(pushId) || 0}`,
+      jobId: `push-send-${normalizedMode}-${Number(pushId) || 0}`,
       removeOnComplete: normalizedMode === "test" ? 10 : true,
       removeOnFail: 100,
       attempts: 1,
@@ -78,7 +78,7 @@ export async function enqueuePushRevokeJob({ pushId }) {
       pushId: Number(pushId) || 0,
     },
     {
-      jobId: `push-revoke:${Number(pushId) || 0}`,
+      jobId: `push-revoke-${Number(pushId) || 0}`,
       removeOnComplete: true,
       removeOnFail: 100,
       attempts: 1,

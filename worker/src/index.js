@@ -119,7 +119,7 @@ async function enqueueDailyReminderRecipients(sendQueue, reminderDate) {
             reminderDate,
           },
           {
-            jobId: `daily-attempt-reminder:${recipient.deliveryId}`,
+            jobId: `daily-attempt-reminder-${recipient.deliveryId}`,
             attempts: NOTIFICATION_SEND_ATTEMPTS,
             backoff: {
               type: "exponential",
