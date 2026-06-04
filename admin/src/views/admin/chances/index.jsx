@@ -56,10 +56,15 @@ function formatAvailableCount(item) {
 
 const EMPTY_RESPONSE = {
   items: [],
-  awardedPrizeStats: [],
   summary: {
     totalPositionsCount: 0,
     totalWeight: 0,
+  },
+};
+
+const EMPTY_AWARDED_PRIZES_ANALYTICS = {
+  awardedPrizeStats: [],
+  summary: {
     totalAwardedCount: 0,
   },
 };
@@ -68,7 +73,9 @@ export default function ChancesPage() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [response, setResponse] = useState(EMPTY_RESPONSE);
+  const [awardedPrizesAnalytics, setAwardedPrizesAnalytics] = useState(EMPTY_AWARDED_PRIZES_ANALYTICS);
   const [loading, setLoading] = useState(true);
+  const [awardedPrizesLoading, setAwardedPrizesLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState("");
@@ -87,8 +94,8 @@ export default function ChancesPage() {
   const probabilityColor = useColorModeValue("brand.500", "white");
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
   const awardedPrizeChartStats = useMemo(
-    () => (Array.isArray(response.awardedPrizeStats) ? response.awardedPrizeStats : []),
-    [response.awardedPrizeStats],
+    () => (Array.isArray(awardedPrizesAnalytics.awardedPrizeStats) ? awardedPrizesAnalytics.awardedPrizeStats : []),
+    [awardedPrizesAnalytics.awardedPrizeStats],
   );
   const awardedPrizeChartHeight = useMemo(
     () => 360,
@@ -183,7 +190,6 @@ export default function ChancesPage() {
           const nextItems = Array.isArray(nextResponse?.items) ? nextResponse.items : [];
           setResponse({
             items: nextItems,
-            awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
           });
           setDrafts(Object.fromEntries(nextItems.map((item) => [item.id, item.chanceValue || ""])));
@@ -206,6 +212,43 @@ export default function ChancesPage() {
     };
   }, [deferredSearch]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAwardedPrizesAnalytics() {
+      setAwardedPrizesLoading(true);
+
+      try {
+        const nextResponse = await postJson("/api/analytics/overview", {
+          range: "all",
+        });
+
+        if (!cancelled) {
+          setAwardedPrizesAnalytics({
+            awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
+            summary: {
+              totalAwardedCount: Number(nextResponse?.summary?.totalAwardedCount || 0),
+            },
+          });
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setError((currentValue) => currentValue || requestError.message || "Не удалось загрузить аналитику призов");
+        }
+      } finally {
+        if (!cancelled) {
+          setAwardedPrizesLoading(false);
+        }
+      }
+    }
+
+    void loadAwardedPrizesAnalytics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function reloadChances() {
     const nextResponse = await postJson("/api/chances/list", {
       search: deferredSearch,
@@ -214,7 +257,6 @@ export default function ChancesPage() {
 
     setResponse({
       items: nextItems,
-      awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
     });
     setDrafts(Object.fromEntries(nextItems.map((item) => [item.id, item.chanceValue || ""])));
@@ -285,13 +327,13 @@ export default function ChancesPage() {
         ) : null}
 
         <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
-          <Skeleton isLoaded={!loading}>
+          <Skeleton isLoaded={!awardedPrizesLoading}>
             <Stack spacing="6px" mb="18px">
               <Text color={textColor} fontSize="xl" fontWeight="700">
                 Выданные призы
               </Text>
               <Text color={textColorSecondary} fontSize="sm">
-                Всего выдано: {formatCount(response.summary?.totalAwardedCount || 0)}
+                Всего выдано: {formatCount(awardedPrizesAnalytics.summary?.totalAwardedCount || 0)}
               </Text>
             </Stack>
             {awardedPrizeChartStats.length > 0 ? (
