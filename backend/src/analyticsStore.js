@@ -781,7 +781,14 @@ export async function getAnalyticsOverview(payload = {}) {
           prize_positions.my_prize_text,
           prize_positions.type,
           prize_positions.sort_order,
-          COUNT(awarded_prizes.id)::int AS awarded_count
+          GREATEST(
+            COUNT(awarded_prizes.id)::int,
+            CASE
+              WHEN prize_positions.has_prize_limit
+                THEN GREATEST(COALESCE(prize_positions.total_count, 0) - COALESCE(prize_positions.remaining_count, 0), 0)
+              ELSE 0
+            END
+          )::int AS awarded_count
         FROM prize_positions
         LEFT JOIN awarded_prizes
           ON awarded_prizes.prize_id = prize_positions.id
