@@ -21,10 +21,9 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { MdCardGiftcard, MdDoNotDisturbAlt, MdSave } from "react-icons/md";
 import Card from "components/card/Card";
-import BarChart from "components/charts/BarChart";
 import { postJson } from "api";
 
 function formatProbability(value) {
@@ -62,20 +61,11 @@ const EMPTY_RESPONSE = {
   },
 };
 
-const EMPTY_AWARDED_PRIZES_ANALYTICS = {
-  awardedPrizeStats: [],
-  summary: {
-    totalAwardedCount: 0,
-  },
-};
-
 export default function ChancesPage() {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [response, setResponse] = useState(EMPTY_RESPONSE);
-  const [awardedPrizesAnalytics, setAwardedPrizesAnalytics] = useState(EMPTY_AWARDED_PRIZES_ANALYTICS);
   const [loading, setLoading] = useState(true);
-  const [awardedPrizesLoading, setAwardedPrizesLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [error, setError] = useState("");
@@ -93,86 +83,6 @@ export default function ChancesPage() {
   const categoryBadgeColor = useColorModeValue("navy.700", "white");
   const probabilityColor = useColorModeValue("brand.500", "white");
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
-  const awardedPrizeChartStats = useMemo(
-    () => (Array.isArray(awardedPrizesAnalytics.awardedPrizeStats) ? awardedPrizesAnalytics.awardedPrizeStats : []),
-    [awardedPrizesAnalytics.awardedPrizeStats],
-  );
-  const awardedPrizeChartHeight = useMemo(
-    () => 360,
-    [awardedPrizeChartStats.length],
-  );
-  const awardedPrizeChartData = useMemo(() => [
-    {
-      name: "Выдано",
-      data: awardedPrizeChartStats.map((item) => Number(item.awardedCount || 0)),
-    },
-  ], [awardedPrizeChartStats]);
-  const awardedPrizeChartOptions = useMemo(() => ({
-    chart: {
-      toolbar: { show: false },
-      sparkline: { enabled: false },
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        borderRadius: 8,
-        columnWidth: "44%",
-        distributed: false,
-      },
-    },
-    dataLabels: {
-      enabled: true,
-      style: {
-        fontSize: "12px",
-        fontWeight: 700,
-      },
-    },
-    xaxis: {
-      categories: awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
-      axisBorder: {
-        show: true,
-      },
-      axisTicks: {
-        show: true,
-      },
-      labels: {
-        style: {
-          colors: "#A3AED0",
-          fontSize: "12px",
-        },
-        rotate: 0,
-        trim: true,
-      },
-    },
-    yaxis: {
-      labels: {
-        style: {
-          colors: "#A3AED0",
-          fontSize: "12px",
-        },
-        formatter: (value) => formatCount(value),
-      },
-    },
-    colors: ["#2B6CB0"],
-    grid: {
-      borderColor: "rgba(163, 174, 208, 0.18)",
-      strokeDashArray: 4,
-      yaxis: {
-        lines: {
-          show: true,
-        },
-      },
-    },
-    tooltip: {
-      theme: "dark",
-      y: {
-        formatter: (value) => `${formatCount(value)} шт.`,
-      },
-    },
-    legend: {
-      show: false,
-    },
-  }), [awardedPrizeChartStats]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,43 +121,6 @@ export default function ChancesPage() {
       cancelled = true;
     };
   }, [deferredSearch]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadAwardedPrizesAnalytics() {
-      setAwardedPrizesLoading(true);
-
-      try {
-        const nextResponse = await postJson("/api/analytics/overview", {
-          range: "all",
-        });
-
-        if (!cancelled) {
-          setAwardedPrizesAnalytics({
-            awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
-            summary: {
-              totalAwardedCount: Number(nextResponse?.summary?.totalAwardedCount || 0),
-            },
-          });
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setError((currentValue) => currentValue || requestError.message || "Не удалось загрузить аналитику призов");
-        }
-      } finally {
-        if (!cancelled) {
-          setAwardedPrizesLoading(false);
-        }
-      }
-    }
-
-    void loadAwardedPrizesAnalytics();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function reloadChances() {
     const nextResponse = await postJson("/api/chances/list", {
@@ -327,45 +200,22 @@ export default function ChancesPage() {
         ) : null}
 
         <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
-          <Skeleton isLoaded={!awardedPrizesLoading}>
-            <Stack spacing="6px" mb="18px">
-              <Text color={textColor} fontSize="xl" fontWeight="700">
-                Выданные призы
-              </Text>
-              <Text color={textColorSecondary} fontSize="sm">
-                Всего выдано: {formatCount(awardedPrizesAnalytics.summary?.totalAwardedCount || 0)}
-              </Text>
-            </Stack>
-            {awardedPrizeChartStats.length > 0 ? (
-              <Box h={`${awardedPrizeChartHeight}px`}>
-                <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
-              </Box>
-            ) : (
-              <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
-                <Text color={textColorSecondary} fontSize="sm" textAlign="center">
-                  Пока в базе нет призов для диаграммы.
-                </Text>
-              </Box>
-            )}
-          </Skeleton>
-        </Card>
-
-        <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
           <Skeleton isLoaded={!loading}>
             <Box overflowX="hidden">
               <Table variant="simple" size="sm" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
-                    <Th color={textColorSecondary} w="20%" px="6px" fontSize="10px">Название</Th>
+                    <Th color={textColorSecondary} w="18%" px="6px" fontSize="10px">Название</Th>
                     <Th color={textColorSecondary} w="6%" px="6px" fontSize="10px">Тип</Th>
-                    <Th color={textColorSecondary} w="12%" px="6px" fontSize="10px">Категория</Th>
-                    <Th color={textColorSecondary} w="13%" px="6px" fontSize="10px">Тип промокода</Th>
+                    <Th color={textColorSecondary} w="11%" px="6px" fontSize="10px">Категория</Th>
+                    <Th color={textColorSecondary} w="12%" px="6px" fontSize="10px">Тип промокода</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Всего</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Остаток</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Доступно</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Выдано</Th>
                     <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Шанс</Th>
-                    <Th color={textColorSecondary} w="9%" px="6px" fontSize="10px">Вероятность</Th>
-                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Действие</Th>
+                    <Th color={textColorSecondary} w="8%" px="6px" fontSize="10px">Вероятность</Th>
+                    <Th color={textColorSecondary} w="5%" px="6px" fontSize="10px">Действие</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -468,6 +318,11 @@ export default function ChancesPage() {
                         </Text>
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
+                        <Text color={textColor} fontSize="13px" fontWeight="600">
+                          {formatPrizeCount(item, item.awardedCount)}
+                        </Text>
+                      </Td>
+                      <Td borderColor={borderColor} py="12px" px="6px">
                         <Input
                           h="36px"
                           minW="64px"
@@ -506,7 +361,7 @@ export default function ChancesPage() {
                     </Tr>
                   )) : (
                     <Tr>
-                      <Td borderColor={borderColor} colSpan={10}>
+                      <Td borderColor={borderColor} colSpan={11}>
                         <Text color={textColorSecondary} fontSize="13px" py="12px" textAlign="center">
                           Позиции не найдены.
                         </Text>

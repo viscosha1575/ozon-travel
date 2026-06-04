@@ -1057,6 +1057,12 @@ function buildChancesResponse(payload = {}) {
 
       return {
         ...item,
+        awardedCount: Math.max(
+          Number(item.claimedPromoCodesCount || 0),
+          item.hasPrizeLimit
+            ? Math.max(0, Number(item.totalCount || 0) - Number(item.remainingCount || 0))
+            : 0,
+        ),
         chanceWeight,
         probabilityPercent,
       };

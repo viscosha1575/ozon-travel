@@ -319,6 +319,79 @@ function buildBarChartOptions(categories, colors, gridColor, labelColor) {
   };
 }
 
+function buildAwardedPrizeChartOptions(categories) {
+  return {
+    chart: {
+      toolbar: {
+        show: false,
+      },
+      sparkline: {
+        enabled: false,
+      },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        borderRadius: 8,
+        columnWidth: "44%",
+        distributed: false,
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      style: {
+        fontSize: "12px",
+        fontWeight: 700,
+      },
+    },
+    xaxis: {
+      categories,
+      axisBorder: {
+        show: true,
+      },
+      axisTicks: {
+        show: true,
+      },
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+        rotate: 0,
+        trim: true,
+      },
+    },
+    yaxis: {
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+        formatter: (value) => formatNumber(value),
+      },
+    },
+    colors: ["#2B6CB0"],
+    grid: {
+      borderColor: "rgba(163, 174, 208, 0.18)",
+      strokeDashArray: 4,
+      yaxis: {
+        lines: {
+          show: true,
+        },
+      },
+    },
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: (value) => `${formatNumber(value)} шт.`,
+      },
+    },
+    legend: {
+      show: false,
+    },
+  };
+}
+
 function AnalyticsFunnelCard({ title, rows }) {
   const titleColor = useColorModeValue("navy.700", "white");
   const labelColor = useColorModeValue("secondaryGray.700", "secondaryGray.300");
@@ -675,6 +748,22 @@ export default function AnalyticsPage() {
   const updatedAtLabel = analytics.meta?.cachedAt
     ? formatDateTime(analytics.meta.cachedAt)
     : "—";
+  const awardedPrizeChartStats = useMemo(
+    () => (Array.isArray(analytics.awardedPrizeStats) ? analytics.awardedPrizeStats : []),
+    [analytics.awardedPrizeStats],
+  );
+  const awardedPrizeChartData = useMemo(() => [
+    {
+      name: "Выдано",
+      data: awardedPrizeChartStats.map((item) => Number(item.awardedCount || 0)),
+    },
+  ], [awardedPrizeChartStats]);
+  const awardedPrizeChartOptions = useMemo(
+    () => buildAwardedPrizeChartOptions(
+      awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
+    ),
+    [awardedPrizeChartStats],
+  );
 
   function handlePresetRangeChange(nextRange) {
     setSelectedRange(nextRange);
@@ -920,6 +1009,28 @@ export default function AnalyticsPage() {
               </Stack>
             </Card>
           </SimpleGrid>
+
+          <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
+            <Stack spacing="6px" mb="18px">
+              <Text color={titleColor} fontSize="xl" fontWeight="700">
+                Выданные призы
+              </Text>
+              <Text color={textColorSecondary} fontSize="sm">
+                Всего выдано: {formatNumber(summary.totalAwardedCount)}
+              </Text>
+            </Stack>
+            {awardedPrizeChartStats.length > 0 ? (
+              <Box h="360px">
+                <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
+              </Box>
+            ) : (
+              <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
+                <Text color={textColorSecondary} fontSize="sm" textAlign="center">
+                  Пока в базе нет призов для диаграммы.
+                </Text>
+              </Box>
+            )}
+          </Card>
 
           <SimpleGrid columns={{ base: 1, xl: 2 }} gap="20px">
             {highlightRows.map((item) => (

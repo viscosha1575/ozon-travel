@@ -1316,6 +1316,12 @@ export async function listChances(payload = {}) {
   items = items
     .map((item) => ({
       ...item,
+      awardedCount: Math.max(
+        Number(item.claimedPromoCodesCount || 0),
+        item.hasPrizeLimit
+          ? Math.max(0, Number(item.totalCount || 0) - Number(item.remainingCount || 0))
+          : 0,
+      ),
       chanceWeight: parseChanceWeight(item.chanceValue),
       probabilityPercent: totalWeight > 0
         ? (parseChanceWeight(item.chanceValue) / totalWeight) * 100
