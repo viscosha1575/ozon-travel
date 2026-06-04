@@ -48,6 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           rsync -az --delete \
+            --rsync-path=/usr/bin/rsync \
             --exclude '.git/' \
             --exclude '.github/' \
             --exclude '.env' \
