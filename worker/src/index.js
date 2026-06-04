@@ -2,8 +2,6 @@ import { Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "./workerJobs.js";
 import {
-  DAILY_ATTEMPT_GRANT_CRON,
-  DAILY_ATTEMPT_GRANT_ENABLED,
   DAILY_ATTEMPT_REMINDER_BATCH_SIZE,
   DAILY_ATTEMPT_REMINDER_CRON,
   DAILY_ATTEMPT_REMINDER_ENABLED,
@@ -37,11 +35,11 @@ import {
 const SCHEDULER_QUEUE_NAME = WORKER_QUEUE_NAMES.scheduler;
 const SEND_QUEUE_NAME = WORKER_QUEUE_NAMES.notificationSend;
 const PUSH_QUEUE_NAME = WORKER_QUEUE_NAMES.pushControl;
-const JOB_GRANT_DAILY_ATTEMPTS = WORKER_JOB_NAMES.grantDailyAttempts;
 const JOB_DAILY_ATTEMPT_REMINDER = WORKER_JOB_NAMES.dailyAttemptReminder;
 const JOB_DAILY_ATTEMPT_REMINDER_BROADCAST_TEST = WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest;
 const JOB_PUSH_SEND = WORKER_JOB_NAMES.pushSend;
 const JOB_PUSH_REVOKE = WORKER_JOB_NAMES.pushRevoke;
+const DEPRECATED_REPEATABLE_JOB_NAMES = ["grant-daily-attempts"];
 
 function getMoscowDateValue(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -60,22 +58,6 @@ function buildRedisConnection() {
 }
 
 async function registerRepeatableJobs(queue) {
-  if (DAILY_ATTEMPT_GRANT_ENABLED) {
-    await queue.add(
-      JOB_GRANT_DAILY_ATTEMPTS,
-      { type: JOB_GRANT_DAILY_ATTEMPTS },
-      {
-        jobId: JOB_GRANT_DAILY_ATTEMPTS,
-        repeat: {
-          pattern: DAILY_ATTEMPT_GRANT_CRON,
-          tz: DAILY_ATTEMPT_TIMEZONE,
-        },
-        removeOnComplete: true,
-        removeOnFail: 1000,
-      },
-    );
-  }
-
   if (DAILY_ATTEMPT_REMINDER_ENABLED) {
     await queue.add(
       JOB_DAILY_ATTEMPT_REMINDER,
@@ -91,6 +73,22 @@ async function registerRepeatableJobs(queue) {
       },
     );
   }
+}
+
+async function removeDeprecatedRepeatableJobs(queue) {
+  const jobs = await queue.getRepeatableJobs();
+
+  await Promise.all(
+    jobs
+      .filter((job) => DEPRECATED_REPEATABLE_JOB_NAMES.includes(String(job.name || "").trim()))
+      .map(async (job) => {
+        await queue.removeRepeatableByKey(job.key);
+        logger.info("Removed deprecated repeatable job", {
+          jobName: job.name,
+          key: job.key,
+        });
+      }),
+  );
 }
 
 async function enqueueDailyReminderRecipients(sendQueue, reminderDate) {
@@ -155,24 +153,13 @@ async function start() {
     connection: producerConnection,
   });
 
+  await removeDeprecatedRepeatableJobs(schedulerQueue);
   await registerRepeatableJobs(schedulerQueue);
 
   const schedulerWorker = new Worker(
     SCHEDULER_QUEUE_NAME,
     async (job) => {
       const reminderDate = getMoscowDateValue();
-
-      if (job.name === JOB_GRANT_DAILY_ATTEMPTS) {
-        logger.info("Daily attempts grant skipped", {
-          reminderDate,
-          reason: "daily_attempts_are_granted_only_when_user_opens_the_game",
-        });
-        return {
-          reminderDate,
-          grantedCount: 0,
-          mode: "grant_on_open_only",
-        };
-      }
 
       if (job.name === JOB_DAILY_ATTEMPT_REMINDER) {
         const queuedCount = await enqueueDailyReminderRecipients(sendQueue, reminderDate);
@@ -374,7 +361,6 @@ async function start() {
     sendQueue: SEND_QUEUE_NAME,
     pushQueue: PUSH_QUEUE_NAME,
     timezone: DAILY_ATTEMPT_TIMEZONE,
-    grantCron: DAILY_ATTEMPT_GRANT_CRON,
     reminderCron: DAILY_ATTEMPT_REMINDER_CRON,
   });
 }

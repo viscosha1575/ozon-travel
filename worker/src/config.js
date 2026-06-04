@@ -32,8 +32,6 @@ export const BROADCAST_INTERNAL_TOKEN = String(
 export const GAME_WEBAPP_URL = String(
   process.env.GAME_WEBAPP_URL || "https://max.ru/ozontravel_lenta_bot?startapp",
 ).trim();
-export const DAILY_ATTEMPT_GRANT_ENABLED = parseBoolean(process.env.DAILY_ATTEMPT_GRANT_ENABLED, true);
-export const DAILY_ATTEMPT_GRANT_CRON = String(process.env.DAILY_ATTEMPT_GRANT_CRON || "0 0 0 * * *").trim();
 export const DAILY_ATTEMPT_REMINDER_ENABLED = parseBoolean(process.env.DAILY_ATTEMPT_REMINDER_ENABLED, true);
 export const DAILY_ATTEMPT_REMINDER_CRON = String(process.env.DAILY_ATTEMPT_REMINDER_CRON || "0 0 12 * * *").trim();
 export const DAILY_ATTEMPT_TIMEZONE = String(process.env.DAILY_ATTEMPT_TIMEZONE || "Europe/Moscow").trim();
