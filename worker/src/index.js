@@ -22,7 +22,6 @@ import {
   prepareDailyAttemptReminderBroadcastTest,
   finalizePushRevoke,
   finalizePushSend,
-  grantDailyAttempts,
   markDeliveryFailed,
   markDeliverySent,
   preparePushRevoke,
@@ -164,17 +163,18 @@ async function start() {
       const reminderDate = getMoscowDateValue();
 
       if (job.name === JOB_GRANT_DAILY_ATTEMPTS) {
-        const result = await grantDailyAttempts(reminderDate);
-
-        logger.info("Daily attempts granted", {
+        logger.info("Daily attempts grant skipped", {
           reminderDate,
-          grantedCount: result?.grantedCount || 0,
+          reason: "daily_attempts_are_granted_only_when_user_opens_the_game",
         });
-        return result;
+        return {
+          reminderDate,
+          grantedCount: 0,
+          mode: "grant_on_open_only",
+        };
       }
 
       if (job.name === JOB_DAILY_ATTEMPT_REMINDER) {
-        await grantDailyAttempts(reminderDate);
         const queuedCount = await enqueueDailyReminderRecipients(sendQueue, reminderDate);
 
         logger.info("Daily attempt reminder queued", {

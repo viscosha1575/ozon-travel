@@ -29,37 +29,12 @@ function parseDateValue(value, fallbackValue = getMoscowDateValue()) {
 
 export async function grantDailyAttemptsForAllUsers(payload = {}) {
   const reminderDate = parseDateValue(payload.reminderDate);
-  const details = JSON.stringify({
-    timezone: MSK_TIMEZONE,
-    grantedAtDate: reminderDate,
-    source: String(payload.source || "worker").trim() || "worker",
-  });
-  const result = await query(
-    `
-      INSERT INTO user_attempt_transactions (
-        user_id,
-        delta,
-        reason,
-        attempt_date,
-        details
-      )
-      SELECT
-        app_users.id,
-        1,
-        'daily_login_attempt',
-        $1::date,
-        $2::jsonb
-      FROM app_users
-      ON CONFLICT DO NOTHING
-      RETURNING id
-    `,
-    [reminderDate, details],
-  );
 
   return {
     ok: true,
     reminderDate,
-    grantedCount: result.rowCount,
+    grantedCount: 0,
+    mode: "grant_on_open_only",
   };
 }
 
