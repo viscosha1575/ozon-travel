@@ -76,20 +76,11 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
           app_users.platform_user_id
         FROM app_users
         WHERE app_users.platform = 'max'
-          AND EXISTS (
-            SELECT 1
-            FROM user_attempt_transactions daily_grants
-            WHERE daily_grants.user_id = app_users.id
-              AND daily_grants.reason = 'daily_login_attempt'
-              AND daily_grants.attempt_date = $2::date
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM user_attempt_transactions spins
-            WHERE spins.user_id = app_users.id
-              AND spins.reason = 'spin_consumed'
-              AND ((spins.created_at AT TIME ZONE $4)::date = $2::date)
-          )
+          AND (
+            SELECT COALESCE(SUM(transactions.delta), 0)::int
+            FROM user_attempt_transactions transactions
+            WHERE transactions.user_id = app_users.id
+          ) = 1
           AND NOT EXISTS (
             SELECT 1
             FROM notification_deliveries deliveries
