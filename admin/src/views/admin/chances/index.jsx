@@ -21,9 +21,10 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { MdCardGiftcard, MdDoNotDisturbAlt, MdSave } from "react-icons/md";
 import Card from "components/card/Card";
+import BarChart from "components/charts/BarChart";
 import { postJson } from "api";
 
 function formatProbability(value) {
@@ -55,9 +56,11 @@ function formatAvailableCount(item) {
 
 const EMPTY_RESPONSE = {
   items: [],
+  awardedPrizeStats: [],
   summary: {
     totalPositionsCount: 0,
     totalWeight: 0,
+    totalAwardedCount: 0,
   },
 };
 
@@ -83,6 +86,86 @@ export default function ChancesPage() {
   const categoryBadgeColor = useColorModeValue("navy.700", "white");
   const probabilityColor = useColorModeValue("brand.500", "white");
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
+  const awardedPrizeChartStats = useMemo(
+    () => (Array.isArray(response.awardedPrizeStats) ? response.awardedPrizeStats : []),
+    [response.awardedPrizeStats],
+  );
+  const awardedPrizeChartHeight = useMemo(
+    () => 360,
+    [awardedPrizeChartStats.length],
+  );
+  const awardedPrizeChartData = useMemo(() => [
+    {
+      name: "Выдано",
+      data: awardedPrizeChartStats.map((item) => Number(item.awardedCount || 0)),
+    },
+  ], [awardedPrizeChartStats]);
+  const awardedPrizeChartOptions = useMemo(() => ({
+    chart: {
+      toolbar: { show: false },
+      sparkline: { enabled: false },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        borderRadius: 8,
+        columnWidth: "44%",
+        distributed: false,
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      style: {
+        fontSize: "12px",
+        fontWeight: 700,
+      },
+    },
+    xaxis: {
+      categories: awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
+      axisBorder: {
+        show: true,
+      },
+      axisTicks: {
+        show: true,
+      },
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+        rotate: 0,
+        trim: true,
+      },
+    },
+    yaxis: {
+      labels: {
+        style: {
+          colors: "#A3AED0",
+          fontSize: "12px",
+        },
+        formatter: (value) => formatCount(value),
+      },
+    },
+    colors: ["#2B6CB0"],
+    grid: {
+      borderColor: "rgba(163, 174, 208, 0.18)",
+      strokeDashArray: 4,
+      yaxis: {
+        lines: {
+          show: true,
+        },
+      },
+    },
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: (value) => `${formatCount(value)} шт.`,
+      },
+    },
+    legend: {
+      show: false,
+    },
+  }), [awardedPrizeChartStats]);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +183,7 @@ export default function ChancesPage() {
           const nextItems = Array.isArray(nextResponse?.items) ? nextResponse.items : [];
           setResponse({
             items: nextItems,
+            awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
             summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
           });
           setDrafts(Object.fromEntries(nextItems.map((item) => [item.id, item.chanceValue || ""])));
@@ -130,6 +214,7 @@ export default function ChancesPage() {
 
     setResponse({
       items: nextItems,
+      awardedPrizeStats: Array.isArray(nextResponse?.awardedPrizeStats) ? nextResponse.awardedPrizeStats : [],
       summary: nextResponse?.summary ?? EMPTY_RESPONSE.summary,
     });
     setDrafts(Object.fromEntries(nextItems.map((item) => [item.id, item.chanceValue || ""])));
@@ -198,6 +283,30 @@ export default function ChancesPage() {
             </Text>
           </Card>
         ) : null}
+
+        <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
+          <Skeleton isLoaded={!loading}>
+            <Stack spacing="6px" mb="18px">
+              <Text color={textColor} fontSize="xl" fontWeight="700">
+                Выданные призы
+              </Text>
+              <Text color={textColorSecondary} fontSize="sm">
+                Всего выдано: {formatCount(response.summary?.totalAwardedCount || 0)}
+              </Text>
+            </Stack>
+            {awardedPrizeChartStats.length > 0 ? (
+              <Box h={`${awardedPrizeChartHeight}px`}>
+                <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
+              </Box>
+            ) : (
+              <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
+                <Text color={textColorSecondary} fontSize="sm" textAlign="center">
+                  Пока в базе нет призов для диаграммы.
+                </Text>
+              </Box>
+            )}
+          </Skeleton>
+        </Card>
 
         <Card p={{ base: "18px", md: "24px" }} border="1px solid" borderColor={tableCardBorder}>
           <Skeleton isLoaded={!loading}>

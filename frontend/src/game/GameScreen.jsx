@@ -31,7 +31,6 @@ const RESULT_BAG_ANIMATION_DURATION = 980
 const RESULT_BAG_ANIMATION_EASING = "cubic-bezier(0.18, 0.82, 0.22, 1)"
 const RESULT_COPY_TOAST_EXIT_DURATION = 460
 const RESULT_COPY_TOAST_VISIBLE_DURATION = 3000
-const CONTROLS_GUIDE_OPEN_DELAY = 420
 const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.3
 const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
@@ -520,7 +519,6 @@ export default function GameScreen({
   deferBootstrap = false,
   allowBootstrapFetch = false,
   isSceneVisible = false,
-  shouldShowControlsGuide = false,
   onDevShowProjectFinished = null,
 }) {
   const cachedBootstrap = readBootstrapCache()
@@ -557,7 +555,6 @@ export default function GameScreen({
   const embeddedPageRequestRef = useRef(0)
   const virtualTranslateRef = useRef(0)
   const pendingSpinRef = useRef(null)
-  const hasOpenedControlsGuideRef = useRef(false)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
   const isIdleSpinActiveRef = useRef(false)
@@ -1542,46 +1539,6 @@ export default function GameScreen({
   }, [centerBagIndex])
 
   useEffect(() => {
-    if (
-      !isSceneVisible
-      || !allowBootstrapFetch
-      || !shouldShowControlsGuide
-      || hasOpenedControlsGuideRef.current
-      || isSpinActive
-      || Boolean(resultBag)
-      || Boolean(activeOverlay)
-      || Boolean(renderedOverlay)
-      || Boolean(embeddedPage)
-    ) {
-      return
-    }
-
-    hasOpenedControlsGuideRef.current = true
-    const openTimeoutId = window.setTimeout(() => {
-      void trackGameEvent("overlay_opened", {
-        overlayId: "controls-guide",
-      })
-      openOverlay("controls-guide")
-      void postJson("/game/controls-guide/seen", {}).catch((error) => {
-        console.warn("Failed to persist controls guide state", error)
-      })
-    }, CONTROLS_GUIDE_OPEN_DELAY)
-
-    return () => {
-      window.clearTimeout(openTimeoutId)
-    }
-  }, [
-    activeOverlay,
-    allowBootstrapFetch,
-    embeddedPage,
-    isSceneVisible,
-    isSpinActive,
-    renderedOverlay,
-    resultBag,
-    shouldShowControlsGuide,
-  ])
-
-  useEffect(() => {
     isSpinActiveRef.current = isSpinActive
   }, [isSpinActive])
 
@@ -2067,51 +2024,6 @@ export default function GameScreen({
                   <br />
                   промокоды закончились
                 </h2>
-                <div className="game-overlay-actions">
-                  <button
-                    type="button"
-                    className="game-overlay-action game-overlay-action--primary"
-                    onClick={handleCloseOverlay}
-                  >
-                    Понятно
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : null}
-        {renderedOverlay === "controls-guide" ? (
-          <div
-            className={`game-overlay game-overlay--controls-guide ${isOverlayClosing ? "is-closing" : "is-opening"}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="game-controls-guide-title"
-          >
-            <section className="game-overlay-sheet game-overlay-sheet--controls-guide">
-              <div className="game-overlay-sheet-inner game-overlay-sheet-inner--controls-guide">
-                <h2 id="game-controls-guide-title" className="game-overlay-title game-overlay-title--controls-guide">
-                  Управление
-                </h2>
-                <div className="game-controls-guide-list" aria-label="Подсказки по управлению">
-                  <div className="game-controls-guide-item">
-                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
-                      <img src="/game/icons/question.svg" alt="" className="game-controls-guide-icon" />
-                    </span>
-                    <span className="game-controls-guide-text">Поддержка бота</span>
-                  </div>
-                  <div className="game-controls-guide-item">
-                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
-                      <img src="/game/icons/exclamation.svg" alt="" className="game-controls-guide-icon" />
-                    </span>
-                    <span className="game-controls-guide-text">Правила акции</span>
-                  </div>
-                  <div className="game-controls-guide-item">
-                    <span className="game-controls-guide-icon-wrap" aria-hidden="true">
-                      <img src="/game/icons/gift.svg" alt="" className="game-controls-guide-icon" />
-                    </span>
-                    <span className="game-controls-guide-text">Список ваших призов</span>
-                  </div>
-                </div>
                 <div className="game-overlay-actions">
                   <button
                     type="button"

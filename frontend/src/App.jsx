@@ -199,7 +199,6 @@ function App() {
   const [prefetchedGameBootstrap, setPrefetchedGameBootstrap] = useState(null)
   const [prefetchedGameAssetVersion, setPrefetchedGameAssetVersion] = useState(0)
   const [isGameBootstrapPreloading, setIsGameBootstrapPreloading] = useState(!INTRO_DISABLED)
-  const [shouldShowControlsGuide, setShouldShowControlsGuide] = useState(false)
   const [projectFinishedMyPrizes, setProjectFinishedMyPrizes] = useState([])
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
@@ -271,7 +270,6 @@ function App() {
         }
 
         setIsProjectFinished(projectFinished)
-        setShouldShowControlsGuide(Boolean(response?.shouldShowControlsGuide))
 
         if (projectFinished || isTelegramHost) {
           return
@@ -705,7 +703,6 @@ function App() {
           deferBootstrap={isGameBootstrapPreloading}
           allowBootstrapFetch={isGameActive}
           isSceneVisible={isGameActive}
-          shouldShowControlsGuide={shouldShowControlsGuide}
           onDevShowProjectFinished={handleDevShowProjectFinished}
         />
       </div>

@@ -504,67 +504,6 @@ export default function AnalyticsPage() {
   const textColorSecondary = useColorModeValue("secondaryGray.600", "secondaryGray.300");
   const tableCardBorder = useColorModeValue("rgba(224, 229, 242, 0.95)", "rgba(255, 255, 255, 0.08)");
   const remainingValueColor = useColorModeValue("green.500", "green.300");
-  const awardedPrizeChartStats = useMemo(
-    () => (Array.isArray(analytics.awardedPrizeStats) ? analytics.awardedPrizeStats : []),
-    [analytics.awardedPrizeStats],
-  );
-  const awardedPrizeChartHeight = useMemo(
-    () => Math.max(380, awardedPrizeChartStats.length * 56),
-    [awardedPrizeChartStats.length],
-  );
-  const awardedPrizeChartData = useMemo(() => [
-    {
-      name: "Выдано",
-      data: awardedPrizeChartStats.map((item) => Number(item.awardedCount || 0)),
-    },
-  ], [awardedPrizeChartStats]);
-  const awardedPrizeChartOptions = useMemo(() => ({
-    chart: {
-      toolbar: { show: false },
-      sparkline: { enabled: false },
-    },
-    plotOptions: {
-      bar: {
-        horizontal: true,
-        borderRadius: 8,
-      },
-    },
-    dataLabels: {
-      enabled: true,
-    },
-    xaxis: {
-      categories: awardedPrizeChartStats.map((item) => String(item.title || "").trim()),
-      axisBorder: {
-        show: false,
-      },
-      axisTicks: {
-        show: false,
-      },
-      labels: {
-        show: false,
-      },
-    },
-    yaxis: {
-      labels: {
-        style: {
-          colors: "#A3AED0",
-          fontSize: "12px",
-        },
-      },
-    },
-    colors: ["#2B6CB0"],
-    grid: {
-      borderColor: "rgba(163, 174, 208, 0.18)",
-      strokeDashArray: 4,
-    },
-    tooltip: {
-      theme: "dark",
-    },
-    legend: {
-      show: false,
-    },
-  }), [awardedPrizeChartStats]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -958,29 +897,7 @@ export default function AnalyticsPage() {
             />
           </SimpleGrid>
 
-          <SimpleGrid columns={{ base: 1, xl: 2 }} gap="20px">
-            <Card p="24px">
-              <Stack spacing="6px" mb="18px">
-                <Text color={titleColor} fontSize="xl" fontWeight="700">
-                  Выданные призы
-                </Text>
-                <Text color={textColorSecondary} fontSize="sm">
-                  Всего выдано: {formatNumber(summary.totalAwardedCount || 0)}
-                </Text>
-              </Stack>
-              {awardedPrizeChartStats.length > 0 ? (
-                <Box h={`${awardedPrizeChartHeight}px`}>
-                  <BarChart chartData={awardedPrizeChartData} chartOptions={awardedPrizeChartOptions} />
-                </Box>
-              ) : (
-                <Box border="1px dashed" borderColor={tableCardBorder} borderRadius="20px" p="20px">
-                  <Text color={textColorSecondary} fontSize="sm" textAlign="center">
-                    Пока в базе нет призов для диаграммы.
-                  </Text>
-                </Box>
-              )}
-            </Card>
-
+          <SimpleGrid columns={{ base: 1, xl: 1 }} gap="20px">
             <Card p="24px">
               <Stack spacing="14px">
                 <Text color={titleColor} fontSize="xl" fontWeight="700">

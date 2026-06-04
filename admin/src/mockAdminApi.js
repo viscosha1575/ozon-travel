@@ -1026,6 +1026,15 @@ function buildChancesResponse(payload = {}) {
   const search = normalizeSearch(payload?.search);
   const allItems = mockState.prizes.slice();
   const totalWeight = allItems.reduce((sum, item) => sum + parseChanceWeight(item.chanceValue), 0);
+  const awardedPrizeStats = allItems
+    .map((item) => ({
+      prizeId: Number(item.id),
+      title: String(item.myPrizeText || item.title || "").trim() || `Приз #${item.id}`,
+      type: String(item.type || "").trim(),
+      awardedCount: Math.max(0, (Number(item.totalCount) || 0) - (Number(item.remainingCount) || 0)),
+    }))
+    .filter((item) => item.awardedCount > 0)
+    .sort((left, right) => Number(right.awardedCount || 0) - Number(left.awardedCount || 0));
   let items = allItems;
 
   if (search) {
@@ -1067,9 +1076,11 @@ function buildChancesResponse(payload = {}) {
 
   return {
     items,
+    awardedPrizeStats,
     summary: {
       totalPositionsCount: allItems.length,
       totalWeight,
+      totalAwardedCount: awardedPrizeStats.reduce((sum, item) => sum + Number(item.awardedCount || 0), 0),
     },
   };
 }
