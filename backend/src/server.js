@@ -56,7 +56,7 @@ import {
   markNotificationDeliverySent,
   sendDailyAttemptReminderBroadcastTest,
 } from "./notificationStore.js";
-import { resolveMiniAppUser } from "./miniAppUser.js";
+import { resolveMiniAppUser, resolveTelegramInitDataUser } from "./miniAppUser.js";
 import {
   createUserFromPlatform,
   deleteUserById,
@@ -71,6 +71,12 @@ import {
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const REQUEST_BODY_SECRET = String(process.env.REQUEST_BODY_SECRET || "").trim();
+const ADMIN_TELEGRAM_IDS = new Set(
+  String(process.env.ADMIN_TELEGRAM_IDS || "")
+    .split(",")
+    .map((value) => String(value || "").trim())
+    .filter(Boolean),
+);
 
 function buildSubscriptionRequiredError() {
   const error = new Error("Требуется подписка на канал");
@@ -84,6 +90,40 @@ function buildMaxUserRequiredError() {
   error.statusCode = 403;
   error.code = "MAX_USER_REQUIRED";
   return error;
+}
+
+function buildAdminAccessDeniedError() {
+  const error = new Error("У вас нет доступа к админке");
+  error.statusCode = 403;
+  error.code = "ADMIN_ACCESS_DENIED";
+  return error;
+}
+
+function buildAdminInitDataRequiredError() {
+  const error = new Error("Админка доступна только для разрешенных пользователей Telegram");
+  error.statusCode = 403;
+  error.code = "ADMIN_INIT_DATA_REQUIRED";
+  return error;
+}
+
+function requireAdminTelegramUser(req) {
+  const telegramUser = resolveTelegramInitDataUser(req);
+  const telegramUserId = String(telegramUser?.platformUserId || "").trim();
+
+  if (!telegramUserId) {
+    throw buildAdminInitDataRequiredError();
+  }
+
+  if (!ADMIN_TELEGRAM_IDS.has(telegramUserId)) {
+    throw buildAdminAccessDeniedError();
+  }
+
+  return {
+    id: telegramUserId,
+    username: telegramUser?.username || "",
+    firstName: telegramUser?.firstName || "",
+    lastName: telegramUser?.lastName || "",
+  };
 }
 
 async function resolveSubscriptionContext(req) {
@@ -459,11 +499,16 @@ app.post(/^\/api\/admin\/.*$/, async (req, res, next) => {
   const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
 
   try {
+    const adminUser = requireAdminTelegramUser(req);
+
     if (path === "/api/auth/me") {
       res.json({
         admin: {
-          id: "local-admin",
-          username: "local_admin",
+          id: adminUser.id,
+          username: adminUser.username || `telegram_${adminUser.id}`,
+          firstName: adminUser.firstName,
+          lastName: adminUser.lastName,
+          authProvider: "telegram",
         },
       });
       return;

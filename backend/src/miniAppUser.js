@@ -262,6 +262,20 @@ function resolvePlatform(req) {
   return "telegram";
 }
 
+export function resolveTelegramInitDataUser(req) {
+  const headerValue = String(
+    req.headers["x-telegram-init-data"]
+      || req.headers["x-mini-app-init-data"]
+      || "",
+  ).trim();
+
+  if (!headerValue) {
+    return null;
+  }
+
+  return parseInitDataString(headerValue);
+}
+
 export function resolveMiniAppUser(req) {
   const platform = resolvePlatform(req);
   const headerValue = resolveInitDataHeader(req);
