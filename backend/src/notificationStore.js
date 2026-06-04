@@ -106,7 +106,7 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
           eligible.id,
           'queued',
           jsonb_build_object(
-            'source', $5::text,
+            'source', $4::text,
             'externalId', eligible.external_id
           ),
           NOW()
@@ -127,7 +127,6 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       DAILY_ATTEMPT_REMINDER_KEY,
       reminderDate,
       batchSize,
-      MSK_TIMEZONE,
       source,
     ],
   );
