@@ -45,9 +45,13 @@ function formatPrizeCount(item, value) {
   return formatCount(value);
 }
 
+function formatAwardedCount(value) {
+  return formatCount(value);
+}
+
 function formatAvailableCount(item) {
   if (!item?.hasPrizeLimit) {
-    return "Без лимита";
+    return "∞";
   }
 
   return formatCount(item?.availablePromoCodesCount || 0);
@@ -319,7 +323,7 @@ export default function ChancesPage() {
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
                         <Text color={textColor} fontSize="13px" fontWeight="600">
-                          {formatPrizeCount(item, item.awardedCount)}
+                          {formatAwardedCount(item.awardedCount)}
                         </Text>
                       </Td>
                       <Td borderColor={borderColor} py="12px" px="6px">
