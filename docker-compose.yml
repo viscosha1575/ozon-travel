@@ -82,7 +82,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.routers.ozon-travel-api.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`admin.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/uploads`))
+      - traefik.http.routers.ozon-travel-api.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`) || Host(`admin.${DOMAIN}`)) && (PathPrefix(`/api`) || PathPrefix(`/uploads`) || Path(`/banner.png`) || Path(`/banner.mp4`))
       - traefik.http.routers.ozon-travel-api.entrypoints=websecure
       - traefik.http.routers.ozon-travel-api.tls.certresolver=le
       - traefik.http.routers.ozon-travel-api.priority=100

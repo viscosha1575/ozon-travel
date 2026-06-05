@@ -776,6 +776,21 @@ export async function getAnalyticsOverview(payload = {}) {
     `),
     query(
       `
+        WITH drop_counts AS (
+          SELECT
+            (details ->> 'positionId')::bigint AS prize_id,
+            COUNT(*)::int AS drop_count
+          FROM game_event_logs
+          WHERE event_name = 'spin_result'
+            AND COALESCE(details ->> 'positionId', '') ~ '^[0-9]+$'
+          GROUP BY 1
+        ),
+        award_counts AS (
+          SELECT prize_id, COUNT(*)::int AS awarded_count
+          FROM awarded_prizes
+          WHERE prize_id IS NOT NULL
+          GROUP BY prize_id
+        )
         SELECT
           prize_positions.id,
           prize_positions.title,
@@ -783,7 +798,8 @@ export async function getAnalyticsOverview(payload = {}) {
           prize_positions.type,
           prize_positions.sort_order,
           GREATEST(
-            COUNT(awarded_prizes.id)::int,
+            COALESCE(drop_counts.drop_count, 0),
+            COALESCE(award_counts.awarded_count, 0),
             CASE
               WHEN prize_positions.has_prize_limit
                 THEN GREATEST(COALESCE(prize_positions.total_count, 0) - COALESCE(prize_positions.remaining_count, 0), 0)
@@ -791,9 +807,10 @@ export async function getAnalyticsOverview(payload = {}) {
             END
           )::int AS awarded_count
         FROM prize_positions
-        LEFT JOIN awarded_prizes
-          ON awarded_prizes.prize_id = prize_positions.id
-        GROUP BY prize_positions.id
+        LEFT JOIN drop_counts
+          ON drop_counts.prize_id = prize_positions.id
+        LEFT JOIN award_counts
+          ON award_counts.prize_id = prize_positions.id
         ORDER BY awarded_count DESC, prize_positions.sort_order ASC, prize_positions.id ASC
       `,
     ),

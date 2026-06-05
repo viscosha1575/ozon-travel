@@ -254,6 +254,51 @@ function mapPrizeRow(row) {
   };
 }
 
+async function getPrizeDropCountByPrizeId(executor = { query }) {
+  const [dropCountResult, awardedPrizeCountResult] = await Promise.all([
+    executor.query(
+      `
+        SELECT
+          (details ->> 'positionId')::bigint AS prize_id,
+          COUNT(*)::int AS drop_count
+        FROM game_event_logs
+        WHERE event_name = 'spin_result'
+          AND COALESCE(details ->> 'positionId', '') ~ '^[0-9]+$'
+        GROUP BY 1
+      `,
+    ),
+    executor.query(
+      `
+        SELECT prize_id, COUNT(*)::int AS awarded_count
+        FROM awarded_prizes
+        WHERE prize_id IS NOT NULL
+        GROUP BY prize_id
+      `,
+    ),
+  ]);
+
+  const dropCountByPrizeId = new Map(
+    dropCountResult.rows.map((row) => [Number(row.prize_id), Number(row.drop_count || 0)]),
+  );
+  const awardedPrizeCountByPrizeId = new Map(
+    awardedPrizeCountResult.rows.map((row) => [Number(row.prize_id), Number(row.awarded_count || 0)]),
+  );
+
+  return {
+    get(prizeId, prize = null) {
+      const fallbackCount = prize?.hasPrizeLimit
+        ? Math.max(0, Number(prize.totalCount || 0) - Number(prize.remainingCount || 0))
+        : 0;
+
+      return Math.max(
+        Number(dropCountByPrizeId.get(Number(prizeId)) || 0),
+        Number(awardedPrizeCountByPrizeId.get(Number(prizeId)) || 0),
+        fallbackCount,
+      );
+    },
+  };
+}
+
 async function getAllPrizes(client = null) {
   const executor = client || { query };
   const result = await executor.query(`
@@ -314,6 +359,7 @@ export async function listPrizes(payload = {}) {
   const categoryFilter = String(payload.category || "").trim();
   const promoCodeTypeFilter = String(payload.promoCodeType || "").trim();
   const allItems = await getAllPrizes();
+  const prizeDropCountByPrizeId = await getPrizeDropCountByPrizeId({ query });
   let items = allItems;
   const projectState = await getProjectState();
   const nonPrizeDescriptionOptions = Array.from(
@@ -364,38 +410,30 @@ export async function listPrizes(payload = {}) {
     return Number(left.id || 0) - Number(right.id || 0);
   });
 
-  const awardedPrizeStatsResult = await query(
-    `
-      SELECT
-        prize_positions.id,
-        prize_positions.title,
-        prize_positions.my_prize_text,
-        prize_positions.type,
-        prize_positions.sort_order,
-        GREATEST(
-          COUNT(awarded_prizes.id)::int,
-          CASE
-            WHEN prize_positions.has_prize_limit
-              THEN GREATEST(COALESCE(prize_positions.total_count, 0) - COALESCE(prize_positions.remaining_count, 0), 0)
-            ELSE 0
-          END
-        )::int AS awarded_count
-      FROM prize_positions
-      LEFT JOIN awarded_prizes
-        ON awarded_prizes.prize_id = prize_positions.id
-      GROUP BY prize_positions.id
-      ORDER BY awarded_count DESC, prize_positions.sort_order ASC, prize_positions.id ASC
-    `,
-  );
-
-  const awardedPrizeStats = awardedPrizeStatsResult.rows
-    .map((row) => ({
-      prizeId: Number(row.id),
-      title: String(row.my_prize_text || row.title || "").trim() || `Приз #${row.id}`,
-      type: String(row.type || "").trim(),
-      awardedCount: Number(row.awarded_count || 0),
+  const awardedPrizeStats = allItems
+    .map((item) => ({
+      prizeId: Number(item.id),
+      title: String(item.myPrizeText || item.title || "").trim() || `Приз #${item.id}`,
+      type: String(item.type || "").trim(),
+      sortOrder: Number(item.sortOrder || 0),
+      awardedCount: prizeDropCountByPrizeId.get(item.id, item),
     }))
     .filter((item) => item.awardedCount > 0);
+  awardedPrizeStats.sort((left, right) => {
+    const countDelta = Number(right.awardedCount || 0) - Number(left.awardedCount || 0);
+
+    if (countDelta !== 0) {
+      return countDelta;
+    }
+
+    const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+
+    if (orderDelta !== 0) {
+      return orderDelta;
+    }
+
+    return Number(left.prizeId || 0) - Number(right.prizeId || 0);
+  });
 
   return {
     items,
@@ -1296,6 +1334,7 @@ export async function updatePrizeEnabled(payload = {}) {
 export async function listChances(payload = {}) {
   const search = normalizeSearch(payload.search);
   const allItems = await getAllPrizes();
+  const prizeDropCountByPrizeId = await getPrizeDropCountByPrizeId({ query });
   const totalWeight = allItems.reduce((sum, item) => sum + parseChanceWeight(item.chanceValue), 0);
   let items = allItems;
 
@@ -1316,12 +1355,7 @@ export async function listChances(payload = {}) {
   items = items
     .map((item) => ({
       ...item,
-      awardedCount: Math.max(
-        Number(item.claimedPromoCodesCount || 0),
-        item.hasPrizeLimit
-          ? Math.max(0, Number(item.totalCount || 0) - Number(item.remainingCount || 0))
-          : 0,
-      ),
+      awardedCount: prizeDropCountByPrizeId.get(item.id, item),
       chanceWeight: parseChanceWeight(item.chanceValue),
       probabilityPercent: totalWeight > 0
         ? (parseChanceWeight(item.chanceValue) / totalWeight) * 100
