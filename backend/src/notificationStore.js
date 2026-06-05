@@ -121,11 +121,10 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
           app_users.platform_user_id
         FROM app_users
         WHERE app_users.platform = 'max'
-          AND (
-            SELECT COALESCE(SUM(transactions.delta), 0)::int
-            FROM user_attempt_transactions transactions
-            WHERE transactions.user_id = app_users.id
-          ) >= 1
+          AND NOT (
+            (app_users.last_seen_at AT TIME ZONE $5)::date = $2::date
+            AND EXTRACT(HOUR FROM (app_users.last_seen_at AT TIME ZONE $5)) < 12
+          )
           AND NOT EXISTS (
             SELECT 1
             FROM notification_deliveries deliveries
@@ -173,6 +172,7 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       reminderDate,
       batchSize,
       source,
+      MSK_TIMEZONE,
     ],
   );
 
