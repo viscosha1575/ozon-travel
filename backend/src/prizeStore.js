@@ -1422,6 +1422,37 @@ function chooseWeightedPrize(prizes) {
   return weightedItems[weightedItems.length - 1];
 }
 
+async function getUserSpinHistoryState(client, userId) {
+  const [lastSpinResult, nonPrizeCountResult] = await Promise.all([
+    client.query(
+      `
+        SELECT details
+        FROM game_event_logs
+        WHERE user_id = $1
+          AND event_name = 'spin_result'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `,
+      [userId],
+    ),
+    client.query(
+      `
+        SELECT COUNT(*)::int AS non_prize_results_count
+        FROM game_event_logs
+        WHERE user_id = $1
+          AND event_name = 'spin_result'
+          AND COALESCE(details->>'type', '') = 'Не приз'
+      `,
+      [userId],
+    ),
+  ]);
+
+  return {
+    lastSpinType: String(lastSpinResult.rows[0]?.details?.type || "").trim(),
+    nonPrizeResultsCount: Number(nonPrizeCountResult.rows[0]?.non_prize_results_count || 0),
+  };
+}
+
 async function getAwardedPrizeCountsByPrizeId(client, userId) {
   const result = await client.query(
     `
@@ -1457,6 +1488,39 @@ function isPrizeAvailableByPromoPool(prize) {
   }
 
   return Number(prize.availablePromoCodesCount || 0) > 0;
+}
+
+function preventConsecutiveNonPrizePrizes(prizes = [], lastSpinType = "") {
+  if (!Array.isArray(prizes) || !prizes.length) {
+    return [];
+  }
+
+  if (String(lastSpinType || "").trim() !== "Не приз") {
+    return prizes;
+  }
+
+  const prizeItems = prizes.filter((item) => item.type === "Приз");
+
+  return prizeItems.length ? prizeItems : prizes;
+}
+
+function applySequentialNonPrizeDescription(prize, nonPrizeResultsCount = 0) {
+  if (!prize || prize.type !== "Не приз") {
+    return prize;
+  }
+
+  const facts = collectEffectivePrizeDescriptions(prize);
+
+  if (!facts.length) {
+    return prize;
+  }
+
+  const nextFactIndex = Math.max(0, Number(nonPrizeResultsCount) || 0) % facts.length;
+
+  return {
+    ...prize,
+    rouletteDescription: facts[nextFactIndex] || prize.rouletteDescription || "",
+  };
 }
 
 async function claimAvailablePromoCode(client, prizeId) {
@@ -1495,8 +1559,62 @@ async function claimAvailablePromoCode(client, prizeId) {
   };
 }
 
-async function listAwardedPrizesForUser(userId) {
-  const result = await query(
+function mapAwardedPrizeForMyPrizesRow(row) {
+  return {
+    id: Number(row.id),
+    positionId: row.prize_id != null ? Number(row.prize_id) : null,
+    title: row.prize_title || row.my_prize_title,
+    myPrizeText: row.my_prize_title || row.prize_title || "",
+    promoCode: row.promo_code,
+    image: normalizeStoredImage(row.image),
+    expiresAt: row.expires_at,
+    type: row.prize_type || "Приз",
+    hasPrizeLimit: Boolean(row.has_prize_limit),
+    description: row.prize_description || "",
+    createdAt: row.created_at,
+  };
+}
+
+function dedupeUnlimitedPromoCodePrizes(prizes = []) {
+  if (!Array.isArray(prizes) || !prizes.length) {
+    return [];
+  }
+
+  const seenPromoCodes = new Set();
+
+  return prizes.filter((prize) => {
+    const promoCodeKey = normalizeSearch(prize?.promoCode);
+
+    if (!promoCodeKey || prize?.type !== "Приз" || prize?.hasPrizeLimit) {
+      return true;
+    }
+
+    if (seenPromoCodes.has(promoCodeKey)) {
+      return false;
+    }
+
+    seenPromoCodes.add(promoCodeKey);
+    return true;
+  });
+}
+
+function serializeMyPrizesForFrontend(prizes = []) {
+  return prizes.map((item) => ({
+    id: item.id,
+    positionId: item.positionId,
+    image: item.image?.previewUrl || "",
+    title: item.title,
+    myPrizeText: item.myPrizeText,
+    description: item.description,
+    expiresAt: item.expiresAt,
+    promoCode: item.promoCode,
+    type: item.type,
+  }));
+}
+
+async function listAwardedPrizesForUser(userId, client = null) {
+  const executor = client || { query };
+  const result = await executor.query(
     `
       SELECT
         awarded_prizes.id,
@@ -1507,6 +1625,7 @@ async function listAwardedPrizesForUser(userId) {
         awarded_prizes.expires_at,
         awarded_prizes.created_at,
         prize_positions.type AS prize_type,
+        prize_positions.has_prize_limit,
         prize_positions.title AS prize_title,
         prize_positions.roulette_description AS prize_description
       FROM awarded_prizes
@@ -1518,18 +1637,7 @@ async function listAwardedPrizesForUser(userId) {
     [userId],
   );
 
-  return result.rows.map((row) => ({
-    id: Number(row.id),
-    positionId: row.prize_id != null ? Number(row.prize_id) : null,
-    title: row.prize_title || row.my_prize_title,
-    myPrizeText: row.my_prize_title || row.prize_title || "",
-    promoCode: row.promo_code,
-    image: normalizeStoredImage(row.image),
-    expiresAt: row.expires_at,
-    type: row.prize_type || "Приз",
-    description: row.prize_description || "",
-    createdAt: row.created_at,
-  }));
+  return dedupeUnlimitedPromoCodePrizes(result.rows.map(mapAwardedPrizeForMyPrizesRow));
 }
 
 function buildFrontendPrize(prize) {
@@ -1695,17 +1803,7 @@ export async function getGameBootstrap(userInfo = {}) {
   return {
     projectFinished: projectState.projectFinished,
     rouletteItems: orderedRoulettePrizes.map(buildFrontendPrize),
-    myPrizes: myPrizes.map((item) => ({
-      id: item.id,
-      positionId: item.positionId,
-      image: item.image?.previewUrl || "",
-      title: item.title,
-      myPrizeText: item.myPrizeText,
-      description: item.description,
-      expiresAt: item.expiresAt,
-      promoCode: item.promoCode,
-      type: item.type,
-    })),
+    myPrizes: serializeMyPrizesForFrontend(myPrizes),
     attempts,
     referral,
   };
@@ -1723,11 +1821,16 @@ export async function spinPrize(userInfo = {}) {
       randomizeDescription: true,
     });
     const awardedPrizeCountsByPrizeId = await getAwardedPrizeCountsByPrizeId(client, rawUser.id);
+    const userSpinHistoryState = await getUserSpinHistoryState(client, rawUser.id);
     const eligiblePrizes = prizePool.filter((item) =>
       isPrizeEligibleForUser(item, awardedPrizeCountsByPrizeId) && isPrizeAvailableByPromoPool(item)
     );
+    const selectablePrizePool = preventConsecutiveNonPrizePrizes(
+      eligiblePrizes,
+      userSpinHistoryState.lastSpinType,
+    );
 
-    if (!eligiblePrizes.length) {
+    if (!selectablePrizePool.length) {
       const error = new Error("Упс, все доступные промокоды закончились");
       error.statusCode = 409;
       error.code = "PROMO_CODES_EXHAUSTED";
@@ -1737,7 +1840,7 @@ export async function spinPrize(userInfo = {}) {
     const attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
       sessionId: userInfo.sessionId || "",
     }, client);
-    const selectablePrizes = [...eligiblePrizes];
+    const selectablePrizes = [...selectablePrizePool];
     let selectedPrize = null;
     let claimedPromoCodeEntry = null;
 
@@ -1774,6 +1877,11 @@ export async function spinPrize(userInfo = {}) {
       error.code = "PROMO_CODES_EXHAUSTED";
       throw error;
     }
+
+    selectedPrize = applySequentialNonPrizeDescription(
+      selectedPrize,
+      userSpinHistoryState.nonPrizeResultsCount,
+    );
 
     let promoCode = "";
     let awardedPrizeId = null;
@@ -1837,38 +1945,7 @@ export async function spinPrize(userInfo = {}) {
       }
     }
 
-    const myPrizesResult = await client.query(
-      `
-        SELECT
-          awarded_prizes.id,
-          awarded_prizes.prize_id,
-          awarded_prizes.title AS my_prize_title,
-          awarded_prizes.promo_code,
-          awarded_prizes.image,
-          awarded_prizes.expires_at,
-          awarded_prizes.created_at,
-          prize_positions.type AS prize_type,
-          prize_positions.title AS prize_title,
-          prize_positions.roulette_description AS prize_description
-        FROM awarded_prizes
-        LEFT JOIN prize_positions ON prize_positions.id = awarded_prizes.prize_id
-        WHERE awarded_prizes.user_id = $1
-          AND COALESCE(prize_positions.type, 'Приз') = 'Приз'
-        ORDER BY awarded_prizes.created_at DESC, awarded_prizes.id DESC
-      `,
-      [rawUser.id],
-    );
-    const myPrizes = myPrizesResult.rows.map((row) => ({
-      id: Number(row.id),
-      positionId: row.prize_id != null ? Number(row.prize_id) : null,
-      image: normalizeStoredImage(row.image)?.previewUrl || "",
-      title: row.prize_title || row.my_prize_title,
-      myPrizeText: row.my_prize_title || row.prize_title || "",
-      expiresAt: row.expires_at,
-      promoCode: row.promo_code,
-      type: row.prize_type || "Приз",
-      description: row.prize_description || "",
-    }));
+    const myPrizes = await listAwardedPrizesForUser(rawUser.id, client);
 
     await logGameEvent(userInfo, "spin_result", {
       source: "backend",
@@ -1898,7 +1975,7 @@ export async function spinPrize(userInfo = {}) {
         promoCode,
         expiresAt: formatDateLabel(selectedPrize.activeTo),
       },
-      myPrizes,
+      myPrizes: serializeMyPrizesForFrontend(myPrizes),
       attempts: attemptsAfterConsume,
     };
   });

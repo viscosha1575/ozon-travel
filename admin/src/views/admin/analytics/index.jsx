@@ -85,6 +85,7 @@ const EMPTY_ANALYTICS = {
     averageCompletionSeconds: 0,
     averageFoundSneakersCount: 0,
     referralsInPeriodCount: 0,
+    averageReferralsPerReferrerCount: 0,
     totalReferredPlayersCount: 0,
     passedSubscriptionStageCount: 0,
     notSubscribedBeforeCount: 0,
@@ -116,6 +117,13 @@ const EMPTY_ANALYTICS = {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("ru-RU").format(Number(value) || 0);
+}
+
+function formatDecimal(value, maximumFractionDigits = 2) {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(Number(value) || 0);
 }
 
 function formatDateTime(value) {
@@ -742,6 +750,16 @@ export default function AnalyticsPage() {
       key: "promoCodeApplyUsersCount",
       label: "Уникальные пользователи по кнопке промокода",
       value: formatNumber(summary.promoCodeApplyUsersCount),
+    },
+    {
+      key: "referralsInPeriodCount",
+      label: "Тотал рефералов за период",
+      value: formatNumber(summary.referralsInPeriodCount),
+    },
+    {
+      key: "averageReferralsPerReferrerCount",
+      label: "Среднее кол-во рефералов на 1 человека",
+      value: formatDecimal(summary.averageReferralsPerReferrerCount),
     },
   ]), [summary]);
 

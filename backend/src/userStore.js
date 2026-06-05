@@ -1,4 +1,5 @@
 import { query, withTransaction } from "./db.js";
+import { sendMaxUserTextNotification } from "./maxBroadcastService.js";
 import { buildStartParam, parseStartParam } from "./startParam.js";
 import {
   trackNewUserAnalytics,
@@ -10,6 +11,8 @@ const MAX_BOT_PUBLIC_URL = String(
   process.env.MAX_BOT_PUBLIC_URL || "https://max.ru/ozontravel_lenta_bot",
 ).trim().replace(/\/$/, "");
 const MSK_TIMEZONE = "Europe/Moscow";
+const DAILY_ATTEMPT_REASON = "daily_login_attempt";
+const REFERRAL_BONUS_NOTIFICATION_TEXT = "Рефералл присоединился, вам +1 попытка!";
 
 function normalizePlatform(value) {
   const platform = String(value || "").trim().toLowerCase();
@@ -192,7 +195,7 @@ async function grantReferralBonusIfEligible(executor, userRow) {
 
   const referrerResult = await executor.query(
     `
-      SELECT id, referral_code
+      SELECT id, referral_code, platform, platform_user_id
       FROM app_users
       WHERE id = $1
       LIMIT 1
@@ -247,6 +250,12 @@ async function grantReferralBonusIfEligible(executor, userRow) {
   return {
     referrerId: Number(referrer.id),
     invitedUserId: userId,
+    notification: String(referrer.platform || "").trim() === "max" && String(referrer.platform_user_id || "").trim()
+      ? {
+        maxUserId: String(referrer.platform_user_id || "").trim(),
+        text: REFERRAL_BONUS_NOTIFICATION_TEXT,
+      }
+      : null,
   };
 }
 
@@ -346,6 +355,23 @@ async function registerUtmVisitInternal(executor, userId, userInfo = {}, options
 
 async function ensureDailyAttemptGrantInternal(executor, userId) {
   const todayValue = getMoscowDateValue();
+  const balanceResult = await executor.query(
+    `
+      SELECT COALESCE(SUM(delta), 0)::int AS available_attempts
+      FROM user_attempt_transactions
+      WHERE user_id = $1
+    `,
+    [userId],
+  );
+  const availableAttempts = Number(balanceResult.rows[0]?.available_attempts || 0);
+
+  if (availableAttempts > 0) {
+    return {
+      granted: false,
+      availableAttempts,
+    };
+  }
+
   await executor.query(
     `
       INSERT INTO user_attempt_transactions (
@@ -355,18 +381,25 @@ async function ensureDailyAttemptGrantInternal(executor, userId) {
         attempt_date,
         details
       )
-      VALUES ($1, 1, 'daily_login_attempt', $2, $3::jsonb)
+      VALUES ($1, 1, $2, $3, $4::jsonb)
       ON CONFLICT DO NOTHING
     `,
     [
       userId,
+      DAILY_ATTEMPT_REASON,
       todayValue,
       JSON.stringify({
         timezone: MSK_TIMEZONE,
         grantedAtDate: todayValue,
+        source: "open_fallback",
       }),
     ],
   );
+
+  return {
+    granted: true,
+    availableAttempts: availableAttempts + 1,
+  };
 }
 
 async function getAttemptSummaryInternal(executor, userId) {
@@ -395,11 +428,11 @@ async function getAttemptSummaryInternal(executor, userId) {
         SELECT 1
         FROM user_attempt_transactions
         WHERE user_id = $1
-          AND reason = 'daily_login_attempt'
-          AND attempt_date = $2
+          AND reason = $2
+          AND attempt_date = $3
       ) AS granted_today
     `,
-    [userId, todayValue],
+    [userId, DAILY_ATTEMPT_REASON, todayValue],
   );
 
   return {
@@ -659,9 +692,10 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
     [Number(user.id), Boolean(payload.isSubscribed)],
   );
   const updatedUser = result.rows[0];
+  let referralBonus = null;
 
   if (!wasSubscribed && Boolean(updatedUser?.subscribed_to_channel)) {
-    await grantReferralBonusIfEligible(executor, updatedUser);
+    referralBonus = await grantReferralBonusIfEligible(executor, updatedUser);
   }
 
   return {
@@ -673,6 +707,7 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
       externalId: updatedUser.external_id,
       subscribedToChannel: Boolean(updatedUser.subscribed_to_channel),
     },
+    referralBonusNotification: referralBonus?.notification || null,
   };
 }
 
@@ -681,5 +716,23 @@ export async function setUserSubscriptionStatus(payload = {}, client = null) {
     return runSetUserSubscriptionStatus(client, payload);
   }
 
-  return withTransaction(async (transactionClient) => runSetUserSubscriptionStatus(transactionClient, payload));
+  const response = await withTransaction(async (transactionClient) =>
+    runSetUserSubscriptionStatus(transactionClient, payload)
+  );
+
+  if (response?.referralBonusNotification?.maxUserId && response?.referralBonusNotification?.text) {
+    try {
+      await sendMaxUserTextNotification(response.referralBonusNotification);
+    } catch (error) {
+      console.warn("Referral bonus notification send failed", {
+        maxUserId: response.referralBonusNotification.maxUserId,
+        error: error?.message || String(error),
+      });
+    }
+  }
+
+  return {
+    ok: Boolean(response?.ok),
+    user: response?.user || null,
+  };
 }

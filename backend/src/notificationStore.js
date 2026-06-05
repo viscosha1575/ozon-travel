@@ -3,6 +3,7 @@ import { enqueueDailyAttemptReminderBroadcastTestJob } from "./workerQueue.js";
 
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REMINDER_KEY = "daily_attempt_reminder";
+const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 
 function getMoscowDateValue(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -29,12 +30,68 @@ function parseDateValue(value, fallbackValue = getMoscowDateValue()) {
 
 export async function grantDailyAttemptsForAllUsers(payload = {}) {
   const reminderDate = parseDateValue(payload.reminderDate);
+  const result = await query(
+    `
+      WITH user_balances AS (
+        SELECT
+          app_users.id AS user_id,
+          COALESCE(SUM(transactions.delta), 0)::int AS available_attempts
+        FROM app_users
+        LEFT JOIN user_attempt_transactions transactions
+          ON transactions.user_id = app_users.id
+        GROUP BY app_users.id
+      ),
+      eligible AS (
+        SELECT user_balances.user_id
+        FROM user_balances
+        WHERE user_balances.available_attempts <= 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM user_attempt_transactions transactions
+            WHERE transactions.user_id = user_balances.user_id
+              AND transactions.reason = $1
+              AND transactions.attempt_date = $2::date
+          )
+      ),
+      inserted AS (
+        INSERT INTO user_attempt_transactions (
+          user_id,
+          delta,
+          reason,
+          attempt_date,
+          details
+        )
+        SELECT
+          eligible.user_id,
+          1,
+          $1,
+          $2::date,
+          jsonb_build_object(
+            'timezone', $3::text,
+            'grantedAtDate', $2::text,
+            'source', $4::text
+          )
+        FROM eligible
+        ON CONFLICT DO NOTHING
+        RETURNING user_id
+      )
+      SELECT COUNT(*)::int AS granted_count
+      FROM inserted
+    `,
+    [
+      DAILY_ATTEMPT_REASON,
+      reminderDate,
+      MSK_TIMEZONE,
+      String(payload.source || "worker").trim() || "worker",
+    ],
+  );
+  const grantedCount = Number(result.rows[0]?.granted_count || 0);
 
   return {
     ok: true,
     reminderDate,
-    grantedCount: 0,
-    mode: "grant_on_open_only",
+    grantedCount,
+    mode: "top_up_to_one",
   };
 }
 

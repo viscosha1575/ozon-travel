@@ -5,6 +5,7 @@ export const WORKER_QUEUE_NAMES = {
 };
 
 export const WORKER_JOB_NAMES = {
+  dailyAttemptGrant: "daily-attempt-grant",
   dailyAttemptReminder: "send-daily-attempt-reminder",
   dailyAttemptReminderBroadcastTest: "send-daily-attempt-reminder-broadcast-test",
   pushSend: "push-send",

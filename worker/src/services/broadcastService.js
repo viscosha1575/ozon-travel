@@ -9,7 +9,7 @@ import {
   MAX_INTERNAL_BROADCAST_URL,
 } from "../config.js";
 
-const DAILY_ATTEMPT_REMINDER_TEXT = "Вам доступна новая попытка крутить Ленту призов!";
+const DAILY_ATTEMPT_REMINDER_TEXT = "Доступна новая попытка крутить Ленту призов!";
 const DAILY_ATTEMPT_REMINDER_BUTTON_TEXT = "Крутить Ленту";
 
 async function runWithConcurrency(items, concurrency, run) {

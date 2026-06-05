@@ -2,6 +2,8 @@ import { Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { WORKER_JOB_NAMES, WORKER_QUEUE_NAMES } from "./workerJobs.js";
 import {
+  DAILY_ATTEMPT_GRANT_CRON,
+  DAILY_ATTEMPT_GRANT_ENABLED,
   DAILY_ATTEMPT_REMINDER_BATCH_SIZE,
   DAILY_ATTEMPT_REMINDER_CRON,
   DAILY_ATTEMPT_REMINDER_ENABLED,
@@ -17,6 +19,7 @@ import {
 import logger from "./logger.js";
 import {
   claimDailyAttemptReminderRecipients,
+  grantDailyAttempts,
   prepareDailyAttemptReminderBroadcastTest,
   finalizePushRevoke,
   finalizePushSend,
@@ -35,6 +38,7 @@ import {
 const SCHEDULER_QUEUE_NAME = WORKER_QUEUE_NAMES.scheduler;
 const SEND_QUEUE_NAME = WORKER_QUEUE_NAMES.notificationSend;
 const PUSH_QUEUE_NAME = WORKER_QUEUE_NAMES.pushControl;
+const JOB_DAILY_ATTEMPT_GRANT = WORKER_JOB_NAMES.dailyAttemptGrant;
 const JOB_DAILY_ATTEMPT_REMINDER = WORKER_JOB_NAMES.dailyAttemptReminder;
 const JOB_DAILY_ATTEMPT_REMINDER_BROADCAST_TEST = WORKER_JOB_NAMES.dailyAttemptReminderBroadcastTest;
 const JOB_PUSH_SEND = WORKER_JOB_NAMES.pushSend;
@@ -58,6 +62,22 @@ function buildRedisConnection() {
 }
 
 async function registerRepeatableJobs(queue) {
+  if (DAILY_ATTEMPT_GRANT_ENABLED) {
+    await queue.add(
+      JOB_DAILY_ATTEMPT_GRANT,
+      { type: JOB_DAILY_ATTEMPT_GRANT },
+      {
+        jobId: JOB_DAILY_ATTEMPT_GRANT,
+        repeat: {
+          pattern: DAILY_ATTEMPT_GRANT_CRON,
+          tz: DAILY_ATTEMPT_TIMEZONE,
+        },
+        removeOnComplete: true,
+        removeOnFail: 1000,
+      },
+    );
+  }
+
   if (DAILY_ATTEMPT_REMINDER_ENABLED) {
     await queue.add(
       JOB_DAILY_ATTEMPT_REMINDER,
@@ -160,6 +180,20 @@ async function start() {
     SCHEDULER_QUEUE_NAME,
     async (job) => {
       const reminderDate = getMoscowDateValue();
+
+      if (job.name === JOB_DAILY_ATTEMPT_GRANT) {
+        const response = await grantDailyAttempts({ reminderDate });
+
+        logger.info("Daily attempt grant completed", {
+          reminderDate,
+          grantedCount: Number(response?.grantedCount || 0),
+        });
+
+        return {
+          reminderDate,
+          grantedCount: Number(response?.grantedCount || 0),
+        };
+      }
 
       if (job.name === JOB_DAILY_ATTEMPT_REMINDER) {
         const queuedCount = await enqueueDailyReminderRecipients(sendQueue, reminderDate);

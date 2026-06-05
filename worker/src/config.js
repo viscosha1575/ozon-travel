@@ -33,6 +33,8 @@ export const GAME_WEBAPP_URL = String(
   process.env.GAME_WEBAPP_URL || "https://max.ru/ozontravel_lenta_bot?startapp",
 ).trim();
 export const DAILY_ATTEMPT_REMINDER_ENABLED = parseBoolean(process.env.DAILY_ATTEMPT_REMINDER_ENABLED, true);
+export const DAILY_ATTEMPT_GRANT_ENABLED = parseBoolean(process.env.DAILY_ATTEMPT_GRANT_ENABLED, true);
+export const DAILY_ATTEMPT_GRANT_CRON = String(process.env.DAILY_ATTEMPT_GRANT_CRON || "0 0 0 * * *").trim();
 export const DAILY_ATTEMPT_REMINDER_CRON = String(process.env.DAILY_ATTEMPT_REMINDER_CRON || "0 0 12 * * *").trim();
 export const DAILY_ATTEMPT_TIMEZONE = String(process.env.DAILY_ATTEMPT_TIMEZONE || "Europe/Moscow").trim();
 export const DAILY_ATTEMPT_REMINDER_BATCH_SIZE = Math.min(
@@ -72,5 +74,5 @@ export const MANUAL_PUSH_REVOKE_CONCURRENCY = Math.min(
   Math.max(1, Number(process.env.MANUAL_PUSH_REVOKE_CONCURRENCY || 20) || 20),
 );
 export const DAILY_ATTEMPT_REMINDER_BANNER_PATH = String(
-  process.env.DAILY_ATTEMPT_REMINDER_BANNER_PATH || "public/banner.png",
+  process.env.DAILY_ATTEMPT_REMINDER_BANNER_PATH || "public/banner.mp4",
 ).trim();

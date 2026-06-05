@@ -350,6 +350,7 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
       averageCompletionSeconds: 0,
       averageFoundSneakersCount: 0,
       referralsInPeriodCount: 0,
+      averageReferralsPerReferrerCount: 0,
       totalReferredPlayersCount: 0,
       passedSubscriptionStageCount: 0,
       notSubscribedBeforeCount: 0,
@@ -838,6 +839,11 @@ export async function getAnalyticsOverview(payload = {}) {
   });
   const attemptsByUser = attemptsByUserResult.rows.map((row) => Number(row.total || 0));
   const referralsByUser = referralsByUserResult.rows.map((row) => Number(row.total || 0));
+  const totalReferralsInPeriodCount = referralsByUser.reduce((sum, count) => sum + count, 0);
+  const activeReferrersCount = referralsByUser.filter((count) => count > 0).length;
+  const averageReferralsPerReferrerCount = activeReferrersCount > 0
+    ? Number((totalReferralsInPeriodCount / activeReferrersCount).toFixed(2))
+    : 0;
   const dailyUniqueVisitCounts = dailyOpenUsersResult.rows.map((row) => Number(row.value || 0));
   const totalUniqueDailyVisitsCount = dailyUniqueVisitCounts.reduce((sum, count) => sum + count, 0);
   const averageDauCount = dailyUniqueVisitCounts.length > 0
@@ -879,7 +885,8 @@ export async function getAnalyticsOverview(payload = {}) {
       playersWithFinishedGameCount: Number(summaryRow.finished_players_count || 0),
       currentlyOnlinePlayersCount: Number(usersResult.rows[0]?.currently_online_players_count || 0),
       averageCompletionSeconds: Number(summaryRow.average_completion_seconds || 0),
-      referralsInPeriodCount: dailyMetricSum(ANALYTICS_METRICS.referralsCreated),
+      referralsInPeriodCount: totalReferralsInPeriodCount,
+      averageReferralsPerReferrerCount,
       totalReferredPlayersCount: Number(totalReferredPlayersResult.rows[0]?.total_referred_players_count || 0),
       passedSubscriptionStageCount: 0,
       notSubscribedBeforeCount: 0,

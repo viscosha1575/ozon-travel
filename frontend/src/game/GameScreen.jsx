@@ -39,7 +39,7 @@ const RESULT_COPY_TOAST_DURATION = 2200
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
-  "100 000 баллов Ozon и классные промокоды на путешествия ждут на Ленте призов!",
+  "100 000 баллов Ozon и выгодные промокоды на путешествия ждут на Ленте призов!",
   "",
   "Скорее летим забирать!",
 ].join("\n")

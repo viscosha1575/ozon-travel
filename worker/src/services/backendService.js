@@ -1,5 +1,14 @@
 import { post } from "./apiClient.js";
 
+export async function grantDailyAttempts({ reminderDate }) {
+  const response = await post("/api/internal/notifications/daily-attempts/grant", {
+    reminderDate,
+    source: "worker",
+  });
+
+  return response.data;
+}
+
 export async function claimDailyAttemptReminderRecipients({ reminderDate, limit }) {
   const response = await post("/api/internal/notifications/daily-attempt-reminder/claim", {
     reminderDate,
