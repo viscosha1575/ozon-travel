@@ -82,7 +82,9 @@ const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
 
 const menuMessage = [
-  'Всё готово для участия! Лови до 100 000 баллов Ozon и промокоды на путешествия!',
+  'Всё готово для участия!',
+  '',
+  'Ловите до 100 000 баллов Ozon и промокоды на путешествия!',
 ].join('\n');
 
 const supportMessage = [
