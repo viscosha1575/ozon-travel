@@ -12,6 +12,7 @@ const MAX_BOT_PUBLIC_URL = String(
 ).trim().replace(/\/$/, "");
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
+const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.png"];
 
@@ -418,11 +419,28 @@ async function getInvitedReferralIdsInternal(executor, userId) {
   return result.rows.map((row) => Number(row.id));
 }
 
+async function grantInitialAttemptInternal(executor, userId) {
+  await executor.query(
+    `
+      INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
+      VALUES ($1, 1, $2, $3::jsonb)
+    `,
+    [
+      userId,
+      INITIAL_ATTEMPT_REASON,
+      JSON.stringify({
+        source: "user_created",
+      }),
+    ],
+  );
+}
+
 async function runGetOrCreate(executor, userInfo = {}) {
   const upsertedUser = await upsertUser(executor, userInfo);
   const linkedUser = await attachReferrer(executor, upsertedUser);
 
   if (upsertedUser.was_inserted) {
+    await grantInitialAttemptInternal(executor, Number(linkedUser.id));
     await trackNewUserAnalytics(executor, linkedUser, "system");
   }
 
