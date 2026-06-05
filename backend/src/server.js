@@ -1,5 +1,8 @@
 import "dotenv/config";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import cors from "cors";
 import express from "express";
 import morgan from "morgan";
@@ -70,6 +73,7 @@ import {
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
 const REQUEST_BODY_SECRET = String(process.env.REQUEST_BODY_SECRET || "").trim();
 const ADMIN_TELEGRAM_IDS = new Set(
   String(process.env.ADMIN_TELEGRAM_IDS || "")
@@ -173,6 +177,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "25mb" }));
 app.use(morgan("dev"));
+app.use(express.static(publicDir));
 app.use("/uploads", express.static(getUploadsDir()));
 
 app.get("/api/health", (_req, res) => {

@@ -12,7 +12,8 @@ const MAX_BOT_PUBLIC_URL = String(
 ).trim().replace(/\/$/, "");
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
-const REFERRAL_BONUS_NOTIFICATION_TEXT = "Рефералл присоединился, вам +1 попытка!";
+const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
+const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.png"];
 
 function normalizePlatform(value) {
   const platform = String(value || "").trim().toLowerCase();
@@ -254,6 +255,7 @@ async function grantReferralBonusIfEligible(executor, userRow) {
       ? {
         maxUserId: String(referrer.platform_user_id || "").trim(),
         text: REFERRAL_BONUS_NOTIFICATION_TEXT,
+        mediaUrls: REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS,
       }
       : null,
   };
@@ -353,52 +355,10 @@ async function registerUtmVisitInternal(executor, userId, userInfo = {}, options
   };
 }
 
-async function ensureDailyAttemptGrantInternal(executor, userId) {
-  const todayValue = getMoscowDateValue();
-  const balanceResult = await executor.query(
-    `
-      SELECT COALESCE(SUM(delta), 0)::int AS available_attempts
-      FROM user_attempt_transactions
-      WHERE user_id = $1
-    `,
-    [userId],
-  );
-  const availableAttempts = Number(balanceResult.rows[0]?.available_attempts || 0);
-
-  if (availableAttempts > 0) {
-    return {
-      granted: false,
-      availableAttempts,
-    };
-  }
-
-  await executor.query(
-    `
-      INSERT INTO user_attempt_transactions (
-        user_id,
-        delta,
-        reason,
-        attempt_date,
-        details
-      )
-      VALUES ($1, 1, $2, $3, $4::jsonb)
-      ON CONFLICT DO NOTHING
-    `,
-    [
-      userId,
-      DAILY_ATTEMPT_REASON,
-      todayValue,
-      JSON.stringify({
-        timezone: MSK_TIMEZONE,
-        grantedAtDate: todayValue,
-        source: "open_fallback",
-      }),
-    ],
-  );
-
+async function ensureDailyAttemptGrantInternal(_executor, _userId) {
+  // Daily attempts are granted by the scheduled worker only.
   return {
-    granted: true,
-    availableAttempts: availableAttempts + 1,
+    granted: false,
   };
 }
 

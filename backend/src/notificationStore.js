@@ -28,29 +28,39 @@ function parseDateValue(value, fallbackValue = getMoscowDateValue()) {
   return normalizedValue;
 }
 
+function addDaysToDateValue(dateValue, delta) {
+  const [year, month, day] = String(dateValue).split("-").map(Number);
+
+  if (!year || !month || !day) {
+    throw new Error("Invalid reminder date");
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + Number(delta || 0));
+
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 export async function grantDailyAttemptsForAllUsers(payload = {}) {
   const reminderDate = parseDateValue(payload.reminderDate);
+  const activityDate = addDaysToDateValue(reminderDate, -1);
   const result = await query(
     `
-      WITH user_balances AS (
-        SELECT
-          app_users.id AS user_id,
-          COALESCE(SUM(transactions.delta), 0)::int AS available_attempts
+      WITH eligible AS (
+        SELECT app_users.id AS user_id
         FROM app_users
-        LEFT JOIN user_attempt_transactions transactions
-          ON transactions.user_id = app_users.id
-        GROUP BY app_users.id
-      ),
-      eligible AS (
-        SELECT user_balances.user_id
-        FROM user_balances
-        WHERE user_balances.available_attempts <= 0
+        WHERE (app_users.last_seen_at AT TIME ZONE $3)::date = $2::date
           AND NOT EXISTS (
             SELECT 1
             FROM user_attempt_transactions transactions
-            WHERE transactions.user_id = user_balances.user_id
+            WHERE transactions.user_id = app_users.id
               AND transactions.reason = $1
-              AND transactions.attempt_date = $2::date
+              AND transactions.attempt_date = $4::date
           )
       ),
       inserted AS (
@@ -65,11 +75,12 @@ export async function grantDailyAttemptsForAllUsers(payload = {}) {
           eligible.user_id,
           1,
           $1,
-          $2::date,
+          $4::date,
           jsonb_build_object(
             'timezone', $3::text,
-            'grantedAtDate', $2::text,
-            'source', $4::text
+            'activityDate', $2::text,
+            'grantedAtDate', $4::text,
+            'source', $5::text
           )
         FROM eligible
         ON CONFLICT DO NOTHING
@@ -80,8 +91,9 @@ export async function grantDailyAttemptsForAllUsers(payload = {}) {
     `,
     [
       DAILY_ATTEMPT_REASON,
-      reminderDate,
+      activityDate,
       MSK_TIMEZONE,
+      reminderDate,
       String(payload.source || "worker").trim() || "worker",
     ],
   );
@@ -90,8 +102,9 @@ export async function grantDailyAttemptsForAllUsers(payload = {}) {
   return {
     ok: true,
     reminderDate,
+    activityDate,
     grantedCount,
-    mode: "top_up_to_one",
+    mode: "grant_for_previous_day_visit",
   };
 }
 
@@ -112,7 +125,7 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
             SELECT COALESCE(SUM(transactions.delta), 0)::int
             FROM user_attempt_transactions transactions
             WHERE transactions.user_id = app_users.id
-          ) = 1
+          ) >= 1
           AND NOT EXISTS (
             SELECT 1
             FROM notification_deliveries deliveries
