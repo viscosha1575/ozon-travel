@@ -1,6 +1,11 @@
 import axios from "axios";
 import crypto from "crypto";
-import { GAME_API_URL, REQUEST_BODY_SECRET, REQUIRE_ENCRYPTED_REQUESTS } from "../config.js";
+import {
+  GAME_API_URL,
+  INTERNAL_API_TOKEN,
+  REQUEST_BODY_SECRET,
+  REQUIRE_ENCRYPTED_REQUESTS,
+} from "../config.js";
 
 function encryptBody(body) {
   if (!REQUEST_BODY_SECRET) {
@@ -26,11 +31,16 @@ function encryptBody(body) {
 export async function post(path, body = {}) {
   const normalizedPath = String(path || "").trim();
   const payload = REQUIRE_ENCRYPTED_REQUESTS ? encryptBody(body) : body;
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  if (INTERNAL_API_TOKEN) {
+    headers["x-internal-token"] = INTERNAL_API_TOKEN;
+  }
 
   return axios.post(`${GAME_API_URL}${normalizedPath}`, payload, {
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     timeout: 60000,
   });
 }

@@ -26,6 +26,12 @@ export const MAX_INTERNAL_BROADCAST_DELETE_URL = normalizeBaseUrl(
   process.env.MAX_INTERNAL_BROADCAST_DELETE_URL,
   "http://max-bot:3011/internal/broadcast/delete",
 );
+export const INTERNAL_API_TOKEN = String(
+  process.env.INTERNAL_API_TOKEN
+    || process.env.BROADCAST_INTERNAL_TOKEN
+    || process.env.REQUEST_BODY_SECRET
+    || "",
+).trim();
 export const BROADCAST_INTERNAL_TOKEN = String(
   process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || "",
 ).trim();

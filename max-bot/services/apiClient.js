@@ -8,6 +8,7 @@ function normalizeBaseUrl(value) {
 const API_BASE_URL = normalizeBaseUrl(process.env.GAME_API_URL || 'http://localhost:3000');
 const REQUEST_BODY_SECRET = process.env.REQUEST_BODY_SECRET || '';
 const REQUIRE_ENCRYPTED_REQUESTS = process.env.REQUIRE_ENCRYPTED_REQUESTS === 'true';
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || process.env.BROADCAST_INTERNAL_TOKEN || REQUEST_BODY_SECRET || '';
 const SHOULD_ENCRYPT_REQUESTS = REQUIRE_ENCRYPTED_REQUESTS;
 
 function encryptBody(body) {
@@ -36,11 +37,16 @@ function encryptBody(body) {
 async function post(path, body = {}, options = {}) {
   const targetBaseUrl = normalizeBaseUrl(options.apiBaseUrl) || API_BASE_URL;
   const payload = SHOULD_ENCRYPT_REQUESTS ? encryptBody(body) : body;
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+
+  if (INTERNAL_API_TOKEN) {
+    headers['x-internal-token'] = INTERNAL_API_TOKEN;
+  }
 
   return axios.post(`${targetBaseUrl}${path}`, payload, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 }
 

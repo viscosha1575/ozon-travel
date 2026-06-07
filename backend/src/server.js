@@ -3,7 +3,6 @@ import "dotenv/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import cors from "cors";
 import express from "express";
 import morgan from "morgan";
 
@@ -62,13 +61,19 @@ import {
 import { resolveMiniAppUser, resolveTelegramInitDataUser } from "./miniAppUser.js";
 import {
   createUserFromPlatform,
-  deleteUserById,
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
   markGameControlsGuideSeen,
   setUserSubscriptionStatus,
 } from "./userStore.js";
+import {
+  applySecurityHeaders,
+  createCorsMiddleware,
+  createRateLimitMiddleware,
+  getTrustProxyHops,
+  requireInternalApiToken,
+} from "./security.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -170,14 +175,60 @@ async function requireSubscribedGameUser(req) {
   return context;
 }
 
-app.use(cors({
-  origin: true,
-  credentials: false,
-}));
+app.disable("x-powered-by");
+app.set("trust proxy", getTrustProxyHops());
+
+app.use(createCorsMiddleware());
+app.use(applySecurityHeaders);
 app.use(express.json({ limit: "25mb" }));
-app.use(morgan("dev"));
+app.use(morgan("dev", {
+  skip: (req) => req.path === "/api/health",
+}));
 app.use(express.static(publicDir));
 app.use("/uploads", express.static(getUploadsDir()));
+
+const publicGameReadRateLimit = createRateLimitMiddleware({
+  bucket: "game-read",
+  windowMs: 60 * 1000,
+  maxRequests: 90,
+});
+const spinRateLimit = createRateLimitMiddleware({
+  bucket: "game-spin",
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+});
+const eventRateLimit = createRateLimitMiddleware({
+  bucket: "game-event",
+  windowMs: 60 * 1000,
+  maxRequests: 240,
+});
+const controlsGuideRateLimit = createRateLimitMiddleware({
+  bucket: "controls-guide",
+  windowMs: 60 * 1000,
+  maxRequests: 30,
+});
+const internalWriteRateLimit = createRateLimitMiddleware({
+  bucket: "internal-write",
+  windowMs: 60 * 1000,
+  maxRequests: 240,
+});
+const adminRateLimit = createRateLimitMiddleware({
+  bucket: "admin-api",
+  windowMs: 60 * 1000,
+  maxRequests: 180,
+});
+
+app.use("/api/game/bootstrap", publicGameReadRateLimit);
+app.use("/api/game/subscription-status", publicGameReadRateLimit);
+app.use("/api/game/open", publicGameReadRateLimit);
+app.use("/api/game/spin", spinRateLimit);
+app.use("/api/game/controls-guide/seen", controlsGuideRateLimit);
+app.use("/api/game/event", eventRateLimit);
+app.use("/api/users/create", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/users/set-subscription-status", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/logs/create", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/internal", requireInternalApiToken, internalWriteRateLimit);
+app.use(/^\/api\/admin\/.*$/, adminRateLimit);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
@@ -337,6 +388,7 @@ app.post("/api/game/dev/grant-attempts", async (req, res, next) => {
 });
 */
 
+/*
 app.post("/api/game/dev/delete-user", async (req, res, next) => {
   try {
     const userInfo = resolveMiniAppUser(req);
@@ -351,6 +403,7 @@ app.post("/api/game/dev/delete-user", async (req, res, next) => {
     next(error);
   }
 });
+*/
 
 app.post("/api/users/create", async (req, res, next) => {
   const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
