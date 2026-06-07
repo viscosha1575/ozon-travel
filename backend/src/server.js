@@ -66,7 +66,6 @@ import {
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
-  grantUserAttempts,
   markGameControlsGuideSeen,
   setUserSubscriptionStatus,
 } from "./userStore.js";
@@ -312,6 +311,7 @@ app.post("/api/game/event", async (req, res, next) => {
   }
 });
 
+/*
 app.post("/api/game/dev/grant-attempts", async (req, res, next) => {
   try {
     const userInfo = resolveMiniAppUser(req);
@@ -335,6 +335,7 @@ app.post("/api/game/dev/grant-attempts", async (req, res, next) => {
     next(error);
   }
 });
+*/
 
 app.post("/api/game/dev/delete-user", async (req, res, next) => {
   try {
