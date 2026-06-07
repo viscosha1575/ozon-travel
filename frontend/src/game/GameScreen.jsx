@@ -3,6 +3,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import { getJson, postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "../embeddedPage.js"
+import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
 import {
   getMiniApp,
   openExternalLink,
@@ -601,6 +602,10 @@ export default function GameScreen({
   const preloadedCarouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
     myPrizes.map((item) => item.image || ""),
+  )
+  const cachedPrizeImageSources = useCachedImageSources(preloadedCarouselImagePaths, { prune: true })
+  const resolvedPreloadedCarouselImagePaths = collectUniqueImagePaths(
+    preloadedCarouselImagePaths.map((src) => resolveCachedImageSource(src, cachedPrizeImageSources)),
   )
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
@@ -1755,7 +1760,7 @@ export default function GameScreen({
         loading="eager"
         decoding="sync"
       />
-      {preloadedCarouselImagePaths.map((src, index) => (
+      {resolvedPreloadedCarouselImagePaths.map((src, index) => (
         <img
           key={src}
           src={src}
@@ -1824,7 +1829,7 @@ export default function GameScreen({
                               centerSlotImageRef.current = node
                             }
                           }}
-                          src={bag.slotPath}
+                          src={resolveCachedImageSource(bag.slotPath, cachedPrizeImageSources) || bag.slotPath}
                           alt=""
                           className="game-carousel-slot-image"
                           aria-hidden="true"
@@ -2057,10 +2062,10 @@ export default function GameScreen({
               >
                 <img
                   ref={resultBagImageRef}
-                    src={resultBag.path}
-                    alt={resultBag.label}
-                    className="game-result-bag"
-                  />
+                  src={resolveCachedImageSource(resultBag.path, cachedPrizeImageSources) || resultBag.path || DEFAULT_ROULETTE_IMAGE_PATH}
+                  alt={resultBag.label}
+                  className="game-result-bag"
+                />
                 </div>
               </div>
             </div>
@@ -2125,7 +2130,7 @@ export default function GameScreen({
           <div className="game-result-flight-layer" aria-hidden="true">
             <img
               ref={resultBagFlightRef}
-              src={resultBagFlight.path}
+              src={resolveCachedImageSource(resultBagFlight.path, cachedPrizeImageSources) || resultBagFlight.path || DEFAULT_ROULETTE_IMAGE_PATH}
               alt=""
               className="game-result-flight-bag"
               style={{
@@ -2200,7 +2205,7 @@ export default function GameScreen({
                 >
                   <div className="game-prize-card-media">
                     <img
-                      src={prize.image || ""}
+                      src={resolveCachedImageSource(prize.image, cachedPrizeImageSources)}
                       alt=""
                       className="game-prize-card-image"
                       aria-hidden="true"

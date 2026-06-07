@@ -3,6 +3,7 @@ import { memo, startTransition, useEffect, useRef, useState } from "react"
 import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
+import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
 import { getMiniAppHost, getMiniAppUser, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
@@ -206,6 +207,9 @@ function App() {
   const embeddedPageRequestRef = useRef(0)
   const currentScreen = screens[activeScreen]
   const canOpenGame = isTelegramHost || isUserSubscribed === true
+  const projectFinishedPrizeImageSources = useCachedImageSources(
+    projectFinishedMyPrizes.map((item) => item?.image || ""),
+  )
 
   const pollSubscriptionStatus = async ({
     attempts,
@@ -358,8 +362,12 @@ function App() {
           remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
         }
 
+        const warmedRemoteSceneAssets = remoteSceneAssets.length
+          ? await warmImageCache(remoteSceneAssets)
+          : []
+
         await Promise.all(
-          [...GAME_SCENE_ASSETS, ...remoteSceneAssets].map(preloadImage),
+          [...GAME_SCENE_ASSETS, ...warmedRemoteSceneAssets].map(preloadImage),
         )
 
         if (!isCancelled) {
@@ -793,7 +801,7 @@ function App() {
                       >
                         <div className="game-prize-card-media">
                           <img
-                            src={prize.image || ""}
+                            src={resolveCachedImageSource(prize.image, projectFinishedPrizeImageSources)}
                             alt=""
                             className="game-prize-card-image"
                           />
