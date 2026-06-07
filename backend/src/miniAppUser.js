@@ -5,6 +5,11 @@ const MAX_INIT_DATA_MAX_AGE_SECONDS = Math.max(
   1,
   Math.round(Number(process.env.MAX_INIT_DATA_MAX_AGE_SECONDS || 60 * 60) || 60 * 60),
 );
+const ALLOW_LOCAL_DEMO_USER = (
+  process.env.ALLOW_LOCAL_DEMO_USER == null || process.env.ALLOW_LOCAL_DEMO_USER === ""
+)
+  ? process.env.NODE_ENV !== "production"
+  : String(process.env.ALLOW_LOCAL_DEMO_USER).trim().toLowerCase() === "true";
 
 function parseInitDataString(initData = "") {
   const params = new URLSearchParams(String(initData || ""));
@@ -348,6 +353,22 @@ export function resolveMiniAppUser(req) {
       startParam: "",
       sessionId,
       isResolved: true,
+    };
+  }
+
+  if (!ALLOW_LOCAL_DEMO_USER) {
+    return {
+      externalId: "",
+      platform: "max",
+      platformUserId: "",
+      username: "",
+      firstName: "",
+      lastName: "",
+      languageCode: "",
+      startParam: "",
+      sessionId,
+      isResolved: false,
+      errorCode: "MAX_INIT_DATA_REQUIRED",
     };
   }
 

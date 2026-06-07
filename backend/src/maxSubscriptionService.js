@@ -13,6 +13,11 @@ const MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS = Math.max(
   1000,
   Math.round(Number(process.env.MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS || 15000) || 15000),
 );
+const ALLOW_LOCAL_DEMO_USER = (
+  process.env.ALLOW_LOCAL_DEMO_USER == null || process.env.ALLOW_LOCAL_DEMO_USER === ""
+)
+  ? process.env.NODE_ENV !== "production"
+  : String(process.env.ALLOW_LOCAL_DEMO_USER).trim().toLowerCase() === "true";
 
 async function parseJsonSafely(response) {
   try {
@@ -75,7 +80,11 @@ export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackVa
     return true;
   }
 
-  if ((platformUserId === "local-demo-user" || externalId === "local-demo-user") && platform !== "max") {
+  if (
+    ALLOW_LOCAL_DEMO_USER
+    && (platformUserId === "local-demo-user" || externalId === "local-demo-user")
+    && platform !== "max"
+  ) {
     return true;
   }
 

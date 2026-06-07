@@ -10,6 +10,11 @@ import {
 const MAX_BOT_PUBLIC_URL = String(
   process.env.MAX_BOT_PUBLIC_URL || "https://max.ru/ozontravel_lenta_bot",
 ).trim().replace(/\/$/, "");
+const ALLOW_LOCAL_DEMO_USER = (
+  process.env.ALLOW_LOCAL_DEMO_USER == null || process.env.ALLOW_LOCAL_DEMO_USER === ""
+)
+  ? process.env.NODE_ENV !== "production"
+  : String(process.env.ALLOW_LOCAL_DEMO_USER).trim().toLowerCase() === "true";
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 const INITIAL_ATTEMPT_REASON = "initial_attempt";
@@ -121,6 +126,13 @@ async function upsertUser(executor, userInfo = {}) {
     const error = new Error("Не удалось определить пользователя MAX");
     error.statusCode = 403;
     error.code = "MAX_USER_REQUIRED";
+    throw error;
+  }
+
+  if (!platformUserId && !ALLOW_LOCAL_DEMO_USER) {
+    const error = new Error("Не удалось определить пользователя мини-приложения");
+    error.statusCode = 403;
+    error.code = "MINI_APP_USER_REQUIRED";
     throw error;
   }
 
