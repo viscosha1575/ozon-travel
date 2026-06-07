@@ -27,7 +27,7 @@ const MOBILE_SPIN_DURATION_MULTIPLIER = 0.82
 const SLOT_GAP = 24
 const TRACK_CENTER_OFFSET = 9
 const TRACK_VISIBLE_START_OFFSET = TRACK_CENTER_OFFSET - 1
-const TRACK_TAIL_BUFFER = 9
+const TRACK_TAIL_BUFFER = 3
 const RESULT_REVEAL_DELAY = 72
 const RESULT_BAG_ANIMATION_DURATION = 980
 const RESULT_BAG_ANIMATION_EASING = "cubic-bezier(0.18, 0.82, 0.22, 1)"
@@ -506,20 +506,11 @@ function normalizeLoopProgress(value, length) {
   return ((progress % length) + length) % length
 }
 
-function formatDebugMetric(value) {
-  if (!Number.isFinite(value)) {
-    return "n/a"
-  }
-
-  return String(Math.round(value * 100) / 100)
-}
-
 export default function GameScreen({
   bootstrapSeed = null,
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
   allowBootstrapFetch = false,
-  onDevShowProjectFinished = null,
 }) {
   const cachedBootstrap = readBootstrapCache()
   const initialRouletteItems = normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0)
@@ -581,10 +572,6 @@ export default function GameScreen({
   const [trackItems, setTrackItems] = useState(initialTrackItems)
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [spinError, setSpinError] = useState("")
-  const [isDevWidgetOpen, setIsDevWidgetOpen] = useState(false)
-  const [carouselDebug, setCarouselDebug] = useState(null)
-  const [isCarouselDebugVisible, setIsCarouselDebugVisible] = useState(false)
-  const isDevWidgetVisible = true
 
   const measureStep = () => {
     const nextStep = roundToDevicePixel((slotRef.current?.getBoundingClientRect().height ?? 0) + SLOT_GAP)
@@ -598,18 +585,27 @@ export default function GameScreen({
 
   const activeRouletteItems = rouletteItems
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
-  const preloadedCarouselImagePaths = collectUniqueImagePaths(
+  const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
-    myPrizes.map((item) => item.image || ""),
-  )
-  const cachedPrizeImageSources = useCachedImageSources(preloadedCarouselImagePaths, { prune: true })
-  const resolvedPreloadedCarouselImagePaths = collectUniqueImagePaths(
-    preloadedCarouselImagePaths.map((src) => resolveCachedImageSource(src, cachedPrizeImageSources)),
   )
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag)
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
+  const isPrizeMediaVisible = isGiftOverlayVisible || isResultSheetVisible
+  const prizeImagePaths = collectUniqueImagePaths(
+    myPrizes.map((item) => item.image || ""),
+    resultBag?.path || "",
+    resultPrize?.image || "",
+  )
+  const cachedCarouselImageSources = useCachedImageSources(carouselImagePaths, { prune: true })
+  const cachedPrizeImageSources = useCachedImageSources(
+    isPrizeMediaVisible ? prizeImagePaths : [],
+  )
+  const resolvedImageSources = {
+    ...cachedCarouselImageSources,
+    ...cachedPrizeImageSources,
+  }
   const isNonPrizeResult = (resultPrize?.type || resultBag?.type || "") === "Не приз"
   const resultBagFinalScaleMultiplier = isNonPrizeResult
     ? NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER
@@ -1394,38 +1390,6 @@ export default function GameScreen({
     }
   }, [applyBootstrapResponse])
 
-  const handleDevGrantAttempts = async () => {
-    try {
-      const response = await postJson("/game/dev/grant-attempts", {
-        count: 10,
-      })
-      setAvailableAttempts(Number(response?.attempts?.availableAttempts || 0))
-      setSpinError("")
-      setIsDevWidgetOpen(false)
-    } catch (error) {
-      openErrorOverlay(error, "Не удалось начислить попытки")
-    }
-  }
-
-  const handleDevDeleteUser = async () => {
-    try {
-      await postJson("/game/dev/delete-user", {})
-      if (typeof window !== "undefined") {
-        window.location.reload()
-      }
-    } catch (error) {
-      openErrorOverlay(error, "Не удалось удалить игрока")
-    }
-  }
-
-  const handleDevShowProjectFinished = () => {
-    if (typeof onDevShowProjectFinished === "function") {
-      onDevShowProjectFinished()
-    }
-
-    setIsDevWidgetOpen(false)
-  }
-
   useEffect(() => {
     isMountedRef.current = true
     let frameId = 0
@@ -1549,59 +1513,6 @@ export default function GameScreen({
   }, [isSpinActive])
 
   useEffect(() => {
-    let frameId = 0
-
-    const updateDebugSnapshot = () => {
-      const sceneNode = carouselMotionRef.current?.closest(".game-carousel-scene") || null
-      const backdropNode = carouselMotionRef.current?.closest(".game-carousel-backdrop") || null
-      const motionNode = carouselMotionRef.current
-      const trackNode = trackRef.current
-      const slotNode = slotRef.current
-
-      const sceneRect = sceneNode?.getBoundingClientRect?.() || null
-      const backdropRect = backdropNode?.getBoundingClientRect?.() || null
-      const motionRect = motionNode?.getBoundingClientRect?.() || null
-      const slotRect = slotNode?.getBoundingClientRect?.() || null
-      const sceneStyle = sceneNode ? window.getComputedStyle(sceneNode) : null
-      const backdropStyle = backdropNode ? window.getComputedStyle(backdropNode) : null
-      const motionStyle = motionNode ? window.getComputedStyle(motionNode) : null
-      const trackStyle = trackNode ? window.getComputedStyle(trackNode) : null
-
-      setCarouselDebug({
-        phase: resultRevealPhase,
-        resultVisible: Boolean(resultBag),
-        spin: isSpinActiveRef.current,
-        idle: isIdleSpinActiveRef.current,
-        rouletteItems: activeRouletteItems.length,
-        trackItems: trackItems.length,
-        centerBagIndex: centerBagIndexRef.current,
-        step: formatDebugMetric(stepRef.current),
-        trackTranslate: formatDebugMetric(trackTranslate),
-        virtualTranslate: formatDebugMetric(virtualTranslateRef.current),
-        liveTranslate: formatDebugMetric(readTranslateY(motionNode)),
-        motionTransition: motionNode?.style.transition || motionStyle?.transition || "",
-        sceneOpacity: sceneStyle?.opacity || "n/a",
-        backdropOpacity: backdropStyle?.opacity || "n/a",
-        trackOpacity: trackStyle?.opacity || "n/a",
-        sceneHeight: formatDebugMetric(sceneRect?.height),
-        motionTop: formatDebugMetric(motionRect?.top),
-        motionBottom: formatDebugMetric(motionRect?.bottom),
-        motionHeight: formatDebugMetric(motionRect?.height),
-        backdropHeight: formatDebugMetric(backdropRect?.height),
-        slotHeight: formatDebugMetric(slotRect?.height),
-      })
-
-      frameId = window.setTimeout(updateDebugSnapshot, 180)
-    }
-
-    updateDebugSnapshot()
-
-    return () => {
-      window.clearTimeout(frameId)
-    }
-  }, [activeRouletteItems.length, resultBag, resultRevealPhase, trackItems.length, trackTranslate])
-
-  useEffect(() => {
     const resultBagElement = resultBagFlightRef.current
     const resultBagTargetElement = resultBagImageRef.current
     const flightState = resultBagFlight
@@ -1677,81 +1588,6 @@ export default function GameScreen({
 
   return (
     <main className="game-screen" aria-label="Игровой экран">
-      {isDevWidgetVisible ? (
-        <div className={`game-dev-widget ${isDevWidgetOpen ? "is-open" : ""}`}>
-          <button
-            type="button"
-            className="game-dev-widget-toggle"
-            onClick={() => setIsDevWidgetOpen((currentValue) => !currentValue)}
-            aria-label="Открыть dev-инструменты"
-          >
-            {isDevWidgetOpen ? "←" : "→"}
-          </button>
-          {isDevWidgetOpen ? (
-            <div className="game-dev-widget-panel">
-              <button
-                type="button"
-                className="game-dev-widget-action game-dev-widget-action--danger"
-                onClick={handleDevDeleteUser}
-              >
-                Удалить
-              </button>
-              <button
-                type="button"
-                className="game-dev-widget-action"
-                onClick={handleDevGrantAttempts}
-              >
-                +10 попыток
-              </button>
-              <button
-                type="button"
-                className="game-dev-widget-action"
-                onClick={handleDevShowProjectFinished}
-              >
-                → Финиш
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {carouselDebug && isCarouselDebugVisible ? (
-        <div className="game-carousel-debug-panel" aria-live="polite">
-          <div className="game-carousel-debug-row">
-            <span>phase: {carouselDebug.phase}</span>
-            <span>spin: {String(carouselDebug.spin)}</span>
-            <span>idle: {String(carouselDebug.idle)}</span>
-            <span>result: {String(carouselDebug.resultVisible)}</span>
-          </div>
-          <div className="game-carousel-debug-row">
-            <span>items: {carouselDebug.rouletteItems}/{carouselDebug.trackItems}</span>
-            <span>center: {carouselDebug.centerBagIndex}</span>
-            <span>step: {carouselDebug.step}</span>
-          </div>
-          <div className="game-carousel-debug-row">
-            <span>track: {carouselDebug.trackTranslate}</span>
-            <span>virtual: {carouselDebug.virtualTranslate}</span>
-            <span>live: {carouselDebug.liveTranslate}</span>
-          </div>
-          <div className="game-carousel-debug-row">
-            <span>scene op: {carouselDebug.sceneOpacity}</span>
-            <span>backdrop op: {carouselDebug.backdropOpacity}</span>
-            <span>track op: {carouselDebug.trackOpacity}</span>
-          </div>
-          <div className="game-carousel-debug-row">
-            <span>scene h: {carouselDebug.sceneHeight}</span>
-            <span>slot h: {carouselDebug.slotHeight}</span>
-            <span>backdrop h: {carouselDebug.backdropHeight}</span>
-          </div>
-          <div className="game-carousel-debug-row">
-            <span>motion top: {carouselDebug.motionTop}</span>
-            <span>bottom: {carouselDebug.motionBottom}</span>
-            <span>h: {carouselDebug.motionHeight}</span>
-          </div>
-          <div className="game-carousel-debug-row game-carousel-debug-row--wide">
-            <span>transition: {carouselDebug.motionTransition || "none"}</span>
-          </div>
-        </div>
-      ) : null}
       <img
         src={CENTER_PATTERN_PATH}
         alt=""
@@ -1761,18 +1597,6 @@ export default function GameScreen({
         loading="eager"
         decoding="sync"
       />
-      {resolvedPreloadedCarouselImagePaths.map((src, index) => (
-        <img
-          key={src}
-          src={src}
-          alt=""
-          aria-hidden="true"
-          className="game-preload-image"
-          fetchPriority={index < 6 ? "high" : "low"}
-          loading="eager"
-          decoding="async"
-        />
-      ))}
       <div className="game-fade-overlay game-fade-overlay-top" aria-hidden="true" />
       <div className="game-fade-overlay game-fade-overlay-bottom" aria-hidden="true" />
       <div className="game-shell">
@@ -1830,7 +1654,7 @@ export default function GameScreen({
                               centerSlotImageRef.current = node
                             }
                           }}
-                          src={resolveCachedImageSource(bag.slotPath, cachedPrizeImageSources) || bag.slotPath}
+                          src={resolveCachedImageSource(bag.slotPath, resolvedImageSources) || bag.slotPath}
                           alt=""
                           className="game-carousel-slot-image"
                           aria-hidden="true"
@@ -1887,7 +1711,6 @@ export default function GameScreen({
               src="/game/icons/logo.webp"
               alt="Логотип"
               className="game-top-banner-logo"
-              onDoubleClick={() => setIsCarouselDebugVisible((currentValue) => !currentValue)}
             />
           </div>
         </section>
@@ -2063,7 +1886,7 @@ export default function GameScreen({
               >
                 <img
                   ref={resultBagImageRef}
-                  src={resolveCachedImageSource(resultBag.path, cachedPrizeImageSources) || resultBag.path || DEFAULT_ROULETTE_IMAGE_PATH}
+                  src={resolveCachedImageSource(resultBag.path, resolvedImageSources) || resultBag.path || DEFAULT_ROULETTE_IMAGE_PATH}
                   alt={resultBag.label}
                   className="game-result-bag"
                 />
@@ -2206,7 +2029,7 @@ export default function GameScreen({
                 >
                   <div className="game-prize-card-media">
                     <img
-                      src={resolveCachedImageSource(prize.image, cachedPrizeImageSources)}
+                      src={resolveCachedImageSource(prize.image, resolvedImageSources)}
                       alt=""
                       className="game-prize-card-image"
                       aria-hidden="true"

@@ -211,7 +211,7 @@ function App() {
   const projectFinishedPrizeImageSources = useCachedImageSources(
     projectFinishedMyPrizes.map((item) => item?.image || ""),
   )
-  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true)
+  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true || isGameActive)
     ? false
     : isGameBootstrapPreloading
   const visibleProjectFinishedMyPrizes = isProjectFinished ? projectFinishedMyPrizes : []
@@ -337,40 +337,53 @@ function App() {
     let isCancelled = false
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
-        let bootstrapResponse = prefetchedGameBootstrap
-        let remoteSceneAssets = []
-        let assetVersion = prefetchedGameAssetVersion
-
         setIsGameBootstrapPreloading(true)
+        const localSceneAssetsPromise = Promise.all(GAME_SCENE_ASSETS.map(preloadImage))
+          .catch(() => [])
 
-        if (canPreloadRemoteBootstrap && !bootstrapResponse) {
-          try {
-            bootstrapResponse = await getJson("/game/bootstrap")
-            assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
-            bootstrapResponse = {
-              ...bootstrapResponse,
-              assetVersion,
+        void (async () => {
+          let bootstrapResponse = prefetchedGameBootstrap
+          let remoteSceneAssets = []
+          let assetVersion = prefetchedGameAssetVersion
+
+          if (canPreloadRemoteBootstrap && !bootstrapResponse) {
+            try {
+              bootstrapResponse = await getJson("/game/bootstrap")
+              assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
+              bootstrapResponse = {
+                ...bootstrapResponse,
+                assetVersion,
+              }
+              remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
+            } catch (error) {
+              logDevWarn("Intro bootstrap preload failed", error)
             }
+          } else if (bootstrapResponse) {
             remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
-          } catch (error) {
-            logDevWarn("Intro bootstrap preload failed", error)
           }
-        } else if (bootstrapResponse) {
-          remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
-        }
 
-        const warmedRemoteSceneAssets = remoteSceneAssets.length
-          ? await warmImageCache(remoteSceneAssets)
-          : []
+          if (isCancelled) {
+            return
+          }
 
-        await Promise.all(
-          [...GAME_SCENE_ASSETS, ...warmedRemoteSceneAssets].map(preloadImage),
-        )
-
-        if (!isCancelled) {
           setPrefetchedGameBootstrap(bootstrapResponse)
           setPrefetchedGameAssetVersion(assetVersion)
           setIsGameBootstrapPreloading(false)
+
+          if (!remoteSceneAssets.length) {
+            return
+          }
+
+          void warmImageCache(remoteSceneAssets)
+            .then((warmedRemoteSceneAssets) => Promise.allSettled(
+              warmedRemoteSceneAssets.map(preloadImage),
+            ))
+            .catch(() => [])
+        })()
+
+        await localSceneAssetsPromise
+
+        if (!isCancelled) {
           setIsGameSceneReady(true)
         }
       }
@@ -537,17 +550,6 @@ function App() {
     openExternalLink(SUBSCRIPTION_CHANNEL_URL)
   }
 
-  const handleDevShowProjectFinished = () => {
-    embeddedPageRequestRef.current += 1
-    setEmbeddedPage(null)
-    setIsProjectFinishedPrizesOpen(false)
-    setProjectFinishedOverlay(null)
-    setProjectFinishedMyPrizes([])
-    setIsGameLaunchPending(false)
-    setIsGameActive(false)
-    setIsProjectFinished(true)
-  }
-
   const handleCloseProjectFinishedPrizes = () => {
     setIsProjectFinishedPrizesOpen(false)
   }
@@ -704,7 +706,6 @@ function App() {
           bootstrapAssetVersion={prefetchedGameAssetVersion}
           deferBootstrap={deferredGameBootstrap}
           allowBootstrapFetch={isGameActive}
-          onDevShowProjectFinished={handleDevShowProjectFinished}
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
