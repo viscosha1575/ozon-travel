@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 
 import { getJson, postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
+import { logDevWarn } from "../devLogger.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "../embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
 import {
@@ -36,7 +37,6 @@ const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.3
 const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
 const IDLE_SPIN_CYCLE_DURATION = 36000
-const RESULT_COPY_TOAST_DURATION = 2200
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
@@ -519,7 +519,6 @@ export default function GameScreen({
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
   allowBootstrapFetch = false,
-  isSceneVisible = false,
   onDevShowProjectFinished = null,
 }) {
   const cachedBootstrap = readBootstrapCache()
@@ -898,7 +897,7 @@ export default function GameScreen({
     try {
       spinResponse = await postJson("/game/spin", {})
     } catch (error) {
-      console.warn("Spin request failed", error)
+      logDevWarn("Spin request failed", error)
 
       isSpinActiveRef.current = false
       setIsSpinActive(false)
@@ -1183,7 +1182,7 @@ export default function GameScreen({
         window.location.assign(buildMaxShareLink(shareText))
       }
     } catch (error) {
-      console.warn("MAX share failed", error)
+      logDevWarn("MAX share failed", error)
       openErrorOverlay(error, "Не удалось открыть отправку в MAX")
     }
   }
@@ -1386,7 +1385,7 @@ export default function GameScreen({
       const assetVersion = getAssetVersion(response)
       applyBootstrapResponse(response, assetVersion, "game_screen")
     } catch (error) {
-      console.warn("Game bootstrap failed", error)
+      logDevWarn("Game bootstrap failed", error)
       setSpinError(getReadableErrorMessage(error, "Не удалось загрузить игру"))
       clearTimeout(overlayTimeoutRef.current)
       setIsOverlayClosing(false)
@@ -1467,6 +1466,8 @@ export default function GameScreen({
     applyTrackStyles(trackTranslate)
   }, [trackItems, trackTranslate])
 
+  /* eslint-disable react-hooks/exhaustive-deps */
+  // These carousel effects intentionally key off the rendered roulette set to avoid restart jitter.
   useEffect(() => {
     const syncCarousel = () => {
       const measuredHeight = slotRef.current?.getBoundingClientRect().height ?? 0
@@ -1474,7 +1475,6 @@ export default function GameScreen({
       const patternWidth = patternUnderlayRef.current?.getBoundingClientRect().width ?? 0
 
       if (patternWidth > 0) {
-        console.log("[game-carousel] visual width px:", Math.round(patternWidth))
         setResultBagPreviewScale(RESULT_PREVIEW_TARGET_WIDTH_PX / patternWidth)
       }
 
@@ -1538,6 +1538,7 @@ export default function GameScreen({
       clearIdleSpin()
     }
   }, [activeRouletteItemsKey, isSpinActive, resultBag, centerBagIndex, trackItems.length])
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     centerBagIndexRef.current = centerBagIndex

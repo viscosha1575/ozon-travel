@@ -1,3 +1,5 @@
+import { logDevWarn } from './devLogger.js'
+
 const TELEGRAM_BRAND_COLOR = '#e2e7ec'
 const BROWSER_HOST = 'browser'
 const TELEGRAM_HOST = 'telegram'
@@ -13,20 +15,6 @@ let maxSdkPromise
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0
-}
-
-function isLocalBrowserHost() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const { hostname } = window.location
-
-  return (
-    hostname === 'localhost'
-    || hostname === '127.0.0.1'
-    || hostname === '0.0.0.0'
-  )
 }
 
 function getTelegramWebApp() {
@@ -310,7 +298,7 @@ export function openExternalLink(url) {
       miniApp.openMaxLink(normalizedUrl)
       return
     } catch (error) {
-      console.warn('Failed to open MAX deep link with mini app SDK', error)
+      logDevWarn('Failed to open MAX deep link with mini app SDK', error)
     }
   }
 
@@ -319,7 +307,7 @@ export function openExternalLink(url) {
       miniApp.openLink(normalizedUrl)
       return
     } catch (error) {
-      console.warn('Failed to open external link with mini app SDK', error)
+      logDevWarn('Failed to open external link with mini app SDK', error)
     }
   }
 
@@ -473,7 +461,7 @@ function expandTelegramApp(webApp) {
     webApp.expand?.()
     webApp.disableVerticalSwipes?.()
   } catch (error) {
-    console.warn('Telegram Mini App initialization failed', error)
+    logDevWarn('Telegram Mini App initialization failed', error)
   }
 }
 
@@ -533,7 +521,7 @@ export function bootstrapMiniApp() {
 
       syncTelegramUiState(webApp)
     } catch (error) {
-      console.warn('Mini App bootstrap failed', error)
+      logDevWarn('Mini App bootstrap failed', error)
     }
   })()
 

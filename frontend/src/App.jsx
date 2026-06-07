@@ -1,11 +1,12 @@
-import { memo, startTransition, useEffect, useRef, useState } from "react"
+import { memo, startTransition, useCallback, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
+import { logDevWarn } from "./devLogger.js"
 import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { getMiniAppHost, getMiniAppUser, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -210,11 +211,16 @@ function App() {
   const projectFinishedPrizeImageSources = useCachedImageSources(
     projectFinishedMyPrizes.map((item) => item?.image || ""),
   )
+  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true)
+    ? false
+    : isGameBootstrapPreloading
+  const visibleProjectFinishedMyPrizes = isProjectFinished ? projectFinishedMyPrizes : []
+  const activeProjectFinishedOverlay = isProjectFinished ? projectFinishedOverlay : null
+  const isProjectFinishedPrizesDialogOpen = isProjectFinished ? isProjectFinishedPrizesOpen : false
 
-  const pollSubscriptionStatus = async ({
+  const pollSubscriptionStatus = useCallback(async ({
     attempts,
     delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
-    reason = "unknown",
     onProgress,
   }) => {
     const totalAttempts = Math.max(1, Number(attempts) || 1)
@@ -235,12 +241,6 @@ function App() {
         }
       }
 
-      console.info("MAX subscription not visible yet, retrying", {
-        attempt,
-        totalAttempts,
-        delayMs,
-        reason,
-      })
       await wait(delayMs)
     }
 
@@ -249,7 +249,7 @@ function App() {
       subscriptionStatus: lastResponse,
       attemptsUsed: totalAttempts,
     }
-  }
+  }, [isMaxHost])
 
   useEffect(() => {
     let isCancelled = false
@@ -294,7 +294,7 @@ function App() {
           setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
         } catch (error) {
           if (!isCancelled) {
-            console.warn("Initial subscription status refresh failed", error)
+            logDevWarn("Initial subscription status refresh failed", error)
           }
         } finally {
           if (!isCancelled) {
@@ -306,10 +306,12 @@ function App() {
           return
         }
 
-        console.warn("Game open tracking failed", error)
+        logDevWarn("Game open tracking failed", error)
         setIsUserSubscribed(false)
         setIsInitialSubscriptionStatusPending(false)
-        setShouldShowControlsGuide(false)
+        setProjectFinishedMyPrizes([])
+        setIsProjectFinishedPrizesOpen(false)
+        setProjectFinishedOverlay(null)
         setIsProjectFinished(false)
       }
     }
@@ -319,15 +321,10 @@ function App() {
     return () => {
       isCancelled = true
     }
-  }, [isMaxHost, isTelegramHost])
+  }, [isMaxHost, isTelegramHost, pollSubscriptionStatus])
 
   useEffect(() => {
-    if (INTRO_DISABLED || isProjectFinished === true) {
-      setIsGameBootstrapPreloading(false)
-      return
-    }
-
-    if (isProjectFinished === null) {
+    if (INTRO_DISABLED || isProjectFinished === true || isProjectFinished === null) {
       return
     }
 
@@ -356,7 +353,7 @@ function App() {
             }
             remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
           } catch (error) {
-            console.warn("Intro bootstrap preload failed", error)
+            logDevWarn("Intro bootstrap preload failed", error)
           }
         } else if (bootstrapResponse) {
           remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
@@ -396,9 +393,6 @@ function App() {
 
   useEffect(() => {
     if (!isProjectFinished) {
-      setProjectFinishedMyPrizes([])
-      setIsProjectFinishedPrizesOpen(false)
-      setProjectFinishedOverlay(null)
       return
     }
 
@@ -411,7 +405,7 @@ function App() {
         }
       })
       .catch((error) => {
-        console.warn("Project finished prizes bootstrap failed", error)
+        logDevWarn("Project finished prizes bootstrap failed", error)
       })
 
     return () => {
@@ -518,7 +512,7 @@ function App() {
     setIsSubscriptionCheckPending(true)
 
     try {
-      const { subscriptionStatus, isSubscribed } = await pollSubscriptionStatus({
+      const { isSubscribed } = await pollSubscriptionStatus({
         attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
         reason: "manual",
       })
@@ -533,7 +527,7 @@ function App() {
         })
       }
     } catch (error) {
-      console.warn("Subscription status refresh failed", error)
+      logDevWarn("Subscription status refresh failed", error)
     } finally {
       setIsSubscriptionCheckPending(false)
     }
@@ -566,18 +560,18 @@ function App() {
     void trackGameEvent("overlay_opened", {
       overlayId,
       source: "project_finished",
-      myPrizesCount: overlayId === "gift" ? projectFinishedMyPrizes.length : undefined,
+      myPrizesCount: overlayId === "gift" ? visibleProjectFinishedMyPrizes.length : undefined,
     })
     setProjectFinishedOverlay(overlayId)
   }
 
   const handleCloseProjectFinishedOverlay = () => {
-    if (!projectFinishedOverlay) {
+    if (!activeProjectFinishedOverlay) {
       return
     }
 
     void trackGameEvent("overlay_closed", {
-      overlayId: projectFinishedOverlay,
+      overlayId: activeProjectFinishedOverlay,
       source: "project_finished",
     })
     setProjectFinishedOverlay(null)
@@ -708,9 +702,8 @@ function App() {
         <PersistentGameScreen
           bootstrapSeed={prefetchedGameBootstrap}
           bootstrapAssetVersion={prefetchedGameAssetVersion}
-          deferBootstrap={isGameBootstrapPreloading}
+          deferBootstrap={deferredGameBootstrap}
           allowBootstrapFetch={isGameActive}
-          isSceneVisible={isGameActive}
           onDevShowProjectFinished={handleDevShowProjectFinished}
         />
       </div>
@@ -782,7 +775,7 @@ function App() {
                 </div>
               </section>
             </div>
-            {isProjectFinishedPrizesOpen ? (
+            {isProjectFinishedPrizesDialogOpen ? (
               <div
                 className="game-prizes-page is-opening"
                 role="dialog"
@@ -794,7 +787,7 @@ function App() {
                     Мои призы
                   </h2>
                   <div className="game-prizes-list" aria-label="Список призов">
-                    {projectFinishedMyPrizes.length ? projectFinishedMyPrizes.map((prize) => (
+                    {visibleProjectFinishedMyPrizes.length ? visibleProjectFinishedMyPrizes.map((prize) => (
                       <div
                         key={prize.id}
                         className="game-prize-card"
@@ -827,7 +820,7 @@ function App() {
                 </section>
               </div>
             ) : null}
-            {projectFinishedOverlay === "question" ? (
+            {activeProjectFinishedOverlay === "question" ? (
               <div
                 className="game-overlay is-opening"
                 role="dialog"

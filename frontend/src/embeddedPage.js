@@ -2,6 +2,7 @@ import {
   GT_EESTI_MEDIUM_DATA_URL,
   GT_EESTI_REGULAR_DATA_URL,
 } from "./embeddedFontData.js"
+import { logDevWarn } from "./devLogger.js"
 
 const EMBEDDED_PAGE_CACHE = new Map()
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
@@ -275,7 +276,7 @@ export async function loadEmbeddedPageDocument(url, title) {
     EMBEDDED_PAGE_CACHE.set(normalizedUrl, injectedHtml)
     return injectedHtml
   } catch (error) {
-    console.warn("Failed to load embedded page document", error)
+    logDevWarn("Failed to load embedded page document", error)
     return buildErrorDocument(title, "Не удалось загрузить страницу. Попробуйте позже.")
   }
 }
