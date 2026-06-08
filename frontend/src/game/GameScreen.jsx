@@ -513,7 +513,11 @@ export default function GameScreen({
   allowBootstrapFetch = false,
 }) {
   const cachedBootstrap = readBootstrapCache()
-  const initialRouletteItems = normalizeRouletteItems(cachedBootstrap?.rouletteItems, 0)
+  const cachedBootstrapAssetVersion = Number(cachedBootstrap?.assetVersion || 0)
+  const initialRouletteItems = normalizeRouletteItems(
+    cachedBootstrap?.rouletteItems,
+    cachedBootstrapAssetVersion,
+  )
   const initialTrackItems = createTrackItems(
     initialRouletteItems,
     0,
@@ -551,7 +555,10 @@ export default function GameScreen({
   const isIdleSpinActiveRef = useRef(false)
   const isMountedRef = useRef(true)
   const [rouletteItems, setRouletteItems] = useState(initialRouletteItems)
-  const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(cachedBootstrap?.myPrizes, 0))
+  const [myPrizes, setMyPrizes] = useState(() => normalizeMyPrizes(
+    cachedBootstrap?.myPrizes,
+    cachedBootstrapAssetVersion,
+  ))
   const [availableAttempts, setAvailableAttempts] = useState(() => Number(cachedBootstrap?.attempts?.availableAttempts || 0))
   const [referralLink, setReferralLink] = useState(() => String(cachedBootstrap?.referral?.referralLink || "").trim())
   const [isSpinActive, setIsSpinActive] = useState(false)
@@ -680,6 +687,7 @@ export default function GameScreen({
     }
 
     writeBootstrapCache({
+      assetVersion,
       rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
       myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
       attempts: response?.attempts || {},

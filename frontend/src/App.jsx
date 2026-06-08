@@ -210,7 +210,7 @@ function App() {
   const projectFinishedPrizeImageSources = useCachedImageSources(
     projectFinishedMyPrizes.map((item) => item?.image || ""),
   )
-  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true || isGameActive)
+  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true)
     ? false
     : isGameBootstrapPreloading
   const visibleProjectFinishedMyPrizes = isProjectFinished ? projectFinishedMyPrizes : []
