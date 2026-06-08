@@ -139,6 +139,17 @@ function injectHead(html, injection) {
   return `<!doctype html><html><head>${injection}</head><body>${html}</body></html>`
 }
 
+function rewriteExternalDocsLinks(html) {
+  return String(html || "").replace(
+    /<a\b([^>]*?)\bhref=(["'])(https?:\/\/docs\.ozon\.ru\/[^"']*)\2([^>]*)>/gi,
+    (_match, beforeHref, quote, url, afterHref) => {
+      const safeUrl = escapeAttribute(url)
+
+      return `<a${beforeHref}href="#" data-embedded-external-url="${safeUrl}" onclick="window.parent.postMessage({ type: '${EMBEDDED_PAGE_EXTERNAL_LINK_EVENT}', url: '${safeUrl}' }, '*'); return false;"${afterHref}>`
+    },
+  )
+}
+
 function injectRuntimeControls(html) {
   const closeButtonHtml = `
 <button type="button" class="embedded-page-close" onclick="window.parent.postMessage({ type: '${EMBEDDED_PAGE_CLOSE_EVENT}' }, '*')">
@@ -296,7 +307,7 @@ export async function loadEmbeddedPageDocument(url, title) {
       throw new Error(`HTTP ${response.status}`)
     }
 
-    const rawHtml = await response.text()
+    const rawHtml = rewriteExternalDocsLinks(await response.text())
     const injectedHtml = injectRuntimeControls(
       injectHead(
         ensureDocumentTitle(rawHtml, title),
