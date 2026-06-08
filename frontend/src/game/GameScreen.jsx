@@ -522,6 +522,13 @@ export default function GameScreen({
   isVisible = true,
 }) {
   const cachedBootstrap = isVisible ? readBootstrapCache() : null
+  const hasPrefetchedBootstrapSeed = Boolean(
+    bootstrapSeed
+    && bootstrapAssetVersion
+    && Array.isArray(bootstrapSeed?.rouletteItems)
+    && bootstrapSeed.rouletteItems.length > 0
+  )
+  const shouldRenderPreloadedScene = isVisible || hasPrefetchedBootstrapSeed
   const cachedBootstrapAssetVersion = Number(cachedBootstrap?.assetVersion || 0)
   const initialRouletteItems = normalizeRouletteItems(
     cachedBootstrap?.rouletteItems,
@@ -599,9 +606,9 @@ export default function GameScreen({
     return stepRef.current
   }
 
-  const activeRouletteItems = isVisible ? rouletteItems : []
+  const activeRouletteItems = shouldRenderPreloadedScene ? rouletteItems : []
   const visibleMyPrizes = isVisible ? myPrizes : []
-  const visibleTrackItems = isVisible ? trackItems : []
+  const visibleTrackItems = shouldRenderPreloadedScene ? trackItems : []
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
   const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
