@@ -207,7 +207,9 @@ function App() {
   const [isProjectFinishedPrizesOpen, setIsProjectFinishedPrizesOpen] = useState(false)
   const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
   const [embeddedPage, setEmbeddedPage] = useState(null)
+  const [isInitialIntroMounted, setIsInitialIntroMounted] = useState(INTRO_DISABLED)
   const embeddedPageRequestRef = useRef(0)
+  const initialIntroMountCommittedRef = useRef(INTRO_DISABLED)
   const currentScreen = screens[activeScreen]
   const canOpenGame = isTelegramHost || isUserSubscribed === true
   const projectFinishedPrizeImageSources = useCachedImageSources(
@@ -412,6 +414,61 @@ function App() {
       cancelled = true
     }
   }, [isProjectFinished])
+
+  useEffect(() => {
+    if (INTRO_DISABLED || isGameActive || isProjectFinished !== false || initialIntroMountCommittedRef.current) {
+      return undefined
+    }
+
+    let isCancelled = false
+    let firstFrameId = 0
+    let secondFrameId = 0
+
+    const commitIntroMount = () => {
+      if (isCancelled || initialIntroMountCommittedRef.current) {
+        return
+      }
+
+      firstFrameId = window.requestAnimationFrame(() => {
+        secondFrameId = window.requestAnimationFrame(() => {
+          if (isCancelled || initialIntroMountCommittedRef.current) {
+            return
+          }
+
+          initialIntroMountCommittedRef.current = true
+          setIsInitialIntroMounted(true)
+        })
+      })
+    }
+
+    const handleVisibilityReady = () => {
+      if (document.visibilityState !== "visible") {
+        return
+      }
+
+      window.removeEventListener("pageshow", handleVisibilityReady)
+      window.removeEventListener("focus", handleVisibilityReady)
+      document.removeEventListener("visibilitychange", handleVisibilityReady)
+      commitIntroMount()
+    }
+
+    if (!isMiniAppHost || document.visibilityState === "visible") {
+      commitIntroMount()
+    } else {
+      window.addEventListener("pageshow", handleVisibilityReady)
+      window.addEventListener("focus", handleVisibilityReady)
+      document.addEventListener("visibilitychange", handleVisibilityReady)
+    }
+
+    return () => {
+      isCancelled = true
+      window.cancelAnimationFrame(firstFrameId)
+      window.cancelAnimationFrame(secondFrameId)
+      window.removeEventListener("pageshow", handleVisibilityReady)
+      window.removeEventListener("focus", handleVisibilityReady)
+      document.removeEventListener("visibilitychange", handleVisibilityReady)
+    }
+  }, [isGameActive, isMiniAppHost, isProjectFinished])
 
   useEffect(() => {
     if (!isGameLaunchPending || !isGameSceneReady || !canOpenGame) {
@@ -690,7 +747,7 @@ function App() {
         />
       </div>
       <div className={`app-layer intro-layer ${isGameActive ? "is-hidden" : "is-visible"}`} aria-hidden={isGameActive}>
-        {!isProjectStateResolved ? (
+        {!isProjectStateResolved || (!isProjectFinished && !isInitialIntroMounted) ? (
           <div className="project-finished-loading" aria-hidden="true" />
         ) : isProjectFinished ? (
           <section className="project-finished-screen" aria-label="Проект завершен">
