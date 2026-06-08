@@ -366,11 +366,7 @@ function App() {
             return
           }
 
-          void warmImageCache(remoteSceneAssets)
-            .then((warmedRemoteSceneAssets) => Promise.allSettled(
-              warmedRemoteSceneAssets.map(preloadImage),
-            ))
-            .catch(() => [])
+          void warmImageCache(remoteSceneAssets).catch(() => [])
         })()
 
         await localSceneAssetsPromise
