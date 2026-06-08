@@ -6,7 +6,6 @@ import { logDevWarn } from "./devLogger.js"
 
 const EMBEDDED_PAGE_CACHE = new Map()
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
-const EMBEDDED_PAGE_EXTERNAL_LINK_EVENT = "ozon-travel-embedded-page-external-link"
 
 function getEmbeddedSafeBottomValue() {
   if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") {
@@ -145,7 +144,7 @@ function rewriteEmbeddedExternalLinks(html) {
     (_match, beforeHref, quote, url, afterHref) => {
       const safeUrl = escapeAttribute(url)
 
-      return `<a${beforeHref}href="#" data-embedded-external-url="${safeUrl}" onclick="window.parent.postMessage({ type: '${EMBEDDED_PAGE_EXTERNAL_LINK_EVENT}', url: '${safeUrl}' }, '*'); return false;"${afterHref}>`
+      return `<a${beforeHref}href="${safeUrl}" target="_blank" rel="noopener noreferrer"${afterHref}>`
     },
   )
 }
@@ -155,36 +154,7 @@ function injectRuntimeControls(html) {
 <button type="button" class="embedded-page-close" onclick="window.parent.postMessage({ type: '${EMBEDDED_PAGE_CLOSE_EVENT}' }, '*')">
   Закрыть
 </button>
-<script>
-  document.addEventListener('click', function (event) {
-    var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
-
-    if (!link) {
-      return;
-    }
-
-    var href = String(link.href || '').trim();
-
-    if (!href) {
-      return;
-    }
-
-    try {
-      var nextUrl = new URL(href, window.location.href);
-
-      if ((nextUrl.protocol === 'http:' || nextUrl.protocol === 'https:') && nextUrl.href !== window.location.href) {
-        event.preventDefault();
-        event.stopPropagation();
-        window.parent.postMessage({
-          type: '${EMBEDDED_PAGE_EXTERNAL_LINK_EVENT}',
-          url: nextUrl.toString(),
-        }, '*');
-      }
-    } catch (_error) {
-      // Ignore malformed URLs.
-    }
-  }, true);
-</script>`
+`
 
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${closeButtonHtml}</body>`)
@@ -323,4 +293,4 @@ export async function loadEmbeddedPageDocument(url, title) {
   }
 }
 
-export { EMBEDDED_PAGE_CLOSE_EVENT, EMBEDDED_PAGE_EXTERNAL_LINK_EVENT }
+export { EMBEDDED_PAGE_CLOSE_EVENT }

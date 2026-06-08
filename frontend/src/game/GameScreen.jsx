@@ -5,7 +5,6 @@ import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { logDevWarn } from "../devLogger.js"
 import {
   EMBEDDED_PAGE_CLOSE_EVENT,
-  EMBEDDED_PAGE_EXTERNAL_LINK_EVENT,
   loadEmbeddedPageDocument,
 } from "../embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
@@ -49,7 +48,7 @@ const REFERRAL_SHARE_MESSAGE = [
   "",
   "Скорее летим забирать!",
 ].join("\n")
-const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-4"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-5"
 const IMPORTANT_INFO_TITLE = "Условия акции"
 const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?utm_source=telegram&utm_medium=special_project&utm_campaign=oztravel_06_26_lenta_prizov_promo_activation"
 const DEFAULT_ROULETTE_IMAGE_PATH = "/game/bags/case.webp"
@@ -1291,25 +1290,7 @@ export default function GameScreen({
     const handleMessage = (event) => {
       if (event.data?.type === EMBEDDED_PAGE_CLOSE_EVENT) {
         handleCloseEmbeddedPage()
-        return
       }
-
-      if (event.data?.type !== EMBEDDED_PAGE_EXTERNAL_LINK_EVENT) {
-        return
-      }
-
-      const targetUrl = String(event.data?.url || "").trim()
-
-      if (!targetUrl) {
-        return
-      }
-
-      void trackGameEvent("external_link_opened", {
-        actionId: "embedded_page_link",
-        url: targetUrl,
-        source: "embedded_page",
-      })
-      openExternalLink(targetUrl)
     }
 
     window.addEventListener("message", handleMessage)

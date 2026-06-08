@@ -5,7 +5,6 @@ import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { logDevWarn } from "./devLogger.js"
 import {
   EMBEDDED_PAGE_CLOSE_EVENT,
-  EMBEDDED_PAGE_EXTERNAL_LINK_EVENT,
   loadEmbeddedPageDocument,
 } from "./embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
@@ -18,7 +17,7 @@ const SUBSCRIPTION_CHANNEL_URL = String(
   import.meta.env.VITE_MAX_CHANNEL_URL || "https://max.ru/ozontravel_official",
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
-const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-4"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-5"
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
 const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
@@ -648,25 +647,7 @@ function App() {
     const handleMessage = (event) => {
       if (event.data?.type === EMBEDDED_PAGE_CLOSE_EVENT) {
         handleCloseEmbeddedPage()
-        return
       }
-
-      if (event.data?.type !== EMBEDDED_PAGE_EXTERNAL_LINK_EVENT) {
-        return
-      }
-
-      const targetUrl = String(event.data?.url || "").trim()
-
-      if (!targetUrl) {
-        return
-      }
-
-      void trackGameEvent("external_link_opened", {
-        actionId: "embedded_page_link",
-        url: targetUrl,
-        source: "embedded_page",
-      })
-      openExternalLink(targetUrl)
     }
 
     window.addEventListener("message", handleMessage)
