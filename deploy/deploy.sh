@@ -8,13 +8,27 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-APP_SERVICES=(
+DEFAULT_APP_SERVICES=(
   backend
   frontend
   admin
   max-bot
   worker
 )
+
+IFS=', ' read -r -a REQUESTED_SERVICES <<< "${DEPLOY_SERVICES:-}"
+
+if [ "${#REQUESTED_SERVICES[@]}" -eq 0 ] || [ -z "${REQUESTED_SERVICES[0]:-}" ]; then
+  APP_SERVICES=("${DEFAULT_APP_SERVICES[@]}")
+else
+  APP_SERVICES=()
+
+  for service in "${REQUESTED_SERVICES[@]}"; do
+    if [ -n "$service" ]; then
+      APP_SERVICES+=("$service")
+    fi
+  done
+fi
 
 cleanup_build_cache() {
   echo "Cleaning Docker build cache before retry..."
@@ -28,6 +42,11 @@ build_once() {
 }
 
 switch_once() {
+  if [ "${#APP_SERVICES[@]}" -eq 1 ]; then
+    docker compose up -d --no-build --no-deps "${APP_SERVICES[@]}"
+    return
+  fi
+
   docker compose up -d --no-build --remove-orphans "${APP_SERVICES[@]}"
 }
 
