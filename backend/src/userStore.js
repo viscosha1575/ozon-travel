@@ -168,10 +168,22 @@ async function upsertUser(executor, userInfo = {}) {
       ON CONFLICT (platform, platform_user_id)
       DO UPDATE SET
         external_id = EXCLUDED.external_id,
-        username = EXCLUDED.username,
-        first_name = EXCLUDED.first_name,
-        last_name = EXCLUDED.last_name,
-        language_code = EXCLUDED.language_code,
+        username = CASE
+          WHEN EXCLUDED.username <> '' THEN EXCLUDED.username
+          ELSE app_users.username
+        END,
+        first_name = CASE
+          WHEN EXCLUDED.first_name <> '' THEN EXCLUDED.first_name
+          ELSE app_users.first_name
+        END,
+        last_name = CASE
+          WHEN EXCLUDED.last_name <> '' THEN EXCLUDED.last_name
+          ELSE app_users.last_name
+        END,
+        language_code = CASE
+          WHEN EXCLUDED.language_code <> '' THEN EXCLUDED.language_code
+          ELSE app_users.language_code
+        END,
         start_param = CASE
           WHEN EXCLUDED.start_param <> '' THEN EXCLUDED.start_param
           ELSE app_users.start_param

@@ -786,7 +786,7 @@ export default function PlayersPage() {
                       <InfoRow label="Referral code" value={selectedPlayer.referralCode || "—"} />
                       <InfoRow label="Referral link" value={selectedPlayer.referralLink || "—"} />
                       <InfoRow label="Пришел по referral" value={selectedPlayer.referredByCode || "—"} />
-                      <InfoRow label="Есть referral" value={selectedPlayer.hasReferral ? "Да" : "Нет"} />
+                      <InfoRow label="Есть реферер" value={selectedPlayer.hasReferral ? "Да" : "Нет"} />
                       <InfoRow label="Доступно попыток" value={formatNumber(selectedPlayer.availableAttempts)} />
                       <InfoRow label="Подписан на канал" value={selectedPlayer.subscribedToChannel ? "Да" : "Нет"} />
                       <InfoRow label="Промокод" value={selectedPlayer.promoCode || "—"} />

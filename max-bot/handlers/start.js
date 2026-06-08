@@ -166,6 +166,31 @@ function getStringValue(...values) {
   return value === undefined || value === null ? '' : String(value);
 }
 
+function splitDisplayName(displayName) {
+  const normalizedValue = String(displayName || '').trim();
+
+  if (!normalizedValue) {
+    return {
+      firstName: '',
+      lastName: '',
+    };
+  }
+
+  const parts = normalizedValue.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: '',
+    };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
 function extractUser(ctx) {
   const sender = getSender(ctx);
   const userId = getStringValue(
@@ -175,20 +200,28 @@ function extractUser(ctx) {
     sender.uid,
     ctx?.user?.user_id,
   );
-  const username = getStringValue(
+  const explicitUsername = getStringValue(
     sender.username,
-    sender.name,
     sender.login,
   );
-  const firstName = getStringValue(
+  const explicitFirstName = getStringValue(
     sender.first_name,
     sender.firstName,
-    sender.display_name,
   );
-  const lastName = getStringValue(
+  const explicitLastName = getStringValue(
     sender.last_name,
     sender.lastName,
   );
+  const displayName = getStringValue(
+    sender.display_name,
+    sender.name,
+  );
+  const fallbackName = (!explicitFirstName && !explicitLastName)
+    ? splitDisplayName(displayName)
+    : { firstName: '', lastName: '' };
+  const username = explicitUsername || displayName;
+  const firstName = explicitFirstName || fallbackName.firstName;
+  const lastName = explicitLastName || fallbackName.lastName;
 
   return {
     userId,
