@@ -3,7 +3,11 @@ import { memo, startTransition, useCallback, useEffect, useRef, useState } from 
 import { getJson, postJson, trackGameEvent } from "./api.js"
 import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { logDevWarn } from "./devLogger.js"
-import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "./embeddedPage.js"
+import {
+  EMBEDDED_PAGE_CLOSE_EVENT,
+  EMBEDDED_PAGE_EXTERNAL_LINK_EVENT,
+  loadEmbeddedPageDocument,
+} from "./embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
 import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
@@ -642,11 +646,27 @@ function App() {
     }
 
     const handleMessage = (event) => {
-      if (event.data?.type !== EMBEDDED_PAGE_CLOSE_EVENT) {
+      if (event.data?.type === EMBEDDED_PAGE_CLOSE_EVENT) {
+        handleCloseEmbeddedPage()
         return
       }
 
-      handleCloseEmbeddedPage()
+      if (event.data?.type !== EMBEDDED_PAGE_EXTERNAL_LINK_EVENT) {
+        return
+      }
+
+      const targetUrl = String(event.data?.url || "").trim()
+
+      if (!targetUrl) {
+        return
+      }
+
+      void trackGameEvent("external_link_opened", {
+        actionId: "embedded_page_link",
+        url: targetUrl,
+        source: "embedded_page",
+      })
+      openExternalLink(targetUrl)
     }
 
     window.addEventListener("message", handleMessage)

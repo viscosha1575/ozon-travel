@@ -3,7 +3,11 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import { getJson, postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { logDevWarn } from "../devLogger.js"
-import { EMBEDDED_PAGE_CLOSE_EVENT, loadEmbeddedPageDocument } from "../embeddedPage.js"
+import {
+  EMBEDDED_PAGE_CLOSE_EVENT,
+  EMBEDDED_PAGE_EXTERNAL_LINK_EVENT,
+  loadEmbeddedPageDocument,
+} from "../embeddedPage.js"
 import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
 import {
   getMiniApp,
@@ -1285,11 +1289,27 @@ export default function GameScreen({
     }
 
     const handleMessage = (event) => {
-      if (event.data?.type !== EMBEDDED_PAGE_CLOSE_EVENT) {
+      if (event.data?.type === EMBEDDED_PAGE_CLOSE_EVENT) {
+        handleCloseEmbeddedPage()
         return
       }
 
-      handleCloseEmbeddedPage()
+      if (event.data?.type !== EMBEDDED_PAGE_EXTERNAL_LINK_EVENT) {
+        return
+      }
+
+      const targetUrl = String(event.data?.url || "").trim()
+
+      if (!targetUrl) {
+        return
+      }
+
+      void trackGameEvent("external_link_opened", {
+        actionId: "embedded_page_link",
+        url: targetUrl,
+        source: "embedded_page",
+      })
+      openExternalLink(targetUrl)
     }
 
     window.addEventListener("message", handleMessage)

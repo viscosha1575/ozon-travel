@@ -6,6 +6,7 @@ import { logDevWarn } from "./devLogger.js"
 
 const EMBEDDED_PAGE_CACHE = new Map()
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
+const EMBEDDED_PAGE_EXTERNAL_LINK_EVENT = "ozon-travel-embedded-page-external-link"
 
 function getEmbeddedSafeBottomValue() {
   if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") {
@@ -138,11 +139,41 @@ function injectHead(html, injection) {
   return `<!doctype html><html><head>${injection}</head><body>${html}</body></html>`
 }
 
-function injectCloseButton(html) {
+function injectRuntimeControls(html) {
   const closeButtonHtml = `
 <button type="button" class="embedded-page-close" onclick="window.parent.postMessage({ type: '${EMBEDDED_PAGE_CLOSE_EVENT}' }, '*')">
   Закрыть
-</button>`
+</button>
+<script>
+  document.addEventListener('click', function (event) {
+    var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+
+    if (!link) {
+      return;
+    }
+
+    var href = String(link.href || '').trim();
+
+    if (!href) {
+      return;
+    }
+
+    try {
+      var nextUrl = new URL(href, window.location.href);
+
+      if (nextUrl.hostname === 'docs.ozon.ru') {
+        event.preventDefault();
+        event.stopPropagation();
+        window.parent.postMessage({
+          type: '${EMBEDDED_PAGE_EXTERNAL_LINK_EVENT}',
+          url: nextUrl.toString(),
+        }, '*');
+      }
+    } catch (_error) {
+      // Ignore malformed URLs.
+    }
+  }, true);
+</script>`
 
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${closeButtonHtml}</body>`)
@@ -266,7 +297,7 @@ export async function loadEmbeddedPageDocument(url, title) {
     }
 
     const rawHtml = await response.text()
-    const injectedHtml = injectCloseButton(
+    const injectedHtml = injectRuntimeControls(
       injectHead(
         ensureDocumentTitle(rawHtml, title),
         buildHeadInjection(normalizedUrl, title),
@@ -281,4 +312,4 @@ export async function loadEmbeddedPageDocument(url, title) {
   }
 }
 
-export { EMBEDDED_PAGE_CLOSE_EVENT }
+export { EMBEDDED_PAGE_CLOSE_EVENT, EMBEDDED_PAGE_EXTERNAL_LINK_EVENT }
