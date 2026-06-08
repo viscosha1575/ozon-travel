@@ -14,7 +14,7 @@ const SUBSCRIPTION_CHANNEL_URL = String(
   import.meta.env.VITE_MAX_CHANNEL_URL || "https://max.ru/ozontravel_official",
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
-const IMPORTANT_INFO_URL = "https://s.ozon.ru/p5fMY0I"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608"
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
 const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
