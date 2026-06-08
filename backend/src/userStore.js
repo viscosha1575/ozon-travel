@@ -1,5 +1,5 @@
 import { query, withTransaction } from "./db.js";
-import { sendMaxUserTextNotification } from "./maxBroadcastService.js";
+import { buildOpenAppNotificationButton, sendMaxUserTextNotification } from "./maxBroadcastService.js";
 import { buildStartParam, parseStartParam } from "./startParam.js";
 import {
   trackNewUserAnalytics,
@@ -21,6 +21,7 @@ const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.png"];
+const REFERRAL_BONUS_NOTIFICATION_BUTTON = buildOpenAppNotificationButton("Крутить Ленту");
 
 function normalizePlatform(value) {
   const platform = String(value || "").trim().toLowerCase();
@@ -270,6 +271,7 @@ async function grantReferralBonusIfEligible(executor, userRow) {
         maxUserId: String(referrer.platform_user_id || "").trim(),
         text: REFERRAL_BONUS_NOTIFICATION_TEXT,
         mediaUrls: REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS,
+        button: REFERRAL_BONUS_NOTIFICATION_BUTTON,
       }
       : null,
   };
