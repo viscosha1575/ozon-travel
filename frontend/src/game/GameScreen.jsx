@@ -38,6 +38,7 @@ const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
 const IDLE_SPIN_CYCLE_DURATION = 36000
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
+const BOOTSTRAP_CACHE_SCHEMA_VERSION = 2
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
   "100 000 баллов Ozon и выгодные промокоды на путешествия ждут на Ленте призов!",
@@ -176,7 +177,14 @@ function readBootstrapCache() {
       return null
     }
 
-    return JSON.parse(rawValue)
+    const parsedValue = JSON.parse(rawValue)
+
+    if (Number(parsedValue?.schemaVersion || 0) !== BOOTSTRAP_CACHE_SCHEMA_VERSION) {
+      window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
+      return null
+    }
+
+    return parsedValue
   } catch {
     try {
       window.sessionStorage.removeItem(BOOTSTRAP_CACHE_KEY)
@@ -511,8 +519,9 @@ export default function GameScreen({
   bootstrapAssetVersion = 0,
   deferBootstrap = false,
   allowBootstrapFetch = false,
+  isVisible = true,
 }) {
-  const cachedBootstrap = readBootstrapCache()
+  const cachedBootstrap = isVisible ? readBootstrapCache() : null
   const cachedBootstrapAssetVersion = Number(cachedBootstrap?.assetVersion || 0)
   const initialRouletteItems = normalizeRouletteItems(
     cachedBootstrap?.rouletteItems,
@@ -590,7 +599,9 @@ export default function GameScreen({
     return stepRef.current
   }
 
-  const activeRouletteItems = rouletteItems
+  const activeRouletteItems = isVisible ? rouletteItems : []
+  const visibleMyPrizes = isVisible ? myPrizes : []
+  const visibleTrackItems = isVisible ? trackItems : []
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
   const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
@@ -601,7 +612,7 @@ export default function GameScreen({
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
   const isPrizeMediaVisible = isGiftOverlayVisible || isResultSheetVisible
   const prizeImagePaths = collectUniqueImagePaths(
-    myPrizes.map((item) => item.image || ""),
+    visibleMyPrizes.map((item) => item.image || ""),
     resultBag?.path || "",
     resultPrize?.image || "",
   )
@@ -687,6 +698,7 @@ export default function GameScreen({
     }
 
     writeBootstrapCache({
+      schemaVersion: BOOTSTRAP_CACHE_SCHEMA_VERSION,
       assetVersion,
       rouletteItems: Array.isArray(response?.rouletteItems) ? response.rouletteItems : [],
       myPrizes: Array.isArray(response?.myPrizes) ? response.myPrizes : [],
@@ -1640,7 +1652,7 @@ export default function GameScreen({
                   ref={trackRef}
                   className="game-carousel-track"
                 >
-                  {trackItems.map((bag, index) => (
+                  {visibleTrackItems.map((bag, index) => (
                     <div
                       key={`${bag.key}-${index}`}
                       ref={index === 0 ? slotRef : null}

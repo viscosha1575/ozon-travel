@@ -23,13 +23,18 @@ cleanup_build_cache() {
   docker image prune -af || true
 }
 
-deploy_once() {
-  docker compose rm -sf "${APP_SERVICES[@]}" || true
-  docker compose up -d --build --remove-orphans "${APP_SERVICES[@]}"
+build_once() {
+  docker compose build "${APP_SERVICES[@]}"
 }
 
-if ! deploy_once; then
-  echo "Initial deploy failed. Retrying once after Docker cache cleanup..."
+switch_once() {
+  docker compose up -d --no-build --remove-orphans "${APP_SERVICES[@]}"
+}
+
+if ! build_once; then
+  echo "Initial build failed. Retrying once after Docker cache cleanup..."
   cleanup_build_cache
-  deploy_once
+  build_once
 fi
+
+switch_once

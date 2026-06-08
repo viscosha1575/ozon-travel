@@ -4,7 +4,7 @@
 
 1. Copy `.env.example` to `.env` on the server.
 2. Update `ACME_EMAIL` if needed.
-3. Run `docker compose up -d --build`.
+3. Run `bash deploy/deploy.sh`.
 
 ## GitHub Actions
 
@@ -19,5 +19,6 @@ Required repository secrets:
 
 The workflow syncs the repository to `/opt/ozon-travel` with `rsync` and then runs `bash deploy/deploy.sh` on the server.
 The server must already have a production `.env` file at `/opt/ozon-travel/.env` because the workflow does not upload env files.
+The deploy script first builds all application images and only then runs `docker compose up -d --no-build`, so an unsuccessful build does not stop the current production containers.
 
 Before requesting a Let's Encrypt certificate, point the `A` record for `ozon-travel-max.ru` and `www.ozon-travel-max.ru` to the target VPS.
