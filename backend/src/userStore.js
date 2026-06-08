@@ -4,6 +4,7 @@ import { buildStartParam, parseStartParam } from "./startParam.js";
 import {
   trackNewUserAnalytics,
   trackReferralLinkedAnalytics,
+  trackSubscriptionConfirmedAnalytics,
   trackSpinConsumedAnalytics,
 } from "./analyticsAggregateStore.js";
 
@@ -675,7 +676,14 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
   const result = await executor.query(
     `
       UPDATE app_users
-      SET subscribed_to_channel = $2, updated_at = NOW(), last_seen_at = NOW()
+      SET
+        subscribed_to_channel = $2,
+        subscribed_at = CASE
+          WHEN $2 = TRUE AND subscribed_at IS NULL THEN NOW()
+          ELSE subscribed_at
+        END,
+        updated_at = NOW(),
+        last_seen_at = NOW()
       WHERE id = $1
       RETURNING *
     `,
@@ -685,6 +693,16 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
   let referralBonus = null;
 
   if (!wasSubscribed && Boolean(updatedUser?.subscribed_to_channel)) {
+    await trackSubscriptionConfirmedAnalytics(
+      executor,
+      Number(updatedUser.id),
+      {
+        platform: String(updatedUser.platform || platform).trim(),
+        platformUserId: String(updatedUser.platform_user_id || platformUserId).trim(),
+        externalId: String(updatedUser.external_id || "").trim(),
+      },
+      updatedUser.subscribed_at || updatedUser.updated_at || new Date().toISOString(),
+    );
     referralBonus = await grantReferralBonusIfEligible(executor, updatedUser);
   }
 

@@ -1,7 +1,7 @@
 import { query, withTransaction } from "./db.js";
 
 const ANALYTICS_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Moscow").trim() || "Europe/Moscow";
-const ANALYTICS_VERSION = "2026-06-03-v2";
+const ANALYTICS_VERSION = "2026-06-08-v3";
 const APP_OPEN_EVENT_NAMES = new Set(["app_open", "bootstrap_loaded", "game_bootstrap_loaded"]);
 const PROMO_CODE_APPLY_EVENT_NAME = "promo_code_apply_clicked";
 const SESSION_FINISH_EVENT_NAME = "spin_result";
@@ -9,6 +9,7 @@ const SESSION_FINISH_EVENT_NAME = "spin_result";
 export const ANALYTICS_METRICS = {
   activeUsers: "active_users",
   newPlayers: "new_players",
+  newSubscribers: "new_subscribers",
   referralsCreated: "referrals_created",
   appOpenEvents: "app_open_events",
   appOpenUniqueUsers: "app_open_unique_users",
@@ -29,6 +30,7 @@ export const ANALYTICS_USER_METRICS = {
 
 export const ANALYTICS_USER_PRESENCE_METRICS = {
   appOpen: "app_open",
+  subscriptionConfirmed: "subscription_confirmed",
   promoCodeApply: "promo_code_apply",
   sessionStarted: "session_started",
   sessionFinished: "session_finished",
@@ -368,6 +370,39 @@ export async function trackReferralLinkedAnalytics(executor, referrerId, invited
   );
 }
 
+export async function trackSubscriptionConfirmedAnalytics(
+  executor,
+  userId,
+  payload = {},
+  createdAt = new Date().toISOString(),
+) {
+  const safeUserId = Number(userId) || 0;
+  const { dateValue, hourValue } = toAnalyticsHourParts(createdAt);
+
+  if (!safeUserId || !dateValue) {
+    return;
+  }
+
+  await insertUserEvent(
+    executor,
+    safeUserId,
+    "system",
+    "subscription_confirmed",
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {},
+    createdAt,
+  );
+  await markDailyActiveUser(executor, safeUserId, dateValue);
+  await incrementDailyMetric(executor, ANALYTICS_METRICS.newSubscribers, 1, dateValue);
+  await incrementHourlyMetric(executor, ANALYTICS_METRICS.newSubscribers, 1, dateValue, hourValue);
+  await markMetricUserPresence(
+    executor,
+    safeUserId,
+    ANALYTICS_USER_PRESENCE_METRICS.subscriptionConfirmed,
+    dateValue,
+    null,
+  );
+}
+
 export async function trackSpinConsumedAnalytics(executor, userId, createdAt = new Date().toISOString(), count = 1) {
   const dateValue = toAnalyticsDateValue(createdAt);
 
@@ -474,6 +509,25 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
       ),
       created_at
     FROM app_users
+    ORDER BY id ASC
+  `);
+
+  await executor.query(`
+    INSERT INTO user_events (user_id, source, action, payload, created_at)
+    SELECT
+      id,
+      'system',
+      'subscription_confirmed',
+      jsonb_build_object(
+        'platform', platform,
+        'platformUserId', platform_user_id,
+        'externalId', external_id,
+        'backfilled', true
+      ),
+      subscribed_at
+    FROM app_users
+    WHERE subscribed_to_channel = TRUE
+      AND subscribed_at IS NOT NULL
     ORDER BY id ASC
   `);
 
@@ -641,6 +695,20 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
 
   await executor.query(
     `
+      INSERT INTO analytics_metric_users (date, metric, user_id)
+      SELECT DISTINCT
+        (created_at AT TIME ZONE $1)::date AS date,
+        '${ANALYTICS_USER_PRESENCE_METRICS.subscriptionConfirmed}' AS metric,
+        user_id
+      FROM user_events
+      WHERE action = 'subscription_confirmed'
+      ON CONFLICT DO NOTHING
+    `,
+    [ANALYTICS_TIMEZONE],
+  );
+
+  await executor.query(
+    `
       INSERT INTO analytics_daily (date, metric, value)
       SELECT
         (created_at AT TIME ZONE $1)::date AS date,
@@ -667,6 +735,39 @@ async function rebuildAnalyticsAggregatesInternal(executor) {
     ON CONFLICT (date, metric)
     DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
   `);
+
+  await executor.query(
+    `
+      INSERT INTO analytics_daily (date, metric, value)
+      SELECT
+        (created_at AT TIME ZONE $1)::date AS date,
+        '${ANALYTICS_METRICS.newSubscribers}',
+        COUNT(*)::bigint
+      FROM user_events
+      WHERE action = 'subscription_confirmed'
+      GROUP BY 1
+      ON CONFLICT (date, metric)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `,
+    [ANALYTICS_TIMEZONE],
+  );
+
+  await executor.query(
+    `
+      INSERT INTO analytics_hourly (date, hour, metric, value)
+      SELECT
+        (created_at AT TIME ZONE $1)::date AS date,
+        EXTRACT(HOUR FROM (created_at AT TIME ZONE $1))::int AS hour,
+        '${ANALYTICS_METRICS.newSubscribers}',
+        COUNT(*)::bigint
+      FROM user_events
+      WHERE action = 'subscription_confirmed'
+      GROUP BY 1, 2
+      ON CONFLICT (date, hour, metric)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+    `,
+    [ANALYTICS_TIMEZONE],
+  );
 
   await executor.query(
     `

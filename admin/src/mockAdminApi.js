@@ -1967,8 +1967,9 @@ function buildAnalyticsOverview(payload = {}) {
     summary: {
       totalPlayersCount: players.length,
       newPlayersCount: inRangePlayers.length,
+      newSubscribersCount: inRangePlayers.filter((player) => player.subscribedToChannel).length,
       appOpenedCount: inRangePlayers.length,
-      subscribedPlayersCount: inRangePlayers.filter((player) => player.subscribedToChannel).length,
+      subscribedPlayersCount: players.filter((player) => player.subscribedToChannel).length,
       totalUniqueDailyVisitsCount,
       averageDauCount,
       sessionsStartedCount: inRangeSessions.length,
@@ -2010,6 +2011,13 @@ function buildAnalyticsOverview(payload = {}) {
     },
     series: {
       newPlayers: totalPlayersSeries,
+      newSubscribers: buildSeries(
+        chartInRangePlayers.filter((player) => player.subscribedToChannel),
+        "createdAt",
+        range,
+        chartRangeStart,
+        chartRangeEnd,
+      ),
       totalPlayers,
       sessionsStarted: buildSeries(chartInRangeSessions, "startedAt", range, chartRangeStart, chartRangeEnd),
       sessionsFinished: buildSeries(chartFinishedInRangeSessions, "finishedAt", range, chartRangeStart, chartRangeEnd),

@@ -107,6 +107,8 @@ async function ensureSchema() {
       start_param TEXT NOT NULL DEFAULT '',
       referred_by_user_id BIGINT NULL REFERENCES app_users(id) ON DELETE SET NULL,
       referral_code TEXT NOT NULL DEFAULT '',
+      subscribed_to_channel BOOLEAN NOT NULL DEFAULT FALSE,
+      subscribed_at TIMESTAMPTZ NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -141,6 +143,11 @@ async function ensureSchema() {
   await query(`
     ALTER TABLE app_users
     ADD COLUMN IF NOT EXISTS subscribed_to_channel BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS subscribed_at TIMESTAMPTZ NULL
   `);
 
   await query(`
@@ -180,6 +187,13 @@ async function ensureSchema() {
            OR platform_user_id <> external_id
          )
        )
+  `);
+
+  await query(`
+    UPDATE app_users
+    SET subscribed_at = COALESCE(subscribed_at, updated_at)
+    WHERE subscribed_to_channel = TRUE
+      AND subscribed_at IS NULL
   `);
 
   await query(`

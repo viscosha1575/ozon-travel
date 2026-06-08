@@ -339,6 +339,7 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
     summary: {
       totalPlayersCount: 0,
       newPlayersCount: 0,
+      newSubscribersCount: 0,
       appOpenedCount: 0,
       subscribedPlayersCount: 0,
       totalUniqueDailyVisitsCount: 0,
@@ -375,6 +376,7 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
     },
     series: {
       newPlayers: [],
+      newSubscribers: [],
       totalPlayers: [],
       sessionsStarted: [],
       sessionsFinished: [],
@@ -615,6 +617,7 @@ export async function getAnalyticsOverview(payload = {}) {
   const chartEndToken = rangeContext.chartEndToken;
   const metricNames = [
     ANALYTICS_METRICS.newPlayers,
+    ANALYTICS_METRICS.newSubscribers,
     ANALYTICS_METRICS.referralsCreated,
     ANALYTICS_METRICS.promoCodeApplyClicks,
     ANALYTICS_METRICS.sessionsStarted,
@@ -637,6 +640,7 @@ export async function getAnalyticsOverview(payload = {}) {
     query(`
       SELECT
         COUNT(*)::int AS total_players_count,
+        COUNT(*) FILTER (WHERE subscribed_to_channel = TRUE)::int AS subscribed_players_count,
         COUNT(*) FILTER (WHERE last_seen_at >= NOW() - INTERVAL '15 minutes')::int AS currently_online_players_count
       FROM app_users
     `),
@@ -833,6 +837,12 @@ export async function getAnalyticsOverview(payload = {}) {
     chartStartToken,
     chartEndToken,
   );
+  const newSubscribersSeries = buildSeriesFromAggregateRows(
+    seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.newSubscribers),
+    rangeContext.effectiveRange,
+    chartStartToken,
+    chartEndToken,
+  );
   const sessionsStartedSeries = buildSeriesFromAggregateRows(
     seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.sessionsStarted),
     rangeContext.effectiveRange,
@@ -893,8 +903,9 @@ export async function getAnalyticsOverview(payload = {}) {
       ...emptyOverview.summary,
       totalPlayersCount: Number(usersResult.rows[0]?.total_players_count || 0),
       newPlayersCount: dailyMetricSum(ANALYTICS_METRICS.newPlayers),
+      newSubscribersCount: dailyMetricSum(ANALYTICS_METRICS.newSubscribers),
       appOpenedCount: Number(appOpenUsersResult.rows[0]?.count || 0),
-      subscribedPlayersCount: 0,
+      subscribedPlayersCount: Number(usersResult.rows[0]?.subscribed_players_count || 0),
       totalUniqueDailyVisitsCount,
       averageDauCount,
       sessionsStartedCount: Number(summaryRow.sessions_started_count || 0),
@@ -905,9 +916,9 @@ export async function getAnalyticsOverview(payload = {}) {
       referralsInPeriodCount: totalReferralsInPeriodCount,
       averageReferralsPerReferrerCount,
       totalReferredPlayersCount: Number(totalReferredPlayersResult.rows[0]?.total_referred_players_count || 0),
-      passedSubscriptionStageCount: 0,
+      passedSubscriptionStageCount: dailyMetricSum(ANALYTICS_METRICS.newSubscribers),
       notSubscribedBeforeCount: 0,
-      subscribedAfterNotSubscribedCount: 0,
+      subscribedAfterNotSubscribedCount: dailyMetricSum(ANALYTICS_METRICS.newSubscribers),
       enteredGameCount: Number(summaryRow.entered_game_count || 0),
       attemptedOneTimePlayersCount: attemptsByUser.filter((count) => count >= 1).length,
       attemptedThreeTimesPlayersCount: attemptsByUser.filter((count) => count >= 3).length,
@@ -927,6 +938,7 @@ export async function getAnalyticsOverview(payload = {}) {
     awardedPrizeStats,
     series: {
       newPlayers: newPlayersSeries,
+      newSubscribers: newSubscribersSeries,
       totalPlayers: totalPlayersSeries,
       sessionsStarted: sessionsStartedSeries,
       sessionsFinished: sessionsFinishedSeries,

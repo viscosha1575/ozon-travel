@@ -195,7 +195,6 @@ function App() {
   const [isGameSceneReady, setIsGameSceneReady] = useState(INTRO_DISABLED)
   const [isGameLaunchPending, setIsGameLaunchPending] = useState(false)
   const [isUserSubscribed, setIsUserSubscribed] = useState(null)
-  const [isInitialSubscriptionStatusPending, setIsInitialSubscriptionStatusPending] = useState(false)
   const [isSubscriptionCheckPending, setIsSubscriptionCheckPending] = useState(false)
   const [isProjectFinished, setIsProjectFinished] = useState(null)
   const [prefetchedGameBootstrap, setPrefetchedGameBootstrap] = useState(null)
@@ -279,8 +278,6 @@ function App() {
           return
         }
 
-        setIsInitialSubscriptionStatusPending(true)
-
         try {
           const { subscriptionStatus } = await pollSubscriptionStatus({
             attempts: isMaxHost ? MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
@@ -296,10 +293,6 @@ function App() {
           if (!isCancelled) {
             logDevWarn("Initial subscription status refresh failed", error)
           }
-        } finally {
-          if (!isCancelled) {
-            setIsInitialSubscriptionStatusPending(false)
-          }
         }
       } catch (error) {
         if (isCancelled) {
@@ -308,7 +301,6 @@ function App() {
 
         logDevWarn("Game open tracking failed", error)
         setIsUserSubscribed(false)
-        setIsInitialSubscriptionStatusPending(false)
         setProjectFinishedMyPrizes([])
         setIsProjectFinishedPrizesOpen(false)
         setProjectFinishedOverlay(null)
@@ -481,10 +473,6 @@ function App() {
 
   const handlePrimaryAction = () => {
     if (currentScreen.id === "intro") {
-      if (!isTelegramHost && isInitialSubscriptionStatusPending) {
-        return
-      }
-
       if (isTelegramHost) {
         handleStartGame()
         return
@@ -696,7 +684,6 @@ function App() {
   }
 
   const isProjectStateResolved = INTRO_DISABLED || isProjectFinished !== null
-  const isPrimaryActionDisabled = currentScreen.id === "intro" && !isTelegramHost && isInitialSubscriptionStatusPending
 
   return (
     <main className="app-shell" aria-label="Application shell">
@@ -1079,9 +1066,8 @@ function App() {
                         type="button"
                         className="content-action"
                         onClick={handlePrimaryAction}
-                        disabled={isPrimaryActionDisabled}
                       >
-                        {isPrimaryActionDisabled ? "Проверяем..." : screen.actionLabel}
+                        {screen.actionLabel}
                       </button>
                     </>
                   )}

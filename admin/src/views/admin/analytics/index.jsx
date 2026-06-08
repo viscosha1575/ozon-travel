@@ -67,6 +67,7 @@ const EMPTY_ANALYTICS = {
   },
   series: {
     newPlayers: [],
+    newSubscribers: [],
     totalPlayers: [],
     sessionsStarted: [],
     sessionsFinished: [],
@@ -74,6 +75,7 @@ const EMPTY_ANALYTICS = {
   summary: {
     totalPlayersCount: 0,
     newPlayersCount: 0,
+    newSubscribersCount: 0,
     appOpenedCount: 0,
     subscribedPlayersCount: 0,
     totalUniqueDailyVisitsCount: 0,
@@ -669,13 +671,18 @@ export default function AnalyticsPage() {
   const usersFunnelRows = useMemo(() => ([
     {
       key: "totalPlayersCount",
-      label: "Всего пользователей",
+      label: "Участники в боте",
       value: formatNumber(summary.totalPlayersCount),
     },
     {
       key: "subscribedPlayersCount",
-      label: "Прошли подписку",
+      label: "Подписаны сейчас",
       value: formatNumber(summary.subscribedPlayersCount),
+    },
+    {
+      key: "newSubscribersCount",
+      label: "Новые подписчики за период",
+      value: formatNumber(summary.newSubscribersCount),
     },
     {
       key: "appOpenedCount",
@@ -740,6 +747,11 @@ export default function AnalyticsPage() {
       key: "averageDauCount",
       label: "Средний DAU",
       value: formatNumber(summary.averageDauCount),
+    },
+    {
+      key: "newSubscribersCount",
+      label: "Новых подписчиков за период",
+      value: formatNumber(summary.newSubscribersCount),
     },
     {
       key: "promoCodeApplyClicksCount",
@@ -983,6 +995,14 @@ export default function AnalyticsPage() {
               chartType="line"
               points={analytics.series.totalPlayers}
               primaryColor={chartBlue}
+            />
+            <AnalyticsChartCard
+              title="Новые подписчики"
+              subtitle="Сколько новых подписчиков добавилось за выбранный период"
+              value={formatNumber(summary.newSubscribersCount)}
+              chartType="line"
+              points={analytics.series.newSubscribers}
+              primaryColor={chartGreen}
             />
             <AnalyticsChartCard
               title="Старты сессий"
