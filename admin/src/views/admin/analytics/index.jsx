@@ -670,14 +670,9 @@ export default function AnalyticsPage() {
 
   const usersFunnelRows = useMemo(() => ([
     {
-      key: "totalPlayersCount",
-      label: "Участники в боте",
-      value: formatNumber(summary.totalPlayersCount),
-    },
-    {
-      key: "subscribedPlayersCount",
-      label: "Подписаны сейчас",
-      value: formatNumber(summary.subscribedPlayersCount),
+      key: "newPlayersCount",
+      label: "Новых участников за период",
+      value: formatNumber(summary.newPlayersCount),
     },
     {
       key: "newSubscribersCount",
