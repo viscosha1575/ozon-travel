@@ -384,6 +384,19 @@ bot.command('start', sendStartStep);
 bot.command('menu', async (ctx) => {
   await sendGameMenu(ctx);
 });
+bot.command('id', async (ctx) => {
+  const { userId } = extractUser(ctx);
+
+  if (userId) {
+    await createMaxLog({
+      maxUserId: userId,
+      eventType: 'command',
+      eventName: 'id',
+    });
+  }
+
+  await safeReply(ctx, userId ? `Ваш MAX ID: ${userId}` : 'Не удалось определить ваш MAX ID.', undefined, 'command:id');
+});
 bot.command('support', async (ctx) => {
   await safeReply(ctx, supportMessage, undefined, 'command:support');
 });
