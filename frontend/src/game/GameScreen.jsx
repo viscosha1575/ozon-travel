@@ -49,7 +49,7 @@ const REFERRAL_SHARE_MESSAGE = [
   "",
   "Скорее летим забирать!",
 ].join("\n")
-const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-3"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260608-4"
 const IMPORTANT_INFO_TITLE = "Условия акции"
 const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?utm_source=telegram&utm_medium=special_project&utm_campaign=oztravel_06_26_lenta_prizov_promo_activation"
 const DEFAULT_ROULETTE_IMAGE_PATH = "/game/bags/case.webp"

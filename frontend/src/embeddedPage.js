@@ -139,9 +139,9 @@ function injectHead(html, injection) {
   return `<!doctype html><html><head>${injection}</head><body>${html}</body></html>`
 }
 
-function rewriteExternalDocsLinks(html) {
+function rewriteEmbeddedExternalLinks(html) {
   return String(html || "").replace(
-    /<a\b([^>]*?)\bhref=(["'])(https?:\/\/docs\.ozon\.ru\/[^"']*)\2([^>]*)>/gi,
+    /<a\b([^>]*?)\bhref=(["'])(https?:\/\/[^"']*)\2([^>]*)>/gi,
     (_match, beforeHref, quote, url, afterHref) => {
       const safeUrl = escapeAttribute(url)
 
@@ -172,7 +172,7 @@ function injectRuntimeControls(html) {
     try {
       var nextUrl = new URL(href, window.location.href);
 
-      if (nextUrl.hostname === 'docs.ozon.ru') {
+      if ((nextUrl.protocol === 'http:' || nextUrl.protocol === 'https:') && nextUrl.href !== window.location.href) {
         event.preventDefault();
         event.stopPropagation();
         window.parent.postMessage({
@@ -307,7 +307,7 @@ export async function loadEmbeddedPageDocument(url, title) {
       throw new Error(`HTTP ${response.status}`)
     }
 
-    const rawHtml = rewriteExternalDocsLinks(await response.text())
+    const rawHtml = rewriteEmbeddedExternalLinks(await response.text())
     const injectedHtml = injectRuntimeControls(
       injectHead(
         ensureDocumentTitle(rawHtml, title),
