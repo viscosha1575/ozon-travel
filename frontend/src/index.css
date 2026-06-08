@@ -77,7 +77,7 @@
   --intro-screen-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --intro-screen-duration: 460ms;
   --background-vector-scale: 0.4;
-  --intro-panel-max-height: 390px;
+  --intro-panel-max-height: 336px;
   --content-panel-padding-top: 37.5px;
   --content-panel-padding-bottom: 37.5px;
   --content-panel-padding: var(--content-panel-padding-top) var(--intro-sheet-side-padding)
@@ -2067,7 +2067,7 @@ body {
 }
 
 .content-bag-accent-left {
-  width: clamp(152px, 39vw, 176px);
+  width: clamp(167px, 42.9vw, 194px);
   aspect-ratio: 223 / 249;
   height: auto;
   transform: translate(-50%, -73%) rotate(0deg);
@@ -2075,7 +2075,7 @@ body {
 }
 
 .content-bag-accent-right {
-  width: clamp(170px, 44vw, 194px);
+  width: clamp(187px, 48.4vw, 213px);
   aspect-ratio: 200 / 201;
   height: auto;
   transform: translate(-50%, -73%) rotate(0deg);
@@ -2108,7 +2108,7 @@ body {
   left: 50%;
   top: 0;
   display: block;
-  width: clamp(244px, 65vw, 282px);
+  width: clamp(268px, 71.5vw, 310px);
   aspect-ratio: 301 / 354;
   height: auto;
   transform: translate(-50%, 118%);
@@ -2218,6 +2218,10 @@ body {
   align-content: center;
   justify-items: center;
   gap: 18px;
+}
+
+.content-screen[data-screen="intro"] {
+  overflow-y: hidden;
 }
 
 .content-copy {
@@ -2352,6 +2356,11 @@ body {
     gap: clamp(12px, 1.896svh, 20px);
   }
 
+  .content-screen[data-screen="intro"] {
+    padding-top: clamp(18px, 3.8svh, 28px);
+    gap: 10px;
+  }
+
   .content-copy {
     gap: clamp(8px, 1.481svh, 15px);
   }
@@ -2389,7 +2398,7 @@ body {
 
 @media (max-height: 760px) {
   :root {
-    --intro-panel-max-height: 320px;
+    --intro-panel-max-height: 280px;
     --content-panel-padding-top: 28px;
     --content-panel-padding-bottom: 24px;
     --content-panel-gap: 16px;
@@ -2425,15 +2434,15 @@ body {
   }
 
   .content-bag {
-    width: clamp(216px, 58vw, 252px);
+    width: clamp(238px, 63.8vw, 277px);
   }
 
   .content-bag-accent-left {
-    width: clamp(132px, 34vw, 156px);
+    width: clamp(145px, 37.4vw, 172px);
   }
 
   .content-bag-accent-right {
-    width: clamp(146px, 38vw, 172px);
+    width: clamp(161px, 41.8vw, 189px);
   }
 
   .content-copy {
@@ -2460,7 +2469,7 @@ body {
 
 @media (max-height: 680px) {
   :root {
-    --intro-panel-max-height: 288px;
+    --intro-panel-max-height: 252px;
     --content-panel-padding-top: 22px;
     --content-panel-padding-bottom: 18px;
     --content-panel-gap: 12px;
@@ -2492,15 +2501,15 @@ body {
   }
 
   .content-bag {
-    width: clamp(188px, 50vw, 224px);
+    width: clamp(207px, 55vw, 246px);
   }
 
   .content-bag-accent-left {
-    width: clamp(118px, 31vw, 140px);
+    width: clamp(130px, 34.1vw, 154px);
   }
 
   .content-bag-accent-right {
-    width: clamp(130px, 34vw, 154px);
+    width: clamp(143px, 37.4vw, 169px);
   }
 
   .content-screen {
@@ -2509,6 +2518,12 @@ body {
 
   .content-screen--subscription {
     gap: 16px;
+  }
+
+  .content-screen[data-screen="intro"] {
+    padding-top: clamp(14px, 3.4svh, 22px);
+    gap: 8px;
+    overflow-y: hidden;
   }
 
   .content-title {
@@ -2524,7 +2539,7 @@ body {
 
 @media (max-height: 620px) {
   :root {
-    --intro-panel-max-height: 260px;
+    --intro-panel-max-height: 236px;
     --content-panel-padding-top: 18px;
     --content-panel-padding-bottom: 16px;
     --content-panel-gap: 10px;
@@ -2545,6 +2560,11 @@ body {
 
   .split-screen--subscribe .content-subscribe-image {
     width: clamp(118px, min(36vw, 17svh), 150px);
+  }
+
+  .content-screen[data-screen="intro"] {
+    padding-top: 12px;
+    gap: 6px;
   }
 
   .content-kicker,

@@ -44,6 +44,10 @@ const JOB_DAILY_ATTEMPT_REMINDER_BROADCAST_TEST = WORKER_JOB_NAMES.dailyAttemptR
 const JOB_PUSH_SEND = WORKER_JOB_NAMES.pushSend;
 const JOB_PUSH_REVOKE = WORKER_JOB_NAMES.pushRevoke;
 const DEPRECATED_REPEATABLE_JOB_NAMES = ["grant-daily-attempts"];
+const MANAGED_REPEATABLE_JOB_NAMES = [
+  JOB_DAILY_ATTEMPT_GRANT,
+  JOB_DAILY_ATTEMPT_REMINDER,
+];
 
 function getMoscowDateValue(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -61,7 +65,27 @@ function buildRedisConnection() {
   });
 }
 
+async function removeManagedRepeatableJobs(queue) {
+  const jobs = await queue.getRepeatableJobs();
+
+  await Promise.all(
+    jobs
+      .filter((job) => MANAGED_REPEATABLE_JOB_NAMES.includes(String(job.name || "").trim()))
+      .map(async (job) => {
+        await queue.removeRepeatableByKey(job.key);
+        logger.info("Removed stale repeatable job", {
+          jobName: job.name,
+          key: job.key,
+          pattern: job.pattern || null,
+          tz: job.tz || null,
+        });
+      }),
+  );
+}
+
 async function registerRepeatableJobs(queue) {
+  await removeManagedRepeatableJobs(queue);
+
   if (DAILY_ATTEMPT_GRANT_ENABLED) {
     await queue.add(
       JOB_DAILY_ATTEMPT_GRANT,
