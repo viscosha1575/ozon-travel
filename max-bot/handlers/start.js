@@ -130,6 +130,25 @@ function getMessageText(ctx) {
   );
 }
 
+function getRawStartParam(ctx) {
+  const payloadValue = getStringValue(
+    ctx?.payload,
+    ctx?.update?.payload,
+    ctx?.message?.payload,
+    ctx?.update?.message?.payload,
+    ctx?.message?.body?.payload,
+    ctx?.update?.message?.body?.payload,
+    ctx?.callback?.payload,
+    ctx?.update?.callback?.payload,
+  ).trim();
+
+  if (payloadValue) {
+    return payloadValue;
+  }
+
+  return getMessageText(ctx).trim().split(/\s+/)[1] || '';
+}
+
 function getSender(ctx) {
   return (
     ctx?.callback?.user ||
@@ -215,7 +234,7 @@ async function checkSubscriptionWithRetry(userId, {
 
 async function registerUser(ctx, { logEntry = true } = {}) {
   const { userId, username, firstName, lastName } = extractUser(ctx);
-  const rawStartParam = getMessageText(ctx).trim().split(/\s+/)[1] || '';
+  const rawStartParam = getRawStartParam(ctx);
   const parsedStartParam = parseStartParam(rawStartParam);
 
   if (logEntry) {
