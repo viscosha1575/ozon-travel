@@ -1,12 +1,12 @@
 import { memo, startTransition, useCallback, useEffect, useRef, useState } from "react"
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
-import { buildBootstrapAssetVersion } from "./bootstrapAssets.js"
 import { logDevWarn } from "./devLogger.js"
 import {
   EMBEDDED_PAGE_CLOSE_EVENT,
   loadEmbeddedPageDocument,
 } from "./embeddedPage.js"
+import { fetchGameBootstrap, getBootstrapAssetVersion } from "./gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
 import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
@@ -90,7 +90,7 @@ const screens = [
 ]
 
 function collectBootstrapImageUrls(response = {}) {
-  const assetVersion = Number(response?.assetVersion || 0)
+  const assetVersion = getBootstrapAssetVersion(response?.assetVersion)
   const rouletteImages = Array.isArray(response?.rouletteItems)
     ? response.rouletteItems.map((item) => withAssetVersion(item?.image, assetVersion))
     : []
@@ -343,12 +343,8 @@ function App() {
 
           if (canPreloadRemoteBootstrap && !bootstrapResponse) {
             try {
-              bootstrapResponse = await getJson("/game/bootstrap")
-              assetVersion = buildBootstrapAssetVersion(bootstrapResponse)
-              bootstrapResponse = {
-                ...bootstrapResponse,
-                assetVersion,
-              }
+              bootstrapResponse = await fetchGameBootstrap()
+              assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
               remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
             } catch (error) {
               logDevWarn("Intro bootstrap preload failed", error)
@@ -402,7 +398,7 @@ function App() {
 
     let cancelled = false
 
-    void getJson("/game/bootstrap")
+    void fetchGameBootstrap()
       .then((response) => {
         if (!cancelled) {
           setProjectFinishedMyPrizes(Array.isArray(response?.myPrizes) ? response.myPrizes : [])

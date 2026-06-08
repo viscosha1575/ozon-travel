@@ -1,12 +1,13 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react"
 
-import { getJson, postJson, trackGameEvent } from "../api.js"
+import { postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { logDevWarn } from "../devLogger.js"
 import {
   EMBEDDED_PAGE_CLOSE_EVENT,
   loadEmbeddedPageDocument,
 } from "../embeddedPage.js"
+import { fetchGameBootstrap, getBootstrapAssetVersion } from "../gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
 import {
   getMiniApp,
@@ -41,7 +42,7 @@ const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
 const IDLE_SPIN_CYCLE_DURATION = 36000
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
-const BOOTSTRAP_CACHE_SCHEMA_VERSION = 2
+const BOOTSTRAP_CACHE_SCHEMA_VERSION = 3
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
   "100 000 баллов Ozon и выгодные промокоды на путешествия ждут на Ленте призов!",
@@ -125,14 +126,15 @@ function formatAttemptsLabel(value) {
 
 function withAssetVersion(url, assetVersion) {
   const value = String(url || "").trim()
+  const normalizedAssetVersion = getBootstrapAssetVersion(assetVersion)
 
-  if (!value || !assetVersion) {
+  if (!value || !normalizedAssetVersion) {
     return value
   }
 
   try {
     const nextUrl = new URL(value, "http://localhost")
-    nextUrl.searchParams.set("v", String(assetVersion))
+    nextUrl.searchParams.set("v", normalizedAssetVersion)
 
     if (/^https?:\/\//i.test(value)) {
       return nextUrl.toString()
@@ -387,7 +389,7 @@ function collectUniqueImagePaths(...groups) {
 }
 
 function getAssetVersion(payload) {
-  return buildBootstrapAssetVersion(payload)
+  return getBootstrapAssetVersion(payload?.assetVersion || buildBootstrapAssetVersion(payload))
 }
 
 function getRandomLoopCount(min, max) {
@@ -525,14 +527,7 @@ export default function GameScreen({
   isVisible = true,
 }) {
   const cachedBootstrap = isVisible ? readBootstrapCache() : null
-  const hasPrefetchedBootstrapSeed = Boolean(
-    bootstrapSeed
-    && bootstrapAssetVersion
-    && Array.isArray(bootstrapSeed?.rouletteItems)
-    && bootstrapSeed.rouletteItems.length > 0
-  )
-  const shouldRenderPreloadedScene = isVisible || hasPrefetchedBootstrapSeed
-  const cachedBootstrapAssetVersion = Number(cachedBootstrap?.assetVersion || 0)
+  const cachedBootstrapAssetVersion = getBootstrapAssetVersion(cachedBootstrap?.assetVersion)
   const initialRouletteItems = normalizeRouletteItems(
     cachedBootstrap?.rouletteItems,
     cachedBootstrapAssetVersion,
@@ -609,9 +604,9 @@ export default function GameScreen({
     return stepRef.current
   }
 
-  const activeRouletteItems = shouldRenderPreloadedScene ? rouletteItems : []
+  const activeRouletteItems = isVisible ? rouletteItems : []
   const visibleMyPrizes = isVisible ? myPrizes : []
-  const visibleTrackItems = shouldRenderPreloadedScene ? trackItems : []
+  const visibleTrackItems = isVisible ? trackItems : []
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
   const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
@@ -1405,7 +1400,7 @@ export default function GameScreen({
 
   const loadGameBootstrap = useCallback(async () => {
     try {
-      const response = await getJson("/game/bootstrap")
+      const response = await fetchGameBootstrap()
       const assetVersion = getAssetVersion(response)
       applyBootstrapResponse(response, assetVersion, "game_screen")
     } catch (error) {
