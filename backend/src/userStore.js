@@ -20,7 +20,7 @@ const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
-const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.png"];
+const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.mp4"];
 const REFERRAL_BONUS_NOTIFICATION_BUTTON = buildOpenAppNotificationButton("Крутить Ленту");
 
 function normalizePlatform(value) {
