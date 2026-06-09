@@ -749,6 +749,11 @@ export default function AnalyticsPage() {
       value: formatNumber(summary.newSubscribersCount),
     },
     {
+      key: "subscribedAfterNotSubscribedCount",
+      label: "Не были подписаны, потом подписались",
+      value: formatNumber(summary.subscribedAfterNotSubscribedCount),
+    },
+    {
       key: "promoCodeApplyClicksCount",
       label: "Нажатия на «Применить промокод»",
       value: formatNumber(summary.promoCodeApplyClicksCount),

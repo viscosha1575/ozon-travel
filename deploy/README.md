@@ -22,11 +22,12 @@ The server must already have a production `.env` file at `/opt/ozon-travel/.env`
 The deploy script first builds the requested application images and only then runs `docker compose up -d --no-build`, so an unsuccessful build does not stop the current production containers.
 
 By default it deploys the full stack: `backend frontend admin max-bot worker`.
+The GitHub Actions workflow is currently configured to deploy only `admin`.
 
 To deploy only specific services, pass `DEPLOY_SERVICES` before running the script. Example:
 
 ```bash
-DEPLOY_SERVICES=frontend bash deploy/deploy.sh
+DEPLOY_SERVICES=admin bash deploy/deploy.sh
 ```
 
 Before requesting a Let's Encrypt certificate, point the `A` record for `ozon-travel-max.ru` and `www.ozon-travel-max.ru` to the target VPS.
