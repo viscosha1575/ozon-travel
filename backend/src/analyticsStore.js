@@ -126,6 +126,28 @@ function getCurrentMonthToken() {
   return todayToken ? todayToken.slice(0, 7) : "";
 }
 
+function buildZonedTimestampDateRangeWhere(startToken, endToken, fieldName = "created_at") {
+  const params = [];
+  const conditions = [];
+  const escapedTimezone = ANALYTICS_TIMEZONE.replace(/'/g, "''");
+  const zonedDateExpression = `(${fieldName} AT TIME ZONE '${escapedTimezone}')::date`;
+
+  if (startToken) {
+    params.push(startToken);
+    conditions.push(`${zonedDateExpression} >= $${params.length}::date`);
+  }
+
+  if (endToken) {
+    params.push(endToken);
+    conditions.push(`${zonedDateExpression} <= $${params.length}::date`);
+  }
+
+  return {
+    whereClause: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "",
+    params,
+  };
+}
+
 function getPresetRangeStartToken(range) {
   const todayToken = getTodayToken();
 
@@ -628,6 +650,16 @@ export async function getAnalyticsOverview(payload = {}) {
   const uniquePresenceRangeWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "date");
   const sessionStartWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "start_date");
   const recentSessionsWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "start_date");
+  const notSubscribedEventRangeWhere = buildZonedTimestampDateRangeWhere(
+    rangeContext.rangeStartToken,
+    rangeContext.rangeEndToken,
+    "previous.created_at",
+  );
+  const subscriptionConfirmedRangeWhere = buildZonedTimestampDateRangeWhere(
+    rangeContext.rangeStartToken,
+    rangeContext.rangeEndToken,
+    "confirmed.created_at",
+  );
   const hourlyDateToken = rangeContext.effectiveRange === "today"
     ? (chartStartToken || rangeContext.rangeStartToken || getTodayToken())
     : "";
@@ -635,8 +667,29 @@ export async function getAnalyticsOverview(payload = {}) {
   const playerSeriesStartToken = rangeContext.effectiveRange === "all"
     ? `${buildMonthTokenSequence(12)[0] || getCurrentMonthToken()}-01`
     : chartStartToken;
+  const unsubscribedEvidenceSql = `
+    previous.source = 'max_bot'
+    AND previous.action = 'check_subscription'
+  `;
 
-  const [usersResult, dailyMetricsResult, hourlyMetricsResult, appOpenUsersResult, promoCodeApplyUsersResult, dailyOpenUsersResult, sessionSummaryResult, recentSessionsResult, attemptsByUserResult, referralsByUserResult, totalReferredPlayersResult, playersBeforeChartResult, prizesSummaryResult, awardedPrizeStatsResult] = await Promise.all([
+  const [
+    usersResult,
+    dailyMetricsResult,
+    hourlyMetricsResult,
+    appOpenUsersResult,
+    promoCodeApplyUsersResult,
+    dailyOpenUsersResult,
+    sessionSummaryResult,
+    recentSessionsResult,
+    attemptsByUserResult,
+    referralsByUserResult,
+    totalReferredPlayersResult,
+    notSubscribedBeforeResult,
+    subscribedAfterNotSubscribedResult,
+    playersBeforeChartResult,
+    prizesSummaryResult,
+    awardedPrizeStatsResult,
+  ] = await Promise.all([
     query(`
       SELECT
         COUNT(*)::int AS total_players_count,
@@ -761,6 +814,31 @@ export async function getAnalyticsOverview(payload = {}) {
       WHERE reason = 'referral_bonus'
         AND related_user_id IS NOT NULL
     `),
+    query(
+      `
+        SELECT COUNT(DISTINCT previous.user_id)::int AS count
+        FROM user_events AS previous
+        ${notSubscribedEventRangeWhere.whereClause}
+          ${notSubscribedEventRangeWhere.whereClause ? "AND" : "WHERE"} ${unsubscribedEvidenceSql}
+      `,
+      notSubscribedEventRangeWhere.params,
+    ),
+    query(
+      `
+        SELECT COUNT(DISTINCT confirmed.user_id)::int AS count
+        FROM user_events AS confirmed
+        ${subscriptionConfirmedRangeWhere.whereClause}
+          ${subscriptionConfirmedRangeWhere.whereClause ? "AND" : "WHERE"} confirmed.action = 'subscription_confirmed'
+          AND EXISTS (
+            SELECT 1
+            FROM user_events AS previous
+            WHERE previous.user_id = confirmed.user_id
+              AND previous.created_at < confirmed.created_at
+              AND (${unsubscribedEvidenceSql})
+          )
+      `,
+      subscriptionConfirmedRangeWhere.params,
+    ),
     playerSeriesStartToken
       ? query(
         `
@@ -917,8 +995,8 @@ export async function getAnalyticsOverview(payload = {}) {
       averageReferralsPerReferrerCount,
       totalReferredPlayersCount: Number(totalReferredPlayersResult.rows[0]?.total_referred_players_count || 0),
       passedSubscriptionStageCount: dailyMetricSum(ANALYTICS_METRICS.newSubscribers),
-      notSubscribedBeforeCount: 0,
-      subscribedAfterNotSubscribedCount: dailyMetricSum(ANALYTICS_METRICS.newSubscribers),
+      notSubscribedBeforeCount: Number(notSubscribedBeforeResult.rows[0]?.count || 0),
+      subscribedAfterNotSubscribedCount: Number(subscribedAfterNotSubscribedResult.rows[0]?.count || 0),
       enteredGameCount: Number(summaryRow.entered_game_count || 0),
       attemptedOneTimePlayersCount: attemptsByUser.filter((count) => count >= 1).length,
       attemptedThreeTimesPlayersCount: attemptsByUser.filter((count) => count >= 3).length,

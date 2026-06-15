@@ -1,6 +1,8 @@
 import { logDevWarn } from './devLogger.js'
 
 const TELEGRAM_BRAND_COLOR = '#e2e7ec'
+const LIGHT_THEME_COLOR = '#ffffff'
+const LIGHT_COLOR_SCHEME = 'light'
 const BROWSER_HOST = 'browser'
 const TELEGRAM_HOST = 'telegram'
 const MAX_HOST = 'max'
@@ -433,6 +435,36 @@ function bindTelegramCssVars(webApp) {
   )
 }
 
+function syncDocumentTheme(host) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const root = document.documentElement
+  const body = document.body
+  const forcedColorScheme = host === MAX_HOST ? LIGHT_COLOR_SCHEME : ''
+  const themeColor = host === MAX_HOST ? LIGHT_THEME_COLOR : ''
+
+  root.dataset.miniAppColorScheme = forcedColorScheme || 'system'
+  root.style.colorScheme = forcedColorScheme
+
+  if (body) {
+    body.style.colorScheme = forcedColorScheme
+  }
+
+  const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]')
+
+  if (colorSchemeMeta) {
+    colorSchemeMeta.setAttribute('content', forcedColorScheme ? 'light only' : 'light')
+  }
+
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', themeColor || LIGHT_THEME_COLOR)
+  }
+}
+
 function syncTelegramUiState(webApp) {
   const root = document.documentElement
   const host = getMiniAppHost()
@@ -445,6 +477,7 @@ function syncTelegramUiState(webApp) {
   root.dataset.tgExpanded = webApp?.isExpanded ? 'true' : 'false'
   root.dataset.tgFullscreen = webApp?.isFullscreen ? 'true' : 'false'
 
+  syncDocumentTheme(host)
   bindTelegramCssVars(webApp)
 }
 

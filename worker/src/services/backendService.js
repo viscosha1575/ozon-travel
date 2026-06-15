@@ -27,6 +27,15 @@ export async function prepareDailyAttemptReminderBroadcastTest() {
   return response.data;
 }
 
+export async function validateDailyAttemptReminderDelivery({ deliveryId }) {
+  const response = await post("/api/internal/notifications/daily-attempt-reminder/validate", {
+    deliveryId,
+    source: "worker",
+  });
+
+  return response.data;
+}
+
 export async function markDeliverySent({ deliveryId, messageId }) {
   const response = await post("/api/internal/notifications/deliveries/sent", {
     deliveryId,

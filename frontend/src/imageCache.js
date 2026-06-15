@@ -158,7 +158,7 @@ export async function ensureCachedImageSource(value) {
   return request
 }
 
-export async function warmImageCache(urls = []) {
+export async function warmImageCache(urls = [], options = {}) {
   const uniqueUrls = Array.from(
     new Set(
       (Array.isArray(urls) ? urls : [])
@@ -167,7 +167,7 @@ export async function warmImageCache(urls = []) {
     ),
   )
 
-  await prepareImageCache(uniqueUrls, { prune: true })
+  await prepareImageCache(uniqueUrls, { prune: options?.prune === true })
 
   return Promise.all(uniqueUrls.map((url) => ensureCachedImageSource(url)))
 }

@@ -279,7 +279,12 @@ export function createCorsMiddleware() {
 export function applySecurityHeaders(req, res, next) {
   res.set("Referrer-Policy", "no-referrer");
   res.set("X-Content-Type-Options", "nosniff");
-  res.set("X-Frame-Options", "DENY");
+
+  // Keep framing disabled for admin API, but don't send DENY on mini app/game routes.
+  if (req.path.startsWith("/api/admin/")) {
+    res.set("X-Frame-Options", "DENY");
+  }
+
   res.set("Permissions-Policy", [
     "accelerometer=()",
     "camera=()",

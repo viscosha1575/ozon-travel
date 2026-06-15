@@ -17,20 +17,18 @@ function warmupAppFonts() {
   ])
 }
 
-async function startApp() {
+function startApp() {
   warmupAppFonts()
-
-  try {
-    await bootstrapMiniApp()
-  } catch (error) {
-    logDevWarn('Mini App bootstrap failed before render', error)
-  }
 
   createRoot(document.getElementById('root')).render(
     <StrictMode>
       <App />
     </StrictMode>,
   )
+
+  void bootstrapMiniApp().catch((error) => {
+    logDevWarn('Mini App bootstrap failed before render', error)
+  })
 }
 
 void startApp()

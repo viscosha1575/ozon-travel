@@ -2,10 +2,6 @@ import { memo, startTransition, useCallback, useEffect, useRef, useState } from 
 
 import { getJson, postJson, trackGameEvent } from "./api.js"
 import { logDevWarn } from "./devLogger.js"
-import {
-  EMBEDDED_PAGE_CLOSE_EVENT,
-  loadEmbeddedPageDocument,
-} from "./embeddedPage.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "./gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
@@ -21,23 +17,8 @@ const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.h
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
 const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
-const GAME_SCENE_ASSETS = [
-  "/game/center.webp",
-  "/game/left-triangle.svg",
-  "/game/rigth-triangle.svg",
-  "/game/icons/logo.webp",
-  "/game/icons/question.svg",
-  "/game/icons/exclamation.svg",
-  "/game/icons/gift.svg",
-  "/game/icons/copy.svg",
-  "/game/icons/check.svg",
-  "/game/bags/case.webp",
-  "/game/bags/case2.webp",
-  "/game/bags/case3.webp",
-  "/game/bags/case4.webp",
-  "/game/bags/case5.webp",
-  "/intro/hands.webp",
-]
+const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
+let embeddedPageModulePromise = null
 
 const screens = [
   {
@@ -89,83 +70,6 @@ const screens = [
   },
 ]
 
-function collectBootstrapImageUrls(response = {}) {
-  const assetVersion = getBootstrapAssetVersion(response?.assetVersion)
-  const rouletteImages = Array.isArray(response?.rouletteItems)
-    ? response.rouletteItems.map((item) => withAssetVersion(item?.image, assetVersion))
-    : []
-  const prizeImages = Array.isArray(response?.myPrizes)
-    ? response.myPrizes.map((item) => withAssetVersion(item?.image, assetVersion))
-    : []
-
-  return Array.from(new Set([...rouletteImages, ...prizeImages].filter(Boolean)))
-}
-
-function withAssetVersion(url, assetVersion) {
-  const value = String(url || "").trim()
-
-  if (!value || !assetVersion) {
-    return value
-  }
-
-  try {
-    const nextUrl = new URL(value, "http://localhost")
-    nextUrl.searchParams.set("v", String(assetVersion))
-
-    if (/^https?:\/\//i.test(value)) {
-      return nextUrl.toString()
-    }
-
-    return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
-  } catch {
-    return value
-  }
-}
-
-function preloadImage(src) {
-  return new Promise((resolve) => {
-    const image = new Image()
-    let isSettled = false
-
-    const finalize = () => {
-      if (isSettled) {
-        return
-      }
-
-      isSettled = true
-      image.onload = null
-      image.onerror = null
-      resolve()
-    }
-
-    image.onload = () => {
-      if (typeof image.decode === "function") {
-        image.decode()
-          .catch(() => {})
-          .finally(finalize)
-        return
-      }
-
-      finalize()
-    }
-    image.onerror = finalize
-    image.decoding = "async"
-    image.loading = "eager"
-    image.src = src
-
-    if (image.complete) {
-      if (typeof image.decode === "function") {
-        image.decode()
-          .catch(() => {})
-          .finally(finalize)
-        return
-      }
-
-      finalize()
-    }
-  })
-}
-
 function buildSupportLink(contact) {
   const value = String(contact || "").trim()
 
@@ -187,6 +91,46 @@ function wait(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms)
   })
+}
+
+function loadEmbeddedPageModule() {
+  if (!embeddedPageModulePromise) {
+    embeddedPageModulePromise = import("./embeddedPage.js")
+  }
+
+  return embeddedPageModulePromise
+}
+
+function withBootstrapAssetVersion(url, assetVersion) {
+  const value = String(url || "").trim()
+  const normalizedAssetVersion = getBootstrapAssetVersion(assetVersion)
+
+  if (!value || !normalizedAssetVersion) {
+    return value
+  }
+
+  try {
+    const nextUrl = new URL(value, "http://localhost")
+    nextUrl.searchParams.set("v", normalizedAssetVersion)
+
+    if (/^https?:\/\//i.test(value)) {
+      return nextUrl.toString()
+    }
+
+    return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+  } catch {
+    return value
+  }
+}
+
+function collectBootstrapCarouselImageUrls(response, assetVersion) {
+  return Array.from(
+    new Set(
+      (Array.isArray(response?.rouletteItems) ? response.rouletteItems : [])
+        .map((item) => withBootstrapAssetVersion(item?.image, assetVersion))
+        .filter(Boolean),
+    ),
+  )
 }
 
 function App() {
@@ -215,9 +159,10 @@ function App() {
   const projectFinishedPrizeImageSources = useCachedImageSources(
     projectFinishedMyPrizes.map((item) => item?.image || ""),
   )
-  const deferredGameBootstrap = (INTRO_DISABLED || isProjectFinished === true)
-    ? false
-    : isGameBootstrapPreloading
+  const deferredGameBootstrap = !INTRO_DISABLED
+    && isProjectFinished !== true
+    && !isGameActive
+    && isGameBootstrapPreloading
   const visibleProjectFinishedMyPrizes = isProjectFinished ? projectFinishedMyPrizes : []
   const activeProjectFinishedOverlay = isProjectFinished ? projectFinishedOverlay : null
   const isProjectFinishedPrizesDialogOpen = isProjectFinished ? isProjectFinishedPrizesOpen : false
@@ -335,24 +280,24 @@ function App() {
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
         setIsGameBootstrapPreloading(true)
-        const localSceneAssetsPromise = Promise.all(GAME_SCENE_ASSETS.map(preloadImage))
-          .catch(() => [])
 
         void (async () => {
           let bootstrapResponse = prefetchedGameBootstrap
-          let remoteSceneAssets = []
           let assetVersion = prefetchedGameAssetVersion
 
           if (canPreloadRemoteBootstrap && !bootstrapResponse) {
             try {
               bootstrapResponse = await fetchGameBootstrap()
               assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
-              remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
+
+              void warmImageCache(
+                collectBootstrapCarouselImageUrls(bootstrapResponse, assetVersion),
+              ).catch((error) => {
+                logDevWarn("Carousel image warmup failed", error)
+              })
             } catch (error) {
               logDevWarn("Intro bootstrap preload failed", error)
             }
-          } else if (bootstrapResponse) {
-            remoteSceneAssets = collectBootstrapImageUrls(bootstrapResponse)
           }
 
           if (isCancelled) {
@@ -362,15 +307,7 @@ function App() {
           setPrefetchedGameBootstrap(bootstrapResponse)
           setPrefetchedGameAssetVersion(assetVersion)
           setIsGameBootstrapPreloading(false)
-
-          if (!remoteSceneAssets.length) {
-            return
-          }
-
-          void warmImageCache(remoteSceneAssets).catch(() => [])
         })()
-
-        await localSceneAssetsPromise
 
         if (!isCancelled) {
           setIsGameSceneReady(true)
@@ -660,23 +597,43 @@ function App() {
       sessionKey: requestId,
     })
 
-    void loadEmbeddedPageDocument(normalizedUrl, normalizedTitle).then((srcDoc) => {
-      if (embeddedPageRequestRef.current !== requestId) {
-        return
-      }
-
-      setEmbeddedPage((currentPage) => {
-        if (!currentPage || currentPage.url !== normalizedUrl) {
-          return currentPage
+    void loadEmbeddedPageModule()
+      .then(({ loadEmbeddedPageDocument }) => loadEmbeddedPageDocument(normalizedUrl, normalizedTitle))
+      .then((srcDoc) => {
+        if (embeddedPageRequestRef.current !== requestId) {
+          return
         }
 
-        return {
-          ...currentPage,
-          srcDoc,
-          isLoading: false,
-        }
+        setEmbeddedPage((currentPage) => {
+          if (!currentPage || currentPage.url !== normalizedUrl) {
+            return currentPage
+          }
+
+          return {
+            ...currentPage,
+            srcDoc,
+            isLoading: false,
+          }
+        })
       })
-    })
+      .catch((error) => {
+        logDevWarn("Embedded page preload failed", error)
+
+        if (embeddedPageRequestRef.current !== requestId) {
+          return
+        }
+
+        setEmbeddedPage((currentPage) => {
+          if (!currentPage || currentPage.url !== normalizedUrl) {
+            return currentPage
+          }
+
+          return {
+            ...currentPage,
+            isLoading: false,
+          }
+        })
+      })
   }
 
   const handleCloseEmbeddedPage = () => {

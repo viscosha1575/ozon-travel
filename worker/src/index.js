@@ -9,8 +9,6 @@ import {
   DAILY_ATTEMPT_REMINDER_ENABLED,
   DAILY_ATTEMPT_TIMEZONE,
   MANUAL_PUSH_JOB_CONCURRENCY,
-  NOTIFICATION_SEND_ATTEMPTS,
-  NOTIFICATION_SEND_BACKOFF_MS,
   NOTIFICATION_SEND_CONCURRENCY,
   NOTIFICATION_SEND_LIMIT_DURATION_MS,
   NOTIFICATION_SEND_LIMIT_MAX,
@@ -27,6 +25,7 @@ import {
   markDeliverySent,
   preparePushRevoke,
   preparePushSend,
+  validateDailyAttemptReminderDelivery,
 } from "./services/backendService.js";
 import {
   revokePushCampaign,
@@ -161,11 +160,7 @@ async function enqueueDailyReminderRecipients(sendQueue, reminderDate) {
           },
           {
             jobId: `daily-attempt-reminder-${recipient.deliveryId}`,
-            attempts: NOTIFICATION_SEND_ATTEMPTS,
-            backoff: {
-              type: "exponential",
-              delay: NOTIFICATION_SEND_BACKOFF_MS,
-            },
+            attempts: 1,
             removeOnComplete: true,
             removeOnFail: false,
           },
@@ -253,6 +248,31 @@ async function start() {
 
       if (!deliveryId || !maxUserId) {
         throw new Error("deliveryId and maxUserId are required");
+      }
+
+      const validation = await validateDailyAttemptReminderDelivery({ deliveryId });
+
+      if (!validation?.eligible) {
+        const reason = String(validation?.reason || "delivery_not_eligible").trim();
+
+        await markDeliveryFailed({
+          deliveryId,
+          errorMessage: `Reminder skipped: ${reason}`,
+        });
+
+        logger.info("Daily attempt reminder skipped", {
+          deliveryId,
+          maxUserId,
+          reason,
+          attemptsBalance: Number(validation?.attemptsBalance || 0),
+          visitedToday: Boolean(validation?.visitedToday),
+        });
+
+        return {
+          deliveryId,
+          skipped: true,
+          reason,
+        };
       }
 
       const response = await sendDailyAttemptReminder({ maxUserId });

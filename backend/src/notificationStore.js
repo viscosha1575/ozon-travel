@@ -4,6 +4,7 @@ import { enqueueDailyAttemptReminderBroadcastTestJob } from "./workerQueue.js";
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REMINDER_KEY = "daily_attempt_reminder";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
+const APP_OPEN_PRESENCE_METRIC = "app_open";
 
 function getMoscowDateValue(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", {
@@ -52,13 +53,14 @@ export async function grantDailyAttemptsForAllUsers(payload = {}) {
   const result = await query(
     `
       WITH eligible AS (
-        SELECT app_users.id AS user_id
-        FROM app_users
-        WHERE (app_users.last_seen_at AT TIME ZONE $3)::date = $2::date
+        SELECT analytics_metric_users.user_id
+        FROM analytics_metric_users
+        WHERE analytics_metric_users.date = $2::date
+          AND analytics_metric_users.metric = $6
           AND NOT EXISTS (
             SELECT 1
             FROM user_attempt_transactions transactions
-            WHERE transactions.user_id = app_users.id
+            WHERE transactions.user_id = analytics_metric_users.user_id
               AND transactions.reason = $1
               AND transactions.attempt_date = $4::date
           )
@@ -95,6 +97,7 @@ export async function grantDailyAttemptsForAllUsers(payload = {}) {
       MSK_TIMEZONE,
       reminderDate,
       String(payload.source || "worker").trim() || "worker",
+      APP_OPEN_PRESENCE_METRIC,
     ],
   );
   const grantedCount = Number(result.rows[0]?.granted_count || 0);
@@ -126,9 +129,9 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
             FROM user_attempt_transactions transactions
             WHERE transactions.user_id = app_users.id
           ) >= 1
-          AND NOT (
-            (app_users.last_seen_at AT TIME ZONE $5)::date = $2::date
-            AND EXTRACT(HOUR FROM (app_users.last_seen_at AT TIME ZONE $5)) < 12
+          AND (
+            app_users.last_seen_at IS NULL
+            OR (app_users.last_seen_at AT TIME ZONE $5)::date <> $2::date
           )
           AND NOT EXISTS (
             SELECT 1
@@ -191,6 +194,78 @@ export async function claimDailyAttemptReminderRecipients(payload = {}) {
       externalId: String(row.external_id || "").trim(),
       maxUserId: String(row.platform_user_id || "").trim(),
     })).filter((item) => item.maxUserId),
+  };
+}
+
+export async function validateDailyAttemptReminderDelivery(payload = {}) {
+  const deliveryId = Number(payload.deliveryId) || 0;
+
+  if (!deliveryId) {
+    throw new Error("deliveryId is required");
+  }
+
+  const result = await query(
+    `
+      SELECT
+        deliveries.id AS delivery_id,
+        deliveries.status,
+        deliveries.reminder_date,
+        app_users.id AS user_id,
+        app_users.platform_user_id,
+        (app_users.last_seen_at AT TIME ZONE $2) AS last_seen_at_msk,
+        (
+          SELECT COALESCE(SUM(transactions.delta), 0)::int
+          FROM user_attempt_transactions transactions
+          WHERE transactions.user_id = app_users.id
+        ) AS attempts_balance,
+        (
+          (app_users.last_seen_at AT TIME ZONE $2)::date = deliveries.reminder_date
+        ) AS visited_today
+      FROM notification_deliveries deliveries
+      JOIN app_users ON app_users.id = deliveries.user_id
+      WHERE deliveries.id = $1
+        AND deliveries.notification_key = $3
+      LIMIT 1
+    `,
+    [deliveryId, MSK_TIMEZONE, DAILY_ATTEMPT_REMINDER_KEY],
+  );
+
+  const row = result.rows[0];
+
+  if (!row) {
+    throw new Error("Notification delivery not found");
+  }
+
+  const status = String(row.status || "").trim();
+  const attemptsBalance = Number(row.attempts_balance || 0);
+  const visitedToday = Boolean(row.visited_today);
+
+  let eligible = true;
+  let reason = "";
+
+  if (status !== "queued") {
+    eligible = false;
+    reason = `delivery_status_${status || "unknown"}`;
+  } else if (visitedToday) {
+    eligible = false;
+    reason = "user_visited_today";
+  } else if (attemptsBalance < 1) {
+    eligible = false;
+    reason = "no_attempts_available";
+  }
+
+  return {
+    ok: true,
+    deliveryId,
+    userId: Number(row.user_id),
+    maxUserId: String(row.platform_user_id || "").trim(),
+    reminderDate: String(row.reminder_date || ""),
+    status,
+    attemptsBalance,
+    visitedToday,
+    lastSeenAtMsk: row.last_seen_at_msk || null,
+    eligible,
+    reason,
   };
 }
 

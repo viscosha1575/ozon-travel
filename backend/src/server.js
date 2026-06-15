@@ -12,7 +12,7 @@ import { decodeRequestBody } from "./adminCipher.js";
 import { initDatabase } from "./db.js";
 import { getUploadsDir, initImageStorage } from "./imageStorage.js";
 import { refreshMiniAppSubscriptionStatus } from "./maxSubscriptionService.js";
-import { syncAnalyticsAggregates } from "./analyticsAggregateStore.js";
+import { syncAnalyticsAggregates, trackSubscriptionRequiredAnalytics } from "./analyticsAggregateStore.js";
 import {
   deletePlayerAnalytics,
   getAnalyticsUtm,
@@ -57,6 +57,7 @@ import {
   markNotificationDeliveryFailed,
   markNotificationDeliverySent,
   sendDailyAttemptReminderBroadcastTest,
+  validateDailyAttemptReminderDelivery,
 } from "./notificationStore.js";
 import { resolveMiniAppUser, resolveTelegramInitDataUser } from "./miniAppUser.js";
 import {
@@ -207,10 +208,20 @@ const controlsGuideRateLimit = createRateLimitMiddleware({
   windowMs: 60 * 1000,
   maxRequests: 30,
 });
+const internalNotificationRateLimit = createRateLimitMiddleware({
+  bucket: "internal-notifications",
+  windowMs: 60 * 1000,
+  maxRequests: 6000,
+});
 const internalWriteRateLimit = createRateLimitMiddleware({
   bucket: "internal-write",
   windowMs: 60 * 1000,
   maxRequests: 240,
+  skip: (req) => {
+    const requestPath = String(req.originalUrl || req.path || "");
+    return requestPath.startsWith("/api/internal/notifications")
+      || requestPath.startsWith("/notifications");
+  },
 });
 const adminRateLimit = createRateLimitMiddleware({
   bucket: "admin-api",
@@ -227,6 +238,7 @@ app.use("/api/game/event", eventRateLimit);
 app.use("/api/users/create", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/users/set-subscription-status", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/logs/create", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/internal/notifications", requireInternalApiToken, internalNotificationRateLimit);
 app.use("/api/internal", requireInternalApiToken, internalWriteRateLimit);
 app.use(/^\/api\/admin\/.*$/, adminRateLimit);
 
@@ -249,6 +261,17 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     const { user, subscribedToChannel } = await resolveSubscriptionContext(req);
+
+    if (user && !subscribedToChannel) {
+      await trackSubscriptionRequiredAnalytics(
+        null,
+        Number(user.id),
+        {
+          source: "subscription_status",
+          endpoint: "/api/game/subscription-status",
+        },
+      );
+    }
 
     res.json({
       ok: true,
@@ -297,8 +320,21 @@ app.post("/api/game/open", async (req, res, next) => {
         details: {
           entryScreen: String(req.body?.entryScreen || "").trim() || "game",
           availableAttempts: attempts?.availableAttempts ?? 0,
+          subscribedToChannel: Boolean(subscribedToChannel),
         },
       });
+    }
+
+    if (user && !subscribedToChannel) {
+      await trackSubscriptionRequiredAnalytics(
+        null,
+        Number(user.id),
+        {
+          source: "game_open",
+          endpoint: "/api/game/open",
+          entryScreen: String(req.body?.entryScreen || "").trim() || "game",
+        },
+      );
     }
 
     res.json({
@@ -480,6 +516,16 @@ app.post("/api/internal/notifications/daily-attempt-reminder/claim", async (req,
 
   try {
     res.json(await claimDailyAttemptReminderRecipients(body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/internal/notifications/daily-attempt-reminder/validate", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    res.json(await validateDailyAttemptReminderDelivery(body));
   } catch (error) {
     next(error);
   }

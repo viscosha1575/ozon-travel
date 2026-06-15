@@ -96,6 +96,7 @@
   --app-viewport-height: var(--tg-viewport-stable-height);
   --app-safe-top: max(var(--tg-safe-area-inset-top), var(--tg-content-safe-area-inset-top));
   --app-safe-bottom: max(var(--tg-safe-area-inset-bottom), var(--tg-content-safe-area-inset-bottom));
+  color-scheme: light;
   color: #18222c;
   background: var(--bg-app-primary);
   font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
@@ -112,6 +113,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  color-scheme: light;
 }
 
 body {

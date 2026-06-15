@@ -3,10 +3,6 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import { postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { logDevWarn } from "../devLogger.js"
-import {
-  EMBEDDED_PAGE_CLOSE_EVENT,
-  loadEmbeddedPageDocument,
-} from "../embeddedPage.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "../gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
 import {
@@ -57,13 +53,23 @@ const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_tr
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
 const RESULT_PREVIEW_TARGET_WIDTH_PX = 326.4
 const NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR = 0.94
+const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 const TOP_BANNER_ACTIONS = [
   { id: "question", icon: "/game/icons/question.svg", label: "Вопрос" },
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
   { id: "gift", icon: "/game/icons/gift.svg", label: "Подарки" },
 ]
+let embeddedPageModulePromise = null
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
 const normalizeEntityId = (value) => String(value ?? "").trim()
+
+function loadEmbeddedPageModule() {
+  if (!embeddedPageModulePromise) {
+    embeddedPageModulePromise = import("../embeddedPage.js")
+  }
+
+  return embeddedPageModulePromise
+}
 
 function roundToDevicePixel(value) {
   const ratio = typeof window !== "undefined" && Number(window.devicePixelRatio) > 0
@@ -1135,23 +1141,43 @@ export default function GameScreen({
         sessionKey: requestId,
       })
 
-      void loadEmbeddedPageDocument(IMPORTANT_INFO_URL, IMPORTANT_INFO_TITLE).then((srcDoc) => {
-        if (embeddedPageRequestRef.current !== requestId) {
-          return
-        }
-
-        setEmbeddedPage((currentPage) => {
-          if (!currentPage || currentPage.url !== IMPORTANT_INFO_URL) {
-            return currentPage
+      void loadEmbeddedPageModule()
+        .then(({ loadEmbeddedPageDocument }) => loadEmbeddedPageDocument(IMPORTANT_INFO_URL, IMPORTANT_INFO_TITLE))
+        .then((srcDoc) => {
+          if (embeddedPageRequestRef.current !== requestId) {
+            return
           }
 
-          return {
-            ...currentPage,
-            srcDoc,
-            isLoading: false,
-          }
+          setEmbeddedPage((currentPage) => {
+            if (!currentPage || currentPage.url !== IMPORTANT_INFO_URL) {
+              return currentPage
+            }
+
+            return {
+              ...currentPage,
+              srcDoc,
+              isLoading: false,
+            }
+          })
         })
-      })
+        .catch((error) => {
+          logDevWarn("Embedded page preload failed", error)
+
+          if (embeddedPageRequestRef.current !== requestId) {
+            return
+          }
+
+          setEmbeddedPage((currentPage) => {
+            if (!currentPage || currentPage.url !== IMPORTANT_INFO_URL) {
+              return currentPage
+            }
+
+            return {
+              ...currentPage,
+              isLoading: false,
+            }
+          })
+        })
 
       return
     }

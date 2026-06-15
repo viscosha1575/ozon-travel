@@ -1,8 +1,9 @@
 import { query, withTransaction } from "./db.js";
 
 const ANALYTICS_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Moscow").trim() || "Europe/Moscow";
-const ANALYTICS_VERSION = "2026-06-08-v3";
-const APP_OPEN_EVENT_NAMES = new Set(["app_open", "bootstrap_loaded", "game_bootstrap_loaded"]);
+const ANALYTICS_VERSION = "2026-06-09-v4";
+export const APP_OPEN_EVENT_NAMES = ["app_open", "bootstrap_loaded", "game_bootstrap_loaded"];
+const APP_OPEN_EVENT_NAMES_SET = new Set(APP_OPEN_EVENT_NAMES);
 const PROMO_CODE_APPLY_EVENT_NAME = "promo_code_apply_clicked";
 const SESSION_FINISH_EVENT_NAME = "spin_result";
 
@@ -30,6 +31,7 @@ export const ANALYTICS_USER_METRICS = {
 
 export const ANALYTICS_USER_PRESENCE_METRICS = {
   appOpen: "app_open",
+  subscriptionRequiredSeen: "subscription_required_seen",
   subscriptionConfirmed: "subscription_confirmed",
   promoCodeApply: "promo_code_apply",
   sessionStarted: "session_started",
@@ -403,6 +405,45 @@ export async function trackSubscriptionConfirmedAnalytics(
   );
 }
 
+export async function trackSubscriptionRequiredAnalytics(
+  executor,
+  userId,
+  payload = {},
+  createdAt = new Date().toISOString(),
+) {
+  const run = async (resolvedExecutor) => {
+    const safeUserId = Number(userId) || 0;
+    const { dateValue } = toAnalyticsHourParts(createdAt);
+
+    if (!safeUserId || !dateValue) {
+      return;
+    }
+
+    await insertUserEvent(
+      resolvedExecutor,
+      safeUserId,
+      "system",
+      "subscription_required_seen",
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {},
+      createdAt,
+    );
+    await markDailyActiveUser(resolvedExecutor, safeUserId, dateValue);
+    await markMetricUserPresence(
+      resolvedExecutor,
+      safeUserId,
+      ANALYTICS_USER_PRESENCE_METRICS.subscriptionRequiredSeen,
+      dateValue,
+      null,
+    );
+  };
+
+  if (executor) {
+    return run(executor);
+  }
+
+  return withTransaction(run);
+}
+
 export async function trackSpinConsumedAnalytics(executor, userId, createdAt = new Date().toISOString(), count = 1) {
   const dateValue = toAnalyticsDateValue(createdAt);
 
@@ -434,7 +475,7 @@ export async function trackGameEventAnalytics(executor, payload = {}) {
   }, createdAt);
   await markDailyActiveUser(executor, userId, dateValue);
 
-  if (APP_OPEN_EVENT_NAMES.has(eventName)) {
+  if (APP_OPEN_EVENT_NAMES_SET.has(eventName)) {
     await incrementDailyMetric(executor, ANALYTICS_METRICS.appOpenEvents, 1, dateValue);
     await markMetricUserPresence(
       executor,
