@@ -17,6 +17,7 @@ import Card from "components/card/Card";
 import BarChart from "components/charts/BarChart";
 import LineChart from "components/charts/LineChart";
 import { postJson } from "api";
+import { addDaysToDateToken, formatDateTimeMsk, getMoscowTodayDateToken } from "utils/dateTime";
 
 const RANGE_OPTIONS = [
   { value: "today", label: "Сегодня" },
@@ -26,16 +27,11 @@ const RANGE_OPTIONS = [
 ];
 
 function formatDateInputValue(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return getMoscowTodayDateToken(date);
 }
 
 function getPresetDateRange(rangeValue) {
-  const today = new Date();
-  const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endDate = getMoscowTodayDateToken();
 
   if (rangeValue === "all") {
     return {
@@ -44,17 +40,21 @@ function getPresetDateRange(rangeValue) {
     };
   }
 
-  const startDate = new Date(endDate);
-
   if (rangeValue === "7d") {
-    startDate.setDate(startDate.getDate() - 6);
+    return {
+      dateFrom: addDaysToDateToken(endDate, -6),
+      dateTo: endDate,
+    };
   } else if (rangeValue === "30d") {
-    startDate.setDate(startDate.getDate() - 29);
+    return {
+      dateFrom: addDaysToDateToken(endDate, -29),
+      dateTo: endDate,
+    };
   }
 
   return {
-    dateFrom: formatDateInputValue(startDate),
-    dateTo: formatDateInputValue(endDate),
+    dateFrom: endDate,
+    dateTo: endDate,
   };
 }
 
@@ -129,17 +129,7 @@ function formatDecimal(value, maximumFractionDigits = 2) {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeMsk(value);
 }
 
 function buildLineChartOptions(categories, color, gridColor, labelColor) {

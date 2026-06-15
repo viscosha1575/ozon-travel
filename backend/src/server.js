@@ -31,6 +31,7 @@ import {
   getPrizePromoCodeSchedule,
   reorderPrizes,
   getGameBootstrap,
+  getSpinResult,
   listChances,
   listPrizes,
   spinPrize,
@@ -232,7 +233,15 @@ const adminRateLimit = createRateLimitMiddleware({
 app.use("/api/game/bootstrap", publicGameReadRateLimit);
 app.use("/api/game/subscription-status", publicGameReadRateLimit);
 app.use("/api/game/open", publicGameReadRateLimit);
-app.use("/api/game/spin", spinRateLimit);
+app.use("/api/game/spin/result", publicGameReadRateLimit);
+app.use("/api/game/spin", (req, res, next) => {
+  if (req.path === "/" || req.path === "") {
+    spinRateLimit(req, res, next);
+    return;
+  }
+
+  next();
+});
 app.use("/api/game/controls-guide/seen", controlsGuideRateLimit);
 app.use("/api/game/event", eventRateLimit);
 app.use("/api/users/create", requireInternalApiToken, internalWriteRateLimit);
@@ -299,6 +308,17 @@ app.post("/api/game/spin", async (req, res, next) => {
 
     const { userInfo } = await requireSubscribedGameUser(req);
     const response = await spinPrize(userInfo);
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/game/spin/result", async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const { userInfo } = await requireSubscribedGameUser(req);
+    const response = await getSpinResult(userInfo, req.body || {});
     res.json(response);
   } catch (error) {
     next(error);

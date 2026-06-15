@@ -38,6 +38,7 @@ import MiniStatistics from "components/card/MiniStatistics";
 import ImageUploader from "components/editor/ImageUploader";
 import RichTextEditor from "components/editor/RichTextEditor";
 import { postJson } from "api";
+import { formatDateTimeMsk, formatTimeMsk } from "utils/dateTime";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Все статусы" },
@@ -71,17 +72,7 @@ function formatNumber(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeMsk(value);
 }
 
 function formatPercent(value, digits = 1) {
@@ -857,7 +848,7 @@ export default function PushesPage() {
                     {itemButton ? " · кнопка" : ""}
                   </Text>
                   <Text color={previewCaptionColor} fontSize="xs" fontWeight="700">
-                    {push.sentAt ? new Date(push.sentAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "14:34"}
+                    {push.sentAt ? formatTimeMsk(push.sentAt) : "14:34"}
                   </Text>
                 </Flex>
               </Stack>

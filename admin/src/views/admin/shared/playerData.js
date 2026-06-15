@@ -1,19 +1,10 @@
 import { postJson } from "api";
+import { formatDateTimeMsk } from "utils/dateTime";
 
 const PAGE_SIZE = 100;
 
 export function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeMsk(value);
 }
 
 export function formatNullableText(value) {

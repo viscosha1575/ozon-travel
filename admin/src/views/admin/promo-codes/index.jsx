@@ -41,6 +41,7 @@ import * as XLSX from "xlsx";
 import Card from "components/card/Card";
 import ImageUploader from "components/editor/ImageUploader";
 import { postJson } from "api";
+import { formatDateTimeInputValueMsk, formatDateTimeMskWithoutSeconds } from "utils/dateTime";
 
 const PRIZE_TYPE_OPTIONS = [
   { value: "Приз", label: "Приз" },
@@ -75,43 +76,11 @@ function formatNumber(value) {
 }
 
 function formatDateTimeLabel(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTimeMskWithoutSeconds(value);
 }
 
 function formatDateTimeInputValue(value) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+  return formatDateTimeInputValueMsk(value);
 }
 
 function splitPromoCodes(rawValue) {

@@ -62,6 +62,7 @@ const TOP_BANNER_ACTIONS = [
   { id: "exclamation", icon: "/game/icons/exclamation.svg", label: "Важно" },
   { id: "gift", icon: "/game/icons/gift.svg", label: "Подарки" },
 ]
+const EMPTY_ITEMS = []
 let embeddedPageModulePromise = null
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
 const normalizeEntityId = (value) => String(value ?? "").trim()
@@ -376,6 +377,57 @@ function normalizeMyPrizes(items, assetVersion) {
     assetVersion,
     image: withAssetVersion(item.image, assetVersion),
   }))
+}
+
+function normalizeSpinId(value) {
+  const normalizedValue = Number(value)
+
+  if (!Number.isInteger(normalizedValue) || normalizedValue <= 0) {
+    return null
+  }
+
+  return normalizedValue
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isValidSpinResultPayload(result) {
+  if (!isPlainObject(result)) {
+    return false
+  }
+
+  const positionId = normalizeEntityId(result.positionId)
+  const type = String(result.type || "").trim()
+  const title = String(result.myPrizeText || result.title || "").trim()
+
+  return Boolean(positionId && type && title)
+}
+
+function isValidSpinResponsePayload(response) {
+  if (!isPlainObject(response)) {
+    return false
+  }
+
+  return Boolean(
+    normalizeSpinId(response?.spin?.id)
+    && isValidSpinResultPayload(response?.result)
+    && Array.isArray(response?.myPrizes)
+    && isPlainObject(response?.attempts)
+  )
+}
+
+async function fetchSpinResultById(spinId) {
+  const normalizedSpinId = normalizeSpinId(spinId)
+
+  if (!normalizedSpinId) {
+    throw new Error("spinId is required")
+  }
+
+  return postJson("/game/spin/result", {
+    spinId: normalizedSpinId,
+  })
 }
 
 function renderResultDescription(description, isNonPrize, toneClassName = "") {
@@ -706,9 +758,9 @@ export default function GameScreen({
     return stepRef.current
   }
 
-  const activeRouletteItems = isVisible ? rouletteItems : []
-  const visibleMyPrizes = isVisible ? myPrizes : []
-  const visibleTrackItems = isVisible ? trackItems : []
+  const activeRouletteItems = isVisible ? rouletteItems : EMPTY_ITEMS
+  const visibleMyPrizes = isVisible ? myPrizes : EMPTY_ITEMS
+  const visibleTrackItems = isVisible ? trackItems : EMPTY_ITEMS
   const activeRouletteItemsKey = activeRouletteItems.map((item) => item.key).join("|")
   const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
@@ -832,6 +884,30 @@ export default function GameScreen({
     setSpinError(getReadableErrorMessage(error, fallback))
     openOverlay("error")
   }
+
+  const resolveSpinResponse = useCallback(async (response) => {
+    if (isValidSpinResponsePayload(response)) {
+      return response
+    }
+
+    const spinId = normalizeSpinId(response?.spin?.id)
+
+    if (!spinId) {
+      return null
+    }
+
+    try {
+      const recoveredResponse = await fetchSpinResultById(spinId)
+
+      if (isValidSpinResponsePayload(recoveredResponse)) {
+        return recoveredResponse
+      }
+    } catch (error) {
+      logDevWarn("Spin recovery request failed", error)
+    }
+
+    return null
+  }, [])
 
   const applyTrackStyles = (translateY) => {
     const normalizedTranslateY = Number(translateY || 0)
@@ -1036,45 +1112,94 @@ export default function GameScreen({
       return
     }
 
-    const targetPositionId = spinResponse?.result?.positionId
+    const canonicalSpinResponse = await resolveSpinResponse(spinResponse)
+
+    if (!isValidSpinResponsePayload(canonicalSpinResponse)) {
+      logDevWarn("Spin response validation failed", spinResponse)
+
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+      resetCarousel(currentCenterBagIndex)
+      await loadGameBootstrap()
+      openErrorOverlay("Не удалось восстановить результат попытки. Состояние игры обновлено.")
+      return
+    }
+
+    const targetPositionId = canonicalSpinResponse.result.positionId
     const normalizedTargetPositionId = normalizeEntityId(targetPositionId)
-    const targetBagIndex = Math.max(
-      0,
-      activeRouletteItems.findIndex((item) => normalizeEntityId(item.id) === normalizedTargetPositionId)
+    const targetBagIndex = activeRouletteItems.findIndex(
+      (item) => normalizeEntityId(item.id) === normalizedTargetPositionId
     )
     const matchedRouletteItem = activeRouletteItems[targetBagIndex] || null
-    const assetVersion = matchedRouletteItem?.assetVersion || getAssetVersion(spinResponse)
-    const nextResult = spinResponse?.result
+    const assetVersion = matchedRouletteItem?.assetVersion
+      || getBootstrapAssetVersion(readBootstrapCache()?.assetVersion)
+      || getAssetVersion(canonicalSpinResponse)
+    const nextResult = canonicalSpinResponse?.result
       ? {
-        ...spinResponse.result,
+        ...canonicalSpinResponse.result,
         // Reuse the already rendered carousel asset so the result popup
         // does not force a second network fetch right at reveal time.
-        image: matchedRouletteItem?.path || spinResponse.result.image || "",
+        image: matchedRouletteItem?.path || canonicalSpinResponse.result.image || "",
       }
       : null
-    const nextMyPrizes = Array.isArray(spinResponse?.myPrizes)
-      ? spinResponse.myPrizes.map((item) => ({
-        ...item,
-        image: withAssetVersion(item.image, assetVersion),
-      }))
-      : []
+    const nextMyPrizes = canonicalSpinResponse.myPrizes.map((item) => ({
+      ...item,
+      image: withAssetVersion(item.image, assetVersion),
+    }))
     const cachedBootstrap = readBootstrapCache()
+    const spinId = normalizeSpinId(canonicalSpinResponse.spin?.id)
 
     writePendingSpinRecovery({
+      spinId,
       assetVersion,
       result: nextResult,
-      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
-      attempts: spinResponse?.attempts || {},
+      myPrizes: canonicalSpinResponse.myPrizes,
+      attempts: canonicalSpinResponse.attempts || {},
     })
 
     writeBootstrapCache({
       schemaVersion: BOOTSTRAP_CACHE_SCHEMA_VERSION,
       assetVersion: assetVersion || cachedBootstrap?.assetVersion || 0,
       rouletteItems: Array.isArray(cachedBootstrap?.rouletteItems) ? cachedBootstrap.rouletteItems : [],
-      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
-      attempts: spinResponse?.attempts || {},
+      myPrizes: canonicalSpinResponse.myPrizes,
+      attempts: canonicalSpinResponse.attempts || {},
       referral: cachedBootstrap?.referral || {},
     })
+
+    if (targetBagIndex < 0) {
+      clearTimeout(overlayTimeoutRef.current)
+      clearTimeout(resultRevealTimeoutRef.current)
+      resetResultState()
+      setSpinError("")
+      setActiveOverlay(null)
+      setRenderedOverlay(null)
+      setIsOverlayClosing(false)
+      setIsResultCopied(false)
+      resetCarousel(currentCenterBagIndex)
+
+      startTransition(() => {
+        const nextResultBag = buildResultBag(nextResult, activeRouletteItems)
+        const nextResultPrize = buildResultPrize(nextResult, nextResultBag)
+
+        setResultBag(nextResultBag)
+        setResultPrize(nextResultPrize)
+        setMyPrizes(nextMyPrizes)
+        setAvailableAttempts(Number(canonicalSpinResponse.attempts?.availableAttempts || 0))
+        setResultEntrySource("spin")
+        setResultRevealPhase("sheet-enter")
+        setResultBagFlight(null)
+        isSpinActiveRef.current = false
+        setIsSpinActive(false)
+      })
+
+      clearPendingSpinRecovery()
+      void trackGameEvent("spin_result_shown", {
+        positionId: canonicalSpinResponse.result?.positionId ?? null,
+        type: canonicalSpinResponse.result?.type || "",
+        hasPromoCode: Boolean(canonicalSpinResponse.result?.promoCode),
+      })
+      return
+    }
 
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
     const currentProgressSteps = normalizeLoopProgress(
@@ -1124,7 +1249,7 @@ export default function GameScreen({
       targetBagIndex,
       result: nextResult,
       myPrizes: nextMyPrizes,
-      attempts: spinResponse?.attempts || null,
+      attempts: canonicalSpinResponse.attempts || null,
       step,
       totalSteps,
       durationMs,
@@ -1210,8 +1335,8 @@ export default function GameScreen({
 
             clearPendingSpinRecovery()
             void trackGameEvent("spin_result_shown", {
-              positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
-              type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
+              positionId: spinState.result?.positionId ?? null,
+              type: spinState.result?.type || "",
               hasPromoCode: Boolean(spinState.result?.promoCode),
             })
           }, RESULT_REVEAL_DELAY)
@@ -1677,50 +1802,87 @@ export default function GameScreen({
   }, [isSpinActive])
 
   useEffect(() => {
-    if (isSpinActive || resultBag || !activeRouletteItems.length) {
+    if (isSpinActive || resultBag) {
       return
     }
 
     const pendingSpinRecovery = readPendingSpinRecovery()
 
-    if (!pendingSpinRecovery?.result) {
+    if (!pendingSpinRecovery) {
       return
     }
+    let isCancelled = false
 
-    const recoveredAssetVersion = getBootstrapAssetVersion(
-      pendingSpinRecovery.assetVersion || getAssetVersion(pendingSpinRecovery),
-    )
-    const recoveredMyPrizes = normalizeMyPrizes(
-      pendingSpinRecovery.myPrizes,
-      recoveredAssetVersion,
-    )
+    const restorePendingSpin = async () => {
+      const canonicalSpinResponse = await resolveSpinResponse({
+        spin: {
+          id: pendingSpinRecovery.spinId,
+        },
+      })
+      const recoveredResponse = isValidSpinResponsePayload(canonicalSpinResponse)
+        ? canonicalSpinResponse
+        : (
+          isValidSpinResultPayload(pendingSpinRecovery.result)
+          && Array.isArray(pendingSpinRecovery.myPrizes)
+          && isPlainObject(pendingSpinRecovery.attempts)
+            ? {
+              spin: {
+                id: normalizeSpinId(pendingSpinRecovery.spinId),
+              },
+              result: pendingSpinRecovery.result,
+              myPrizes: pendingSpinRecovery.myPrizes,
+              attempts: pendingSpinRecovery.attempts,
+            }
+            : null
+        )
 
-    startTransition(() => {
-      const nextResultBag = buildResultBag(pendingSpinRecovery.result, activeRouletteItems)
-      const nextResultPrize = buildResultPrize(pendingSpinRecovery.result, nextResultBag)
-
-      if (recoveredMyPrizes.length) {
-        setMyPrizes(recoveredMyPrizes)
+      if (isCancelled) {
+        return
       }
 
-      setAvailableAttempts(Number(pendingSpinRecovery.attempts?.availableAttempts || 0))
-      setResultBag(nextResultBag)
-      setResultPrize(nextResultPrize)
-      setResultEntrySource("spin")
-      setResultRevealPhase("sheet-enter")
-      setResultBagFlight(null)
-      isSpinActiveRef.current = false
-      setIsSpinActive(false)
-    })
+      if (!recoveredResponse) {
+        clearPendingSpinRecovery()
+        return
+      }
 
-    clearPendingSpinRecovery()
-    void trackGameEvent("spin_result_shown", {
-      positionId: pendingSpinRecovery.result?.positionId ?? null,
-      type: pendingSpinRecovery.result?.type || "",
-      hasPromoCode: Boolean(pendingSpinRecovery.result?.promoCode),
-      recovered: true,
-    })
-  }, [activeRouletteItemsKey, activeRouletteItems.length, isSpinActive, resultBag])
+      const recoveredAssetVersion = getBootstrapAssetVersion(
+        pendingSpinRecovery.assetVersion || getAssetVersion(recoveredResponse),
+      )
+      const recoveredMyPrizes = normalizeMyPrizes(
+        recoveredResponse.myPrizes,
+        recoveredAssetVersion,
+      )
+
+      startTransition(() => {
+        const nextResultBag = buildResultBag(recoveredResponse.result, activeRouletteItems)
+        const nextResultPrize = buildResultPrize(recoveredResponse.result, nextResultBag)
+
+        setMyPrizes(recoveredMyPrizes)
+        setAvailableAttempts(Number(recoveredResponse.attempts?.availableAttempts || 0))
+        setResultBag(nextResultBag)
+        setResultPrize(nextResultPrize)
+        setResultEntrySource("spin")
+        setResultRevealPhase("sheet-enter")
+        setResultBagFlight(null)
+        isSpinActiveRef.current = false
+        setIsSpinActive(false)
+      })
+
+      clearPendingSpinRecovery()
+      void trackGameEvent("spin_result_shown", {
+        positionId: recoveredResponse.result?.positionId ?? null,
+        type: recoveredResponse.result?.type || "",
+        hasPromoCode: Boolean(recoveredResponse.result?.promoCode),
+        recovered: true,
+      })
+    }
+
+    void restorePendingSpin()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeRouletteItems, activeRouletteItemsKey, isSpinActive, resultBag, resolveSpinResponse])
 
   useEffect(() => {
     const resultBagElement = resultBagFlightRef.current

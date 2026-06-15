@@ -10,6 +10,7 @@ import {
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
+  getUserAttemptSummary,
 } from "./userStore.js";
 import { getProjectState } from "./appStateStore.js";
 
@@ -1810,6 +1811,22 @@ function buildFallbackPromoCode(prize, usedCount = 0) {
   return `${base || "PRIZE"}-${String(prize.id).padStart(4, "0")}-${String(usedCount + 1).padStart(4, "0")}`;
 }
 
+function buildSpinResultPayload(prize, promoCode = "", awardedPrizeId = null) {
+  return {
+    positionId: prize?.id ?? null,
+    type: prize?.type || "Приз",
+    title: prize?.title || "",
+    myPrizeText: prize?.myPrizeText || prize?.title || "",
+    fullTitle: prize?.title || "",
+    description: prize?.rouletteDescription || "",
+    image: prize?.rouletteImage?.previewUrl || "",
+    promoCode: String(promoCode || "").trim(),
+    promoCodeIssued: Boolean(promoCode),
+    awardedPrizeId: Number(awardedPrizeId) || null,
+    expiresAt: formatDateLabel(prize?.activeTo),
+  };
+}
+
 export async function getGameBootstrap(userInfo = {}) {
   const user = await getOrCreateUser(userInfo);
   const attempts = await ensureDailyAttemptGrant(user.id);
@@ -1981,36 +1998,132 @@ export async function spinPrize(userInfo = {}) {
 
     const myPrizes = await listAwardedPrizesForUser(rawUser.id, client);
 
-    await logGameEvent(userInfo, "spin_result", {
+    const resultPayload = buildSpinResultPayload(selectedPrize, promoCode, awardedPrizeId);
+    const spinEvent = await logGameEvent(userInfo, "spin_result", {
       source: "backend",
       sessionId: userInfo.sessionId,
       client,
       details: {
         userId: Number(rawUser.id),
-        positionId: selectedPrize.id,
-        type: selectedPrize.type,
-        title: selectedPrize.myPrizeText || selectedPrize.title,
-        fullTitle: selectedPrize.title,
-        promoCodeIssued: Boolean(promoCode),
+        positionId: resultPayload.positionId,
+        type: resultPayload.type,
+        title: resultPayload.myPrizeText,
+        myPrizeText: resultPayload.myPrizeText,
+        fullTitle: resultPayload.fullTitle,
+        description: resultPayload.description,
+        image: resultPayload.image,
+        expiresAt: resultPayload.expiresAt,
+        awardedPrizeId: resultPayload.awardedPrizeId,
+        promoCodeIssued: resultPayload.promoCodeIssued,
         myPrizesCount: myPrizes.length,
         availableAttempts: attemptsAfterConsume.availableAttempts,
       },
     });
 
     return {
-      result: {
-        positionId: selectedPrize.id,
-        type: selectedPrize.type,
-        title: selectedPrize.title,
-        myPrizeText: selectedPrize.myPrizeText || selectedPrize.title,
-        fullTitle: selectedPrize.title,
-        description: selectedPrize.rouletteDescription || "",
-        image: selectedPrize.rouletteImage?.previewUrl || "",
-        promoCode,
-        expiresAt: formatDateLabel(selectedPrize.activeTo),
+      spin: {
+        id: Number(spinEvent.id),
+        awardedPrizeId,
       },
+      result: resultPayload,
       myPrizes: serializeMyPrizesForFrontend(myPrizes),
       attempts: attemptsAfterConsume,
+    };
+  });
+}
+
+export async function getSpinResult(userInfo = {}, payload = {}) {
+  return withTransaction(async (client) => {
+    const rawUser = await getOrCreateUser(userInfo, client);
+    const spinId = Number(payload?.spinId) || 0;
+
+    if (!spinId) {
+      const error = new Error("spinId is required");
+      error.statusCode = 400;
+      error.code = "SPIN_ID_REQUIRED";
+      throw error;
+    }
+
+    const spinEventResult = await client.query(
+      `
+        SELECT id, details
+        FROM game_event_logs
+        WHERE id = $1
+          AND user_id = $2
+          AND event_name = 'spin_result'
+        LIMIT 1
+      `,
+      [spinId, rawUser.id],
+    );
+    const spinEventRow = spinEventResult.rows[0];
+
+    if (!spinEventRow) {
+      const error = new Error("Spin result not found");
+      error.statusCode = 404;
+      error.code = "SPIN_RESULT_NOT_FOUND";
+      throw error;
+    }
+
+    const details = spinEventRow.details && typeof spinEventRow.details === "object" && !Array.isArray(spinEventRow.details)
+      ? spinEventRow.details
+      : {};
+    const awardedPrizeId = Number(details.awardedPrizeId || 0) || null;
+    const positionId = Number(details.positionId || 0) || null;
+    let awardedPrizeRow = null;
+    let prizeRow = null;
+
+    if (awardedPrizeId) {
+      const awardedPrizeResult = await client.query(
+        `
+          SELECT id, prize_id, title, promo_code, image, expires_at
+          FROM awarded_prizes
+          WHERE id = $1
+            AND user_id = $2
+          LIMIT 1
+        `,
+        [awardedPrizeId, rawUser.id],
+      );
+      awardedPrizeRow = awardedPrizeResult.rows[0] || null;
+    }
+
+    if (positionId) {
+      const prizeResult = await client.query(
+        `
+          SELECT id, title, type, my_prize_text, roulette_description, roulette_image, active_to
+          FROM prize_positions
+          WHERE id = $1
+          LIMIT 1
+        `,
+        [positionId],
+      );
+      prizeRow = prizeResult.rows[0] || null;
+    }
+
+    const result = {
+      positionId: positionId || Number(awardedPrizeRow?.prize_id || 0) || Number(prizeRow?.id || 0) || null,
+      type: String(details.type || prizeRow?.type || "Приз").trim() || "Приз",
+      title: String(details.title || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
+      myPrizeText: String(details.myPrizeText || prizeRow?.my_prize_text || awardedPrizeRow?.title || "").trim(),
+      fullTitle: String(details.fullTitle || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
+      description: String(details.description || prizeRow?.roulette_description || "").trim(),
+      image: String(details.image || normalizeStoredImage(awardedPrizeRow?.image || prizeRow?.roulette_image)?.previewUrl || "").trim(),
+      promoCode: String(awardedPrizeRow?.promo_code || "").trim(),
+      promoCodeIssued: Boolean(details.promoCodeIssued || awardedPrizeRow?.promo_code),
+      awardedPrizeId,
+      expiresAt: String(details.expiresAt || awardedPrizeRow?.expires_at || formatDateLabel(prizeRow?.active_to)).trim(),
+    };
+    const myPrizes = await listAwardedPrizesForUser(rawUser.id, client);
+    await ensureDailyAttemptGrant(rawUser.id, client);
+    const attempts = await getUserAttemptSummary(rawUser.id, client);
+
+    return {
+      spin: {
+        id: Number(spinEventRow.id),
+        awardedPrizeId,
+      },
+      result,
+      myPrizes: serializeMyPrizesForFrontend(myPrizes),
+      attempts,
     };
   });
 }

@@ -22,23 +22,14 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Card from "components/card/Card";
 import MiniStatistics from "components/card/MiniStatistics";
 import { postJson } from "api";
+import { formatDateTimeMsk } from "utils/dateTime";
 
 function formatNumber(value) {
   return new Intl.NumberFormat("ru-RU").format(Number(value) || 0);
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeMsk(value);
 }
 
 export default function UtmPage() {

@@ -33,6 +33,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from "@chakra-ui/icons";
 import Card from "components/card/Card";
 import { postJson } from "api";
+import { formatDateTimeMsk } from "utils/dateTime";
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -58,17 +59,7 @@ function formatNumber(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeMsk(value);
 }
 
 function formatDuration(seconds) {

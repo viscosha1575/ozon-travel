@@ -10,6 +10,7 @@ const TELEGRAM_SDK_URL = 'https://telegram.org/js/telegram-web-app.js'
 const TELEGRAM_SDK_SCRIPT_ID = 'telegram-web-app-sdk'
 const MAX_SDK_URL = 'https://st.max.ru/js/max-web-app.js'
 const MAX_SDK_SCRIPT_ID = 'max-web-app-sdk'
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1'])
 
 let bootstrapPromise
 let telegramSdkPromise
@@ -17,6 +18,58 @@ let maxSdkPromise
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function isLocalDevHost() {
+  return typeof window !== 'undefined' && LOCAL_DEV_HOSTS.has(window.location.hostname)
+}
+
+function readLocalDevSearchParam(name) {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  return String(new URLSearchParams(window.location.search).get(name) || '').trim()
+}
+
+function getLocalMaxDevUser() {
+  if (!isLocalDevHost()) {
+    return null
+  }
+
+  const platformUserId = String(
+    readLocalDevSearchParam('devMaxUserId')
+    || import.meta.env.VITE_LOCAL_MAX_USER_ID
+    || '',
+  ).trim()
+
+  if (!platformUserId) {
+    return null
+  }
+
+  return {
+    platformUserId,
+    username: String(
+      readLocalDevSearchParam('devMaxUsername')
+      || import.meta.env.VITE_LOCAL_MAX_USERNAME
+      || '',
+    ).trim(),
+    firstName: String(
+      readLocalDevSearchParam('devMaxFirstName')
+      || import.meta.env.VITE_LOCAL_MAX_FIRST_NAME
+      || 'Local',
+    ).trim(),
+    lastName: String(
+      readLocalDevSearchParam('devMaxLastName')
+      || import.meta.env.VITE_LOCAL_MAX_LAST_NAME
+      || 'MAX User',
+    ).trim(),
+    languageCode: String(
+      readLocalDevSearchParam('devMaxLanguageCode')
+      || import.meta.env.VITE_LOCAL_MAX_LANGUAGE_CODE
+      || 'ru',
+    ).trim(),
+  }
 }
 
 function getTelegramWebApp() {
@@ -237,6 +290,10 @@ function resolveMiniAppHost() {
     return BROWSER_HOST
   }
 
+  if (getLocalMaxDevUser()) {
+    return MAX_HOST
+  }
+
   if (hasValue(getTelegramWebApp()?.initData) || hasValue(extractTelegramInitDataFromLocation())) {
     return TELEGRAM_HOST
   }
@@ -329,6 +386,12 @@ export function getMiniAppInitData() {
 }
 
 export function getMiniAppUser() {
+  const localMaxDevUser = getLocalMaxDevUser()
+
+  if (localMaxDevUser) {
+    return localMaxDevUser
+  }
+
   if (isTelegramMiniApp()) {
     return (
       normalizeMiniAppUser(getTelegramWebApp()?.initDataUnsafe?.user)
@@ -347,6 +410,14 @@ export function getMiniAppUser() {
 }
 
 export function getMiniAppPlatform() {
+  if (getLocalMaxDevUser()) {
+    return String(
+      readLocalDevSearchParam('devMaxPlatform')
+      || import.meta.env.VITE_LOCAL_MAX_PLATFORM
+      || 'android',
+    ).trim().toLowerCase()
+  }
+
   if (isMaxMiniApp()) {
     return String(getMaxWebApp()?.platform || extractMaxLaunchParamsFromLocation().platform || '').trim().toLowerCase()
   }
@@ -534,6 +605,9 @@ export function bootstrapMiniApp() {
       const webApp = getMiniApp()
 
       if (!webApp) {
+        syncTelegramUiState({
+          platform: getMiniAppPlatform(),
+        })
         return
       }
 
