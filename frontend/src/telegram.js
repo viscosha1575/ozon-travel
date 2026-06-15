@@ -605,9 +605,12 @@ export function bootstrapMiniApp() {
       const webApp = getMiniApp()
 
       if (!webApp) {
-        syncTelegramUiState({
-          platform: getMiniAppPlatform(),
-        })
+        if (getLocalMaxDevUser()) {
+          syncTelegramUiState({
+            platform: getMiniAppPlatform(),
+          })
+        }
+
         return
       }
 
