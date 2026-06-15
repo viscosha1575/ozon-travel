@@ -39,6 +39,9 @@ const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
 const IDLE_SPIN_CYCLE_DURATION = 36000
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const BOOTSTRAP_CACHE_SCHEMA_VERSION = 3
+const PENDING_SPIN_RECOVERY_KEY = "ozon-travel-pending-spin"
+const PENDING_SPIN_RECOVERY_SCHEMA_VERSION = 1
+const PENDING_SPIN_RECOVERY_MAX_AGE_MS = 30 * 60 * 1000
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
   "100 000 баллов Ozon и выгодные промокоды на путешествия ждут на Ленте призов!",
@@ -207,6 +210,22 @@ function readBootstrapCache() {
   return null
 }
 
+function getPersistentStorage() {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    return window.localStorage
+  } catch {
+    try {
+      return window.sessionStorage
+    } catch {
+      return null
+    }
+  }
+}
+
 function writeBootstrapCache(payload) {
   if (typeof window === "undefined") {
     return
@@ -221,6 +240,83 @@ function writeBootstrapCache(payload) {
     window.sessionStorage.setItem(BOOTSTRAP_CACHE_KEY, JSON.stringify(payload))
   } catch {
     // Ignore sessionStorage failures.
+  }
+}
+
+function readPendingSpinRecovery() {
+  const storage = getPersistentStorage()
+
+  if (!storage) {
+    return null
+  }
+
+  try {
+    const rawValue = storage.getItem(PENDING_SPIN_RECOVERY_KEY)
+
+    if (!rawValue) {
+      return null
+    }
+
+    const parsedValue = JSON.parse(rawValue)
+    const schemaVersion = Number(parsedValue?.schemaVersion || 0)
+    const createdAt = Number(parsedValue?.createdAt || 0)
+
+    if (schemaVersion !== PENDING_SPIN_RECOVERY_SCHEMA_VERSION) {
+      storage.removeItem(PENDING_SPIN_RECOVERY_KEY)
+      return null
+    }
+
+    if (!createdAt || (Date.now() - createdAt) > PENDING_SPIN_RECOVERY_MAX_AGE_MS) {
+      storage.removeItem(PENDING_SPIN_RECOVERY_KEY)
+      return null
+    }
+
+    return parsedValue
+  } catch {
+    try {
+      storage.removeItem(PENDING_SPIN_RECOVERY_KEY)
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  return null
+}
+
+function writePendingSpinRecovery(payload) {
+  const storage = getPersistentStorage()
+
+  if (!storage) {
+    return
+  }
+
+  try {
+    if (!payload || typeof payload !== "object") {
+      storage.removeItem(PENDING_SPIN_RECOVERY_KEY)
+      return
+    }
+
+    storage.setItem(PENDING_SPIN_RECOVERY_KEY, JSON.stringify({
+      schemaVersion: PENDING_SPIN_RECOVERY_SCHEMA_VERSION,
+      createdAt: Date.now(),
+      ...payload,
+    }))
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function clearPendingSpinRecovery() {
+  const storage = getPersistentStorage()
+
+  if (!storage) {
+    return
+  }
+
+  try {
+    storage.removeItem(PENDING_SPIN_RECOVERY_KEY)
+  } catch {
+    // Ignore storage failures.
   }
 }
 
@@ -962,6 +1058,23 @@ export default function GameScreen({
         image: withAssetVersion(item.image, assetVersion),
       }))
       : []
+    const cachedBootstrap = readBootstrapCache()
+
+    writePendingSpinRecovery({
+      assetVersion,
+      result: nextResult,
+      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
+      attempts: spinResponse?.attempts || {},
+    })
+
+    writeBootstrapCache({
+      schemaVersion: BOOTSTRAP_CACHE_SCHEMA_VERSION,
+      assetVersion: assetVersion || cachedBootstrap?.assetVersion || 0,
+      rouletteItems: Array.isArray(cachedBootstrap?.rouletteItems) ? cachedBootstrap.rouletteItems : [],
+      myPrizes: Array.isArray(spinResponse?.myPrizes) ? spinResponse.myPrizes : [],
+      attempts: spinResponse?.attempts || {},
+      referral: cachedBootstrap?.referral || {},
+    })
 
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
     const currentProgressSteps = normalizeLoopProgress(
@@ -1094,13 +1207,14 @@ export default function GameScreen({
               isSpinActiveRef.current = false
               setIsSpinActive(false)
             })
-          }, RESULT_REVEAL_DELAY)
 
-          void trackGameEvent("spin_result_shown", {
-            positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
-            type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
-            hasPromoCode: Boolean(spinState.result?.promoCode),
-          })
+            clearPendingSpinRecovery()
+            void trackGameEvent("spin_result_shown", {
+              positionId: spinState.result?.positionId ?? activeRouletteItems[spinState.targetBagIndex]?.id ?? null,
+              type: spinState.result?.type || activeRouletteItems[spinState.targetBagIndex]?.type || "",
+              hasPromoCode: Boolean(spinState.result?.promoCode),
+            })
+          }, RESULT_REVEAL_DELAY)
         }, durationMs)
       })
     })
@@ -1286,6 +1400,7 @@ export default function GameScreen({
     setIsResultCopied(false)
     setResultEntrySource("spin")
     clearTimeout(resultRevealTimeoutRef.current)
+    clearPendingSpinRecovery()
     resetResultState()
     resetCarousel(centerBagIndexRef.current)
   }
@@ -1560,6 +1675,52 @@ export default function GameScreen({
   useEffect(() => {
     isSpinActiveRef.current = isSpinActive
   }, [isSpinActive])
+
+  useEffect(() => {
+    if (isSpinActive || resultBag || !activeRouletteItems.length) {
+      return
+    }
+
+    const pendingSpinRecovery = readPendingSpinRecovery()
+
+    if (!pendingSpinRecovery?.result) {
+      return
+    }
+
+    const recoveredAssetVersion = getBootstrapAssetVersion(
+      pendingSpinRecovery.assetVersion || getAssetVersion(pendingSpinRecovery),
+    )
+    const recoveredMyPrizes = normalizeMyPrizes(
+      pendingSpinRecovery.myPrizes,
+      recoveredAssetVersion,
+    )
+
+    startTransition(() => {
+      const nextResultBag = buildResultBag(pendingSpinRecovery.result, activeRouletteItems)
+      const nextResultPrize = buildResultPrize(pendingSpinRecovery.result, nextResultBag)
+
+      if (recoveredMyPrizes.length) {
+        setMyPrizes(recoveredMyPrizes)
+      }
+
+      setAvailableAttempts(Number(pendingSpinRecovery.attempts?.availableAttempts || 0))
+      setResultBag(nextResultBag)
+      setResultPrize(nextResultPrize)
+      setResultEntrySource("spin")
+      setResultRevealPhase("sheet-enter")
+      setResultBagFlight(null)
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+    })
+
+    clearPendingSpinRecovery()
+    void trackGameEvent("spin_result_shown", {
+      positionId: pendingSpinRecovery.result?.positionId ?? null,
+      type: pendingSpinRecovery.result?.type || "",
+      hasPromoCode: Boolean(pendingSpinRecovery.result?.promoCode),
+      recovered: true,
+    })
+  }, [activeRouletteItemsKey, activeRouletteItems.length, isSpinActive, resultBag])
 
   useEffect(() => {
     const resultBagElement = resultBagFlightRef.current
