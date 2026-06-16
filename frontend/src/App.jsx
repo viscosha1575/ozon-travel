@@ -17,6 +17,7 @@ const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.h
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
 const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
+const INITIAL_INTRO_VISIBILITY_FALLBACK_MS = 1200
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 let embeddedPageModulePromise = null
 
@@ -360,6 +361,7 @@ function App() {
     let isCancelled = false
     let firstFrameId = 0
     let secondFrameId = 0
+    let fallbackTimeoutId = 0
 
     const commitIntroMount = () => {
       if (isCancelled || initialIntroMountCommittedRef.current) {
@@ -395,12 +397,16 @@ function App() {
       window.addEventListener("pageshow", handleVisibilityReady)
       window.addEventListener("focus", handleVisibilityReady)
       document.addEventListener("visibilitychange", handleVisibilityReady)
+      fallbackTimeoutId = window.setTimeout(() => {
+        commitIntroMount()
+      }, INITIAL_INTRO_VISIBILITY_FALLBACK_MS)
     }
 
     return () => {
       isCancelled = true
       window.cancelAnimationFrame(firstFrameId)
       window.cancelAnimationFrame(secondFrameId)
+      window.clearTimeout(fallbackTimeoutId)
       window.removeEventListener("pageshow", handleVisibilityReady)
       window.removeEventListener("focus", handleVisibilityReady)
       document.removeEventListener("visibilitychange", handleVisibilityReady)
