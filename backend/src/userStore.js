@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 import { query, withTransaction } from "./db.js";
 import { buildOpenAppNotificationButton, sendMaxUserTextNotification } from "./maxBroadcastService.js";
 import { buildStartParam, parseStartParam } from "./startParam.js";
@@ -97,6 +99,40 @@ function buildReferralCode(value) {
     .padStart(6, "0")}`;
 }
 
+function buildReferralCodeBase(value) {
+  return String(value || "")
+    .replace(/\W+/g, "")
+    .slice(-6)
+    .padStart(6, "0");
+}
+
+function buildUniqueReferralCodeCandidate(value) {
+  return `OZONTRAVEL-${buildReferralCodeBase(value)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`
+}
+
+async function generateUniqueReferralCode(executor, platformUserId) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const candidate = buildUniqueReferralCodeCandidate(platformUserId);
+    const existingResult = await executor.query(
+      `
+        SELECT 1
+        FROM app_users
+        WHERE referral_code = $1
+        LIMIT 1
+      `,
+      [candidate],
+    );
+
+    if (!existingResult.rowCount) {
+      return candidate;
+    }
+  }
+
+  const fallbackCode = `${buildReferralCode(platformUserId)}-${Date.now().toString(36).toUpperCase()}`;
+
+  return fallbackCode;
+}
+
 function getMoscowDateValue() {
   return new Intl.DateTimeFormat("sv-SE", {
     timeZone: MSK_TIMEZONE,
@@ -146,7 +182,7 @@ async function upsertUser(executor, userInfo = {}) {
   const languageCode = String(userInfo.languageCode || "").trim();
   const startParam = String(userInfo.startParam || "").trim();
   const parsedStartParam = parseStartParam(startParam);
-  const referralCode = buildReferralCode(resolvedPlatformUserId);
+  const referralCode = await generateUniqueReferralCode(executor, resolvedPlatformUserId);
   const result = await executor.query(
     `
       INSERT INTO app_users (
