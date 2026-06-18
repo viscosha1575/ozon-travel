@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "referrals:audit-dupes": "node scripts/reportDuplicateReferralCodes.js",
+    "referrals:plan-recodes": "node scripts/planDuplicateReferralCodeRecoding.js",
+    "referrals:apply-no-traffic-recodes": "node scripts/applyNoTrafficReferralCodeRecoding.js",
+    "referrals:finalize-uniqueness": "node scripts/finalizeReferralCodeUniqueness.js"
   },
   "dependencies": {
     "bullmq": "^5.77.7",

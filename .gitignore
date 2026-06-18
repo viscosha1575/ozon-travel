@@ -10,6 +10,7 @@ worker/node_modules/
 backend/uploads/
 admin-panel/
 test-data/
+exports/
 
 ## Environment files
 .env

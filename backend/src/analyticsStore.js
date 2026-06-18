@@ -367,6 +367,7 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
       totalUniqueDailyVisitsCount: 0,
       averageDauCount: 0,
       sessionsStartedCount: 0,
+      sessionsStartedUniqueUsersCount: 0,
       finishedSessionsCount: 0,
       playersWithFinishedGameCount: 0,
       currentlyOnlinePlayersCount: 0,
@@ -401,6 +402,7 @@ function createEmptyAnalyticsOverview(payload = {}, rangeContext = getRangeConte
       newSubscribers: [],
       totalPlayers: [],
       sessionsStarted: [],
+      sessionsStartedUniqueUsers: [],
       sessionsFinished: [],
     },
     recentSessions: [],
@@ -643,6 +645,7 @@ export async function getAnalyticsOverview(payload = {}) {
     ANALYTICS_METRICS.referralsCreated,
     ANALYTICS_METRICS.promoCodeApplyClicks,
     ANALYTICS_METRICS.sessionsStarted,
+    ANALYTICS_METRICS.sessionsStartedUniqueUsers,
     ANALYTICS_METRICS.sessionsFinished,
   ];
   const rangeWhere = buildAnalyticsRangeWhere(rangeContext.rangeStartToken, rangeContext.rangeEndToken, "date");
@@ -927,6 +930,12 @@ export async function getAnalyticsOverview(payload = {}) {
     chartStartToken,
     chartEndToken,
   );
+  const sessionsStartedUniqueUsersSeries = buildSeriesFromAggregateRows(
+    dailyMetricRows.filter((row) => row.metric === ANALYTICS_METRICS.sessionsStartedUniqueUsers),
+    rangeContext.effectiveRange === "today" ? "custom" : rangeContext.effectiveRange,
+    chartStartToken,
+    chartEndToken,
+  );
   const sessionsFinishedSeries = buildSeriesFromAggregateRows(
     seriesSourceRows.filter((row) => row.metric === ANALYTICS_METRICS.sessionsFinished),
     rangeContext.effectiveRange,
@@ -987,6 +996,7 @@ export async function getAnalyticsOverview(payload = {}) {
       totalUniqueDailyVisitsCount,
       averageDauCount,
       sessionsStartedCount: Number(summaryRow.sessions_started_count || 0),
+      sessionsStartedUniqueUsersCount: Number(summaryRow.entered_game_count || 0),
       finishedSessionsCount: Number(summaryRow.finished_sessions_count || 0),
       playersWithFinishedGameCount: Number(summaryRow.finished_players_count || 0),
       currentlyOnlinePlayersCount: Number(usersResult.rows[0]?.currently_online_players_count || 0),
@@ -1019,6 +1029,7 @@ export async function getAnalyticsOverview(payload = {}) {
       newSubscribers: newSubscribersSeries,
       totalPlayers: totalPlayersSeries,
       sessionsStarted: sessionsStartedSeries,
+      sessionsStartedUniqueUsers: sessionsStartedUniqueUsersSeries,
       sessionsFinished: sessionsFinishedSeries,
     },
     recentSessions: recentSessionsResult.rows.map((session) => ({

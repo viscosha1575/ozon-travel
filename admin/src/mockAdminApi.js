@@ -1870,6 +1870,14 @@ function buildSeries(items, dateKey, range, rangeStart = null, rangeEnd = null) 
   }));
 }
 
+function buildSeriesFromBucketMap(bucketMap, range, rangeStart = null, rangeEnd = null) {
+  return getBucketDates(range, rangeStart, rangeEnd).map((date) => ({
+    key: bucketKey(date, range),
+    label: bucketLabel(date, range),
+    value: Number(bucketMap.get(bucketKey(date, range)) || 0),
+  }));
+}
+
 function buildAnalyticsOverview(payload = {}) {
   const requestedRange = ["today", "7d", "30d", "all"].includes(payload?.range) ? payload.range : "today";
   const customRangeStart = parseDateStart(payload?.dateFrom);
@@ -1973,6 +1981,7 @@ function buildAnalyticsOverview(payload = {}) {
       totalUniqueDailyVisitsCount,
       averageDauCount,
       sessionsStartedCount: inRangeSessions.length,
+      sessionsStartedUniqueUsersCount: inRangeSessionPlayers.size,
       finishedSessionsCount: finishedInRangeSessions.length,
       playersWithFinishedGameCount: new Set(finishedInRangeSessions.map((session) => session.playerId)).size,
       currentlyOnlinePlayersCount: players.filter((player) => Date.now() - new Date(player.lastSeenAt).getTime() <= 15 * 60 * 1000).length,
@@ -2020,6 +2029,14 @@ function buildAnalyticsOverview(payload = {}) {
       ),
       totalPlayers,
       sessionsStarted: buildSeries(chartInRangeSessions, "startedAt", range, chartRangeStart, chartRangeEnd),
+      sessionsStartedUniqueUsers: buildSeriesFromBucketMap(
+        new Map(
+          [...uniquePlayersByDay.entries()].map(([key, playerIds]) => [key, playerIds.size]),
+        ),
+        range === "today" ? "custom" : range,
+        chartRangeStart,
+        chartRangeEnd,
+      ),
       sessionsFinished: buildSeries(chartFinishedInRangeSessions, "finishedAt", range, chartRangeStart, chartRangeEnd),
     },
     recentSessions: inRangeSessions

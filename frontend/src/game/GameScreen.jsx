@@ -42,6 +42,7 @@ const BOOTSTRAP_CACHE_SCHEMA_VERSION = 3
 const PENDING_SPIN_RECOVERY_KEY = "ozon-travel-pending-spin"
 const PENDING_SPIN_RECOVERY_SCHEMA_VERSION = 1
 const PENDING_SPIN_RECOVERY_MAX_AGE_MS = 30 * 60 * 1000
+const SPIN_RESULT_RECOVERY_TIMEOUT_BUFFER_MS = 1800
 const NON_PRIZE_COPY = "А ваш багаж прилетит следующим рейсом.\nВозвращайтесь за ним позже!"
 const REFERRAL_SHARE_MESSAGE = [
   "100 000 баллов Ozon и выгодные промокоды на путешествия ждут на Ленте призов!",
@@ -709,6 +710,7 @@ export default function GameScreen({
   const idleStartRetryFrameRef = useRef(0)
   const transitionResetFrameRef = useRef(0)
   const spinCompletionTimeoutRef = useRef(0)
+  const spinResultRecoveryTimeoutRef = useRef(0)
   const idleSpinTimeoutRef = useRef(0)
   const overlayTimeoutRef = useRef(0)
   const resultRevealTimeoutRef = useRef(0)
@@ -720,6 +722,7 @@ export default function GameScreen({
   const pendingSpinRef = useRef(null)
   const centerBagIndexRef = useRef(0)
   const isSpinActiveRef = useRef(false)
+  const isSpinResultPendingRef = useRef(false)
   const isIdleSpinActiveRef = useRef(false)
   const isMountedRef = useRef(true)
   const [rouletteItems, setRouletteItems] = useState(initialRouletteItems)
@@ -747,6 +750,7 @@ export default function GameScreen({
   const [trackItems, setTrackItems] = useState(initialTrackItems)
   const [trackTranslate, setTrackTranslate] = useState(0)
   const [spinError, setSpinError] = useState("")
+  const [isSpinResultPending, setIsSpinResultPending] = useState(false)
 
   const measureStep = () => {
     const nextStep = roundToDevicePixel((slotRef.current?.getBoundingClientRect().height ?? 0) + SLOT_GAP)
@@ -968,7 +972,7 @@ export default function GameScreen({
     idleStartRetryFrameRef.current = requestAnimationFrame(() => {
       idleStartRetryFrameRef.current = 0
 
-      if (!isMountedRef.current || isSpinActiveRef.current || resultBag || !activeRouletteItems.length) {
+      if (!isMountedRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
         return
       }
 
@@ -977,7 +981,7 @@ export default function GameScreen({
   }
 
   const startIdleSpin = () => {
-    if (isSpinActiveRef.current || resultBag || !activeRouletteItems.length) {
+    if (isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
       return
     }
 
@@ -999,8 +1003,8 @@ export default function GameScreen({
 
     const runIdleCycle = () => {
       idleAnimationFrameRef.current = requestAnimationFrame(() => {
-        if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
-          if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+        if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
+          if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
             scheduleIdleSpinRetry()
           }
           return
@@ -1011,8 +1015,8 @@ export default function GameScreen({
         void carouselMotionRef.current.offsetWidth
 
         idleAnimationFrameRef.current = requestAnimationFrame(() => {
-          if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
-            if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+          if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
+            if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
               scheduleIdleSpinRetry()
             }
             return
@@ -1023,8 +1027,8 @@ export default function GameScreen({
           virtualTranslateRef.current = finalTranslate
 
           idleSpinTimeoutRef.current = window.setTimeout(() => {
-            if (!carouselMotionRef.current || isSpinActiveRef.current || resultBag || !isIdleSpinActiveRef.current) {
-              if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+            if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
+              if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
                 scheduleIdleSpinRetry()
               }
               return
@@ -1071,8 +1075,130 @@ export default function GameScreen({
     }
   }
 
+  const clearSpinResultRecoveryTimeout = useCallback(() => {
+    clearTimeout(spinResultRecoveryTimeoutRef.current)
+  }, [])
+
+  const presentSpinResult = useCallback((spinResponse, options = {}) => {
+    if (!isValidSpinResponsePayload(spinResponse)) {
+      return false
+    }
+
+    const resolvedAssetVersion = getBootstrapAssetVersion(
+      options.assetVersion || getAssetVersion(spinResponse),
+    )
+    const normalizedMyPrizes = Array.isArray(options.myPrizes)
+      ? options.myPrizes
+      : normalizeMyPrizes(spinResponse.myPrizes, resolvedAssetVersion)
+    const normalizedCenterBagIndex = activeRouletteItems.length
+      ? getLoopedIndex(options.targetBagIndex ?? centerBagIndexRef.current, activeRouletteItems.length)
+      : centerBagIndexRef.current
+    const nextResultBag = buildResultBag(spinResponse.result, activeRouletteItems)
+    const nextResultPrize = buildResultPrize(spinResponse.result, nextResultBag)
+    const shouldAnimateBagEntry = Boolean(options.resultOriginRect && nextResultBag)
+
+    clearIdleSpin()
+    clearSpinResultRecoveryTimeout()
+    clearTimeout(spinCompletionTimeoutRef.current)
+    clearTimeout(resultRevealTimeoutRef.current)
+    cancelAnimationFrame(animationFrameRef.current)
+    pendingSpinRef.current = null
+    setCarouselMotionTransition("")
+
+    startTransition(() => {
+      setCenterBagIndex(normalizedCenterBagIndex)
+      setResultBag(nextResultBag)
+      setResultPrize(nextResultPrize)
+      setMyPrizes(normalizedMyPrizes)
+      setAvailableAttempts(Number(spinResponse.attempts?.availableAttempts || 0))
+      setResultEntrySource("spin")
+      setResultRevealPhase(shouldAnimateBagEntry ? "bag-enter" : "sheet-enter")
+      setResultBagFlight(
+        shouldAnimateBagEntry
+          ? {
+            path: nextResultBag.path,
+            label: nextResultBag.label,
+            originRect: options.resultOriginRect,
+          }
+          : null
+      )
+      setActiveOverlay(null)
+      setRenderedOverlay(null)
+      setIsOverlayClosing(false)
+      setIsSpinResultPending(false)
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+    })
+
+    clearPendingSpinRecovery()
+    void trackGameEvent("spin_result_shown", {
+      positionId: spinResponse.result?.positionId ?? null,
+      type: spinResponse.result?.type || "",
+      hasPromoCode: Boolean(spinResponse.result?.promoCode),
+      recovered: Boolean(options.recovered),
+    })
+
+    return true
+  }, [activeRouletteItems, clearSpinResultRecoveryTimeout])
+
+  const restorePendingSpinResult = useCallback(async (pendingSpinRecovery = readPendingSpinRecovery()) => {
+    if (!pendingSpinRecovery) {
+      pendingSpinRef.current = null
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+      setIsSpinResultPending(false)
+      return false
+    }
+
+    const canonicalSpinResponse = await resolveSpinResponse({
+      spin: {
+        id: pendingSpinRecovery.spinId,
+      },
+    })
+    const recoveredResponse = isValidSpinResponsePayload(canonicalSpinResponse)
+      ? canonicalSpinResponse
+      : (
+        isValidSpinResultPayload(pendingSpinRecovery.result)
+        && Array.isArray(pendingSpinRecovery.myPrizes)
+        && isPlainObject(pendingSpinRecovery.attempts)
+          ? {
+            spin: {
+              id: normalizeSpinId(pendingSpinRecovery.spinId),
+            },
+            result: pendingSpinRecovery.result,
+            myPrizes: pendingSpinRecovery.myPrizes,
+            attempts: pendingSpinRecovery.attempts,
+          }
+          : null
+      )
+
+    if (!recoveredResponse) {
+      clearSpinResultRecoveryTimeout()
+      clearPendingSpinRecovery()
+      pendingSpinRef.current = null
+      isSpinActiveRef.current = false
+      setIsSpinActive(false)
+      setIsSpinResultPending(false)
+      return false
+    }
+
+    const recoveredAssetVersion = getBootstrapAssetVersion(
+      pendingSpinRecovery.assetVersion || getAssetVersion(recoveredResponse),
+    )
+    const recoveredMyPrizes = normalizeMyPrizes(
+      recoveredResponse.myPrizes,
+      recoveredAssetVersion,
+    )
+
+    return presentSpinResult(recoveredResponse, {
+      assetVersion: recoveredAssetVersion,
+      myPrizes: recoveredMyPrizes,
+      recovered: true,
+    })
+  }, [clearSpinResultRecoveryTimeout, presentSpinResult, resolveSpinResponse])
+
   const handleSpin = async () => {
-    if (isSpinActive || resultBag || !activeRouletteItems.length || availableAttempts <= 0) {
+    if (isSpinActive || isSpinResultPending || resultBag || !activeRouletteItems.length || availableAttempts <= 0) {
       return
     }
 
@@ -1098,6 +1224,7 @@ export default function GameScreen({
     } catch (error) {
       logDevWarn("Spin request failed", error)
 
+      setIsSpinResultPending(false)
       isSpinActiveRef.current = false
       setIsSpinActive(false)
       resetCarousel(currentCenterBagIndex)
@@ -1117,6 +1244,7 @@ export default function GameScreen({
     if (!isValidSpinResponsePayload(canonicalSpinResponse)) {
       logDevWarn("Spin response validation failed", spinResponse)
 
+      setIsSpinResultPending(false)
       isSpinActiveRef.current = false
       setIsSpinActive(false)
       resetCarousel(currentCenterBagIndex)
@@ -1149,6 +1277,10 @@ export default function GameScreen({
     const cachedBootstrap = readBootstrapCache()
     const spinId = normalizeSpinId(canonicalSpinResponse.spin?.id)
 
+    setAvailableAttempts(Number(canonicalSpinResponse.attempts?.availableAttempts || 0))
+    setMyPrizes(nextMyPrizes)
+    setIsSpinResultPending(true)
+
     writePendingSpinRecovery({
       spinId,
       assetVersion,
@@ -1177,26 +1309,10 @@ export default function GameScreen({
       setIsResultCopied(false)
       resetCarousel(currentCenterBagIndex)
 
-      startTransition(() => {
-        const nextResultBag = buildResultBag(nextResult, activeRouletteItems)
-        const nextResultPrize = buildResultPrize(nextResult, nextResultBag)
-
-        setResultBag(nextResultBag)
-        setResultPrize(nextResultPrize)
-        setMyPrizes(nextMyPrizes)
-        setAvailableAttempts(Number(canonicalSpinResponse.attempts?.availableAttempts || 0))
-        setResultEntrySource("spin")
-        setResultRevealPhase("sheet-enter")
-        setResultBagFlight(null)
-        isSpinActiveRef.current = false
-        setIsSpinActive(false)
-      })
-
-      clearPendingSpinRecovery()
-      void trackGameEvent("spin_result_shown", {
-        positionId: canonicalSpinResponse.result?.positionId ?? null,
-        type: canonicalSpinResponse.result?.type || "",
-        hasPromoCode: Boolean(canonicalSpinResponse.result?.promoCode),
+      presentSpinResult(canonicalSpinResponse, {
+        assetVersion,
+        myPrizes: nextMyPrizes,
+        targetBagIndex: currentCenterBagIndex,
       })
       return
     }
@@ -1274,6 +1390,19 @@ export default function GameScreen({
     cancelAnimationFrame(animationFrameRef.current)
     cancelAnimationFrame(transitionResetFrameRef.current)
     clearTimeout(spinCompletionTimeoutRef.current)
+    clearSpinResultRecoveryTimeout()
+    spinResultRecoveryTimeoutRef.current = window.setTimeout(() => {
+      if (resultBag || !readPendingSpinRecovery()) {
+        return
+      }
+
+      void restorePendingSpinResult().then((wasRecovered) => {
+        if (!wasRecovered) {
+          void loadGameBootstrap()
+          openErrorOverlay("Не удалось завершить показ результата. Состояние игры обновлено.")
+        }
+      })
+    }, durationMs + RESULT_REVEAL_DELAY + RESULT_BAG_ANIMATION_DURATION + SPIN_RESULT_RECOVERY_TIMEOUT_BUFFER_MS)
     animationFrameRef.current = requestAnimationFrame(() => {
       const spinState = pendingSpinRef.current
 
@@ -1310,34 +1439,17 @@ export default function GameScreen({
               || measureContainedImageRect(centerSlotImageRef.current)
               || measureRectSnapshot(centerSlotMediaRef.current)
 
-            startTransition(() => {
-              const nextResultBag = buildResultBag(spinState.result, activeRouletteItems)
-              const nextResultPrize = buildResultPrize(spinState.result, nextResultBag)
-              setCenterBagIndex(spinState.targetBagIndex)
-              setResultBag(nextResultBag)
-              setResultPrize(nextResultPrize)
-              setMyPrizes(spinState.myPrizes)
-              setAvailableAttempts(Number(spinState.attempts?.availableAttempts || 0))
-              setResultEntrySource("spin")
-              setResultRevealPhase(resultOriginRect ? "bag-enter" : "sheet-enter")
-              setResultBagFlight(
-                resultOriginRect && nextResultBag
-                  ? {
-                    path: nextResultBag.path,
-                    label: nextResultBag.label,
-                    originRect: resultOriginRect,
-                  }
-                  : null
-              )
-              isSpinActiveRef.current = false
-              setIsSpinActive(false)
-            })
-
-            clearPendingSpinRecovery()
-            void trackGameEvent("spin_result_shown", {
-              positionId: spinState.result?.positionId ?? null,
-              type: spinState.result?.type || "",
-              hasPromoCode: Boolean(spinState.result?.promoCode),
+            presentSpinResult({
+              spin: {
+                id: spinId,
+              },
+              result: spinState.result,
+              myPrizes: spinState.myPrizes,
+              attempts: spinState.attempts || {},
+            }, {
+              myPrizes: spinState.myPrizes,
+              targetBagIndex: spinState.targetBagIndex,
+              resultOriginRect,
             })
           }, RESULT_REVEAL_DELAY)
         }, durationMs)
@@ -1346,7 +1458,7 @@ export default function GameScreen({
   }
 
   const handlePrimaryActionClick = () => {
-    if (isSpinActive || !activeRouletteItems.length) {
+    if (isSpinActive || isSpinResultPending || !activeRouletteItems.length) {
       return
     }
 
@@ -1519,11 +1631,13 @@ export default function GameScreen({
       prizeType: resultPrize?.type || resultBag?.type || "",
     })
     clearIdleSpin()
+    clearSpinResultRecoveryTimeout()
     pendingSpinRef.current = null
     setResultBag(null)
     setResultPrize(null)
     setIsResultCopied(false)
     setResultEntrySource("spin")
+    setIsSpinResultPending(false)
     clearTimeout(resultRevealTimeoutRef.current)
     clearPendingSpinRecovery()
     resetResultState()
@@ -1739,7 +1853,7 @@ export default function GameScreen({
         setCarouselMotionTransition("none")
         applyTrackStyles(baseTranslate)
 
-        if (!isSpinActiveRef.current && !resultBag && activeRouletteItems.length) {
+        if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
           scheduleIdleSpinRetry()
         }
       }
@@ -1764,10 +1878,11 @@ export default function GameScreen({
       clearIdleSpin()
       cancelAnimationFrame(animationFrameRef.current)
       clearTimeout(spinCompletionTimeoutRef.current)
+      clearSpinResultRecoveryTimeout()
       clearTimeout(overlayTimeoutRef.current)
       clearTimeout(resultRevealTimeoutRef.current)
     }
-  }, [activeRouletteItemsKey])
+  }, [activeRouletteItemsKey, clearSpinResultRecoveryTimeout])
 
   useEffect(() => {
     if (!activeRouletteItems.length) {
@@ -1780,7 +1895,7 @@ export default function GameScreen({
       return undefined
     }
 
-    if (isSpinActive) {
+    if (isSpinActive || isSpinResultPending) {
       clearIdleSpin()
       return undefined
     }
@@ -1790,7 +1905,7 @@ export default function GameScreen({
     return () => {
       clearIdleSpin()
     }
-  }, [activeRouletteItemsKey, isSpinActive, resultBag, centerBagIndex, trackItems.length])
+  }, [activeRouletteItemsKey, isSpinActive, isSpinResultPending, resultBag, centerBagIndex, trackItems.length])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
@@ -1800,6 +1915,10 @@ export default function GameScreen({
   useEffect(() => {
     isSpinActiveRef.current = isSpinActive
   }, [isSpinActive])
+
+  useEffect(() => {
+    isSpinResultPendingRef.current = isSpinResultPending
+  }, [isSpinResultPending])
 
   useEffect(() => {
     if (isSpinActive || resultBag) {
@@ -1813,76 +1932,17 @@ export default function GameScreen({
     }
     let isCancelled = false
 
-    const restorePendingSpin = async () => {
-      const canonicalSpinResponse = await resolveSpinResponse({
-        spin: {
-          id: pendingSpinRecovery.spinId,
-        },
-      })
-      const recoveredResponse = isValidSpinResponsePayload(canonicalSpinResponse)
-        ? canonicalSpinResponse
-        : (
-          isValidSpinResultPayload(pendingSpinRecovery.result)
-          && Array.isArray(pendingSpinRecovery.myPrizes)
-          && isPlainObject(pendingSpinRecovery.attempts)
-            ? {
-              spin: {
-                id: normalizeSpinId(pendingSpinRecovery.spinId),
-              },
-              result: pendingSpinRecovery.result,
-              myPrizes: pendingSpinRecovery.myPrizes,
-              attempts: pendingSpinRecovery.attempts,
-            }
-            : null
-        )
-
-      if (isCancelled) {
-        return
+    setIsSpinResultPending(true)
+    void restorePendingSpinResult(pendingSpinRecovery).then((wasRecovered) => {
+      if (!isCancelled && !wasRecovered) {
+        void loadGameBootstrap()
       }
-
-      if (!recoveredResponse) {
-        clearPendingSpinRecovery()
-        return
-      }
-
-      const recoveredAssetVersion = getBootstrapAssetVersion(
-        pendingSpinRecovery.assetVersion || getAssetVersion(recoveredResponse),
-      )
-      const recoveredMyPrizes = normalizeMyPrizes(
-        recoveredResponse.myPrizes,
-        recoveredAssetVersion,
-      )
-
-      startTransition(() => {
-        const nextResultBag = buildResultBag(recoveredResponse.result, activeRouletteItems)
-        const nextResultPrize = buildResultPrize(recoveredResponse.result, nextResultBag)
-
-        setMyPrizes(recoveredMyPrizes)
-        setAvailableAttempts(Number(recoveredResponse.attempts?.availableAttempts || 0))
-        setResultBag(nextResultBag)
-        setResultPrize(nextResultPrize)
-        setResultEntrySource("spin")
-        setResultRevealPhase("sheet-enter")
-        setResultBagFlight(null)
-        isSpinActiveRef.current = false
-        setIsSpinActive(false)
-      })
-
-      clearPendingSpinRecovery()
-      void trackGameEvent("spin_result_shown", {
-        positionId: recoveredResponse.result?.positionId ?? null,
-        type: recoveredResponse.result?.type || "",
-        hasPromoCode: Boolean(recoveredResponse.result?.promoCode),
-        recovered: true,
-      })
-    }
-
-    void restorePendingSpin()
+    })
 
     return () => {
       isCancelled = true
     }
-  }, [activeRouletteItems, activeRouletteItemsKey, isSpinActive, resultBag, resolveSpinResponse])
+  }, [activeRouletteItemsKey, isSpinActive, loadGameBootstrap, restorePendingSpinResult, resultBag])
 
   useEffect(() => {
     const resultBagElement = resultBagFlightRef.current

@@ -70,6 +70,7 @@ const EMPTY_ANALYTICS = {
     newSubscribers: [],
     totalPlayers: [],
     sessionsStarted: [],
+    sessionsStartedUniqueUsers: [],
     sessionsFinished: [],
   },
   summary: {
@@ -81,6 +82,7 @@ const EMPTY_ANALYTICS = {
     totalUniqueDailyVisitsCount: 0,
     averageDauCount: 0,
     sessionsStartedCount: 0,
+    sessionsStartedUniqueUsersCount: 0,
     finishedSessionsCount: 0,
     playersWithFinishedGameCount: 0,
     currentlyOnlinePlayersCount: 0,
@@ -1001,6 +1003,15 @@ export default function AnalyticsPage() {
               chartType="bar"
               points={analytics.series.sessionsStarted}
               primaryColor={chartOrange}
+              secondaryColor={brandColor}
+            />
+            <AnalyticsChartCard
+              title="Уникальные старты"
+              subtitle="Сколько уникальных пользователей запускали игру по дням"
+              value={formatNumber(summary.sessionsStartedUniqueUsersCount)}
+              chartType="bar"
+              points={analytics.series.sessionsStartedUniqueUsers}
+              primaryColor={chartBlue}
               secondaryColor={brandColor}
             />
             <AnalyticsChartCard
