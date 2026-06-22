@@ -530,33 +530,6 @@ export default function PushesPage() {
     }
   }
 
-  async function handleSendReminderBroadcastTest() {
-    const confirmed = window.confirm(
-      "Отправить reminder-пуш всем MAX-пользователям? Текст и кнопка будут такими же, как у автоматического пуша в 12:00 по Москве.",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setSendingPushAction("reminder:test");
-    setError("");
-    setSuccessMessage("");
-
-    try {
-      const result = await postJson("/api/pushes/reminder-test/send", {});
-      setSuccessMessage(
-        result?.queued
-          ? `Тестовый reminder-пуш поставлен в очередь для ${formatNumber(result?.recipientsCount || 0)} MAX-пользователей.`
-          : "Тестовый reminder-пуш отправлен.",
-      );
-    } catch (requestError) {
-      setError(requestError.message || "Не удалось отправить тестовый reminder-пуш");
-    } finally {
-      setSendingPushAction("");
-    }
-  }
-
   async function saveCurrentTemplate({ showSuccessMessage = true } = {}) {
     if (!canCreateDraft) {
       return null;
@@ -879,18 +852,6 @@ export default function PushesPage() {
                 </Text>
               </Box>
               <Flex wrap="wrap" gap="10px" justify={{ base: "stretch", lg: "flex-end" }}>
-                <Button
-                  variant="outline"
-                  borderRadius="16px"
-                  fontWeight="700"
-                  isLoading={sendingPushAction === "reminder:test"}
-                  loadingText="Шлём reminder"
-                  onClick={handleSendReminderBroadcastTest}
-                  colorScheme="orange"
-                  leftIcon={<Icon as={MdSend} boxSize="16px" />}
-                >
-                  Напоминание
-                </Button>
                 <Button
                   variant="outline"
                   borderRadius="16px"
