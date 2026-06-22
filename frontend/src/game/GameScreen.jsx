@@ -869,6 +869,16 @@ export default function GameScreen({
       referral: response?.referral || {},
     })
 
+    if (!readPendingSpinRecovery() && isValidSpinResponsePayload(response?.pendingSpin)) {
+      writePendingSpinRecovery({
+        spinId: normalizeSpinId(response.pendingSpin.spin?.id),
+        assetVersion,
+        result: response.pendingSpin.result,
+        myPrizes: Array.isArray(response.pendingSpin.myPrizes) ? response.pendingSpin.myPrizes : [],
+        attempts: response.pendingSpin.attempts || {},
+      })
+    }
+
     void trackGameEvent("bootstrap_loaded", {
       rouletteItemsCount: nextRouletteItems.length,
       myPrizesCount: nextMyPrizes.length,
@@ -1132,6 +1142,7 @@ export default function GameScreen({
 
     clearPendingSpinRecovery()
     void trackGameEvent("spin_result_shown", {
+      spinId: normalizeSpinId(spinResponse.spin?.id),
       positionId: spinResponse.result?.positionId ?? null,
       type: spinResponse.result?.type || "",
       hasPromoCode: Boolean(spinResponse.result?.promoCode),

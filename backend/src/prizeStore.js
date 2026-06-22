@@ -1827,37 +1827,151 @@ function buildSpinResultPayload(prize, promoCode = "", awardedPrizeId = null) {
   };
 }
 
-export async function getGameBootstrap(userInfo = {}) {
-  const user = await getOrCreateUser(userInfo);
-  const attempts = await ensureDailyAttemptGrant(user.id);
-  const prizes = await getAllPrizes();
-  const projectState = await getProjectState();
-  const todayValue = getTodayValue();
-  const enabledPrizes = prizes.filter((item) => item.isEnabled);
-  const activePrizes = enabledPrizes.filter((item) => isPrizeActive(item, todayValue));
-  const prizePool = activePrizes.length ? activePrizes : enabledPrizes;
-  const mergedPrizePool = mergeNonPrizePositions(prizePool, { randomizeDescription: true });
-  const orderedRoulettePrizes = arrangeRoulettePrizes(mergedPrizePool);
-  const myPrizes = await listAwardedPrizesForUser(user.id);
-  const referral = await getReferralData(user.id);
+async function buildSpinResponseFromEventRow(client, rawUser, spinEventRow) {
+  const details = spinEventRow?.details && typeof spinEventRow.details === "object" && !Array.isArray(spinEventRow.details)
+    ? spinEventRow.details
+    : {};
+  const awardedPrizeId = Number(details.awardedPrizeId || 0) || null;
+  const positionId = Number(details.positionId || 0) || null;
+  let awardedPrizeRow = null;
+  let prizeRow = null;
 
-  await logGameEvent(userInfo, "game_bootstrap_loaded", {
-    source: "backend",
-    sessionId: userInfo.sessionId,
-    details: {
-      rouletteItemsCount: mergedPrizePool.length,
-      myPrizesCount: myPrizes.length,
-      availableAttempts: attempts.availableAttempts,
-    },
-  });
+  if (awardedPrizeId) {
+    const awardedPrizeResult = await client.query(
+      `
+        SELECT id, prize_id, title, promo_code, image, expires_at
+        FROM awarded_prizes
+        WHERE id = $1
+          AND user_id = $2
+        LIMIT 1
+      `,
+      [awardedPrizeId, rawUser.id],
+    );
+    awardedPrizeRow = awardedPrizeResult.rows[0] || null;
+  }
+
+  if (positionId) {
+    const prizeResult = await client.query(
+      `
+        SELECT id, title, type, my_prize_text, roulette_description, roulette_image, active_to
+        FROM prize_positions
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [positionId],
+    );
+    prizeRow = prizeResult.rows[0] || null;
+  }
+
+  const result = {
+    positionId: positionId || Number(awardedPrizeRow?.prize_id || 0) || Number(prizeRow?.id || 0) || null,
+    type: String(details.type || prizeRow?.type || "Приз").trim() || "Приз",
+    title: String(details.title || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
+    myPrizeText: String(details.myPrizeText || prizeRow?.my_prize_text || awardedPrizeRow?.title || "").trim(),
+    fullTitle: String(details.fullTitle || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
+    description: String(details.description || prizeRow?.roulette_description || "").trim(),
+    image: String(details.image || normalizeStoredImage(awardedPrizeRow?.image || prizeRow?.roulette_image)?.previewUrl || "").trim(),
+    promoCode: String(awardedPrizeRow?.promo_code || "").trim(),
+    promoCodeIssued: Boolean(details.promoCodeIssued || awardedPrizeRow?.promo_code),
+    awardedPrizeId,
+    expiresAt: String(details.expiresAt || awardedPrizeRow?.expires_at || formatDateLabel(prizeRow?.active_to)).trim(),
+  };
+  const myPrizes = await listAwardedPrizesForUser(rawUser.id, client);
+  await ensureDailyAttemptGrant(rawUser.id, client);
+  const attempts = await getUserAttemptSummary(rawUser.id, client);
 
   return {
-    projectFinished: projectState.projectFinished,
-    rouletteItems: orderedRoulettePrizes.map(buildFrontendPrize),
+    spin: {
+      id: Number(spinEventRow.id),
+      awardedPrizeId,
+    },
+    result,
     myPrizes: serializeMyPrizesForFrontend(myPrizes),
     attempts,
-    referral,
   };
+}
+
+async function getLatestPendingSpinResultForUser(client, rawUser) {
+  const pendingSpinResult = await client.query(
+    `
+      WITH latest_backend_spin AS (
+        SELECT backend.id, backend.details, backend.user_id, backend.session_id, backend.created_at
+        FROM game_event_logs backend
+        WHERE backend.user_id = $1
+          AND backend.event_name = 'spin_result'
+          AND backend.source = 'backend'
+        ORDER BY backend.created_at DESC, backend.id DESC
+        LIMIT 1
+      )
+      SELECT latest_backend_spin.id, latest_backend_spin.details
+      FROM latest_backend_spin
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM game_event_logs shown
+        WHERE shown.user_id = latest_backend_spin.user_id
+          AND shown.event_name = 'spin_result_shown'
+          AND shown.source = 'frontend'
+          AND (
+            (
+              COALESCE(shown.details ->> 'spinId', '') ~ '^[0-9]+$'
+              AND (shown.details ->> 'spinId')::bigint = latest_backend_spin.id
+            )
+            OR (
+              COALESCE(latest_backend_spin.session_id, '') <> ''
+              AND shown.session_id = latest_backend_spin.session_id
+              AND shown.created_at >= latest_backend_spin.created_at
+            )
+          )
+      )
+    `,
+    [rawUser.id],
+  );
+  const pendingSpinRow = pendingSpinResult.rows[0] || null;
+
+  if (!pendingSpinRow) {
+    return null;
+  }
+
+  return buildSpinResponseFromEventRow(client, rawUser, pendingSpinRow);
+}
+
+export async function getGameBootstrap(userInfo = {}) {
+  return withTransaction(async (client) => {
+    const user = await getOrCreateUser(userInfo, client);
+    const attempts = await ensureDailyAttemptGrant(user.id, client);
+    const prizes = await getAllPrizes(client);
+    const projectState = await getProjectState(client);
+    const todayValue = getTodayValue();
+    const enabledPrizes = prizes.filter((item) => item.isEnabled);
+    const activePrizes = enabledPrizes.filter((item) => isPrizeActive(item, todayValue));
+    const prizePool = activePrizes.length ? activePrizes : enabledPrizes;
+    const mergedPrizePool = mergeNonPrizePositions(prizePool, { randomizeDescription: true });
+    const orderedRoulettePrizes = arrangeRoulettePrizes(mergedPrizePool);
+    const myPrizes = await listAwardedPrizesForUser(user.id, client);
+    const referral = await getReferralData(user.id, client);
+    const pendingSpin = await getLatestPendingSpinResultForUser(client, user);
+
+    await logGameEvent(userInfo, "game_bootstrap_loaded", {
+      source: "backend",
+      sessionId: userInfo.sessionId,
+      client,
+      details: {
+        rouletteItemsCount: mergedPrizePool.length,
+        myPrizesCount: myPrizes.length,
+        availableAttempts: attempts.availableAttempts,
+        hasPendingSpinResult: Boolean(pendingSpin),
+      },
+    });
+
+    return {
+      projectFinished: projectState.projectFinished,
+      rouletteItems: orderedRoulettePrizes.map(buildFrontendPrize),
+      myPrizes: serializeMyPrizesForFrontend(myPrizes),
+      attempts,
+      referral,
+      pendingSpin,
+    };
+  });
 }
 
 export async function spinPrize(userInfo = {}) {
@@ -2064,66 +2178,6 @@ export async function getSpinResult(userInfo = {}, payload = {}) {
       throw error;
     }
 
-    const details = spinEventRow.details && typeof spinEventRow.details === "object" && !Array.isArray(spinEventRow.details)
-      ? spinEventRow.details
-      : {};
-    const awardedPrizeId = Number(details.awardedPrizeId || 0) || null;
-    const positionId = Number(details.positionId || 0) || null;
-    let awardedPrizeRow = null;
-    let prizeRow = null;
-
-    if (awardedPrizeId) {
-      const awardedPrizeResult = await client.query(
-        `
-          SELECT id, prize_id, title, promo_code, image, expires_at
-          FROM awarded_prizes
-          WHERE id = $1
-            AND user_id = $2
-          LIMIT 1
-        `,
-        [awardedPrizeId, rawUser.id],
-      );
-      awardedPrizeRow = awardedPrizeResult.rows[0] || null;
-    }
-
-    if (positionId) {
-      const prizeResult = await client.query(
-        `
-          SELECT id, title, type, my_prize_text, roulette_description, roulette_image, active_to
-          FROM prize_positions
-          WHERE id = $1
-          LIMIT 1
-        `,
-        [positionId],
-      );
-      prizeRow = prizeResult.rows[0] || null;
-    }
-
-    const result = {
-      positionId: positionId || Number(awardedPrizeRow?.prize_id || 0) || Number(prizeRow?.id || 0) || null,
-      type: String(details.type || prizeRow?.type || "Приз").trim() || "Приз",
-      title: String(details.title || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
-      myPrizeText: String(details.myPrizeText || prizeRow?.my_prize_text || awardedPrizeRow?.title || "").trim(),
-      fullTitle: String(details.fullTitle || prizeRow?.title || awardedPrizeRow?.title || "").trim(),
-      description: String(details.description || prizeRow?.roulette_description || "").trim(),
-      image: String(details.image || normalizeStoredImage(awardedPrizeRow?.image || prizeRow?.roulette_image)?.previewUrl || "").trim(),
-      promoCode: String(awardedPrizeRow?.promo_code || "").trim(),
-      promoCodeIssued: Boolean(details.promoCodeIssued || awardedPrizeRow?.promo_code),
-      awardedPrizeId,
-      expiresAt: String(details.expiresAt || awardedPrizeRow?.expires_at || formatDateLabel(prizeRow?.active_to)).trim(),
-    };
-    const myPrizes = await listAwardedPrizesForUser(rawUser.id, client);
-    await ensureDailyAttemptGrant(rawUser.id, client);
-    const attempts = await getUserAttemptSummary(rawUser.id, client);
-
-    return {
-      spin: {
-        id: Number(spinEventRow.id),
-        awardedPrizeId,
-      },
-      result,
-      myPrizes: serializeMyPrizesForFrontend(myPrizes),
-      attempts,
-    };
+    return buildSpinResponseFromEventRow(client, rawUser, spinEventRow);
   });
 }
