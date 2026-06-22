@@ -653,6 +653,7 @@ export async function deletePush(payload = {}) {
 export async function preparePushSend(payload = {}) {
   const pushId = Number(payload?.pushId) || 0;
   const mode = String(payload?.mode || "live").trim().toLowerCase() === "test" ? "test" : "live";
+  const isWorkerRequest = String(payload?.source || "").trim().toLowerCase() === "worker";
   const row = await fetchPushById({ query }, pushId);
 
   if (!row) {
@@ -679,15 +680,15 @@ export async function preparePushSend(payload = {}) {
     };
   }
 
-  if (push.status === "scheduled") {
+  if (push.status === "scheduled" && !isWorkerRequest) {
     throw new Error("Эта рассылка уже поставлена в очередь.");
   }
 
-  if (push.status !== "template") {
+  if (push.status !== "template" && !(isWorkerRequest && push.status === "scheduled")) {
     throw new Error("Отправить можно только рассылку в статусе шаблона.");
   }
 
-  if (push.status === "template" && !push.testSentAt) {
+  if (!push.testSentAt) {
     throw new Error("Test send is required before live send");
   }
 
