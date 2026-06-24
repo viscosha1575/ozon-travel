@@ -3,6 +3,7 @@ import { logDevWarn } from './devLogger.js'
 const TELEGRAM_BRAND_COLOR = '#e2e7ec'
 const LIGHT_THEME_COLOR = '#ffffff'
 const LIGHT_COLOR_SCHEME = 'light'
+const FORCED_LIGHT_COLOR_SCHEME = 'only light'
 const BROWSER_HOST = 'browser'
 const TELEGRAM_HOST = 'telegram'
 const MAX_HOST = 'max'
@@ -513,7 +514,7 @@ function syncDocumentTheme(host) {
 
   const root = document.documentElement
   const body = document.body
-  const forcedColorScheme = host === MAX_HOST ? LIGHT_COLOR_SCHEME : ''
+  const forcedColorScheme = host === MAX_HOST ? FORCED_LIGHT_COLOR_SCHEME : ''
   const themeColor = host === MAX_HOST ? LIGHT_THEME_COLOR : ''
 
   root.dataset.miniAppColorScheme = forcedColorScheme || 'system'
@@ -526,7 +527,7 @@ function syncDocumentTheme(host) {
   const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]')
 
   if (colorSchemeMeta) {
-    colorSchemeMeta.setAttribute('content', forcedColorScheme ? 'light only' : 'light')
+    colorSchemeMeta.setAttribute('content', forcedColorScheme || LIGHT_COLOR_SCHEME)
   }
 
   const themeColorMeta = document.querySelector('meta[name="theme-color"]')
