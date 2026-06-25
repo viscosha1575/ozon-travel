@@ -5,7 +5,7 @@ import { logDevWarn } from "./devLogger.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "./gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { getMiniAppPlatform, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -85,6 +85,33 @@ function buildSupportLink(contact) {
   return `https://max.ru/${value.replace(/^@+/, "")}`
 }
 
+function getMaxLaunchErrorMessage(errorCode, platform) {
+  const normalizedCode = String(errorCode || "").trim().toUpperCase()
+
+  if (!normalizedCode) {
+    return ""
+  }
+
+  if (
+    normalizedCode === "MAX_INIT_DATA_MISSING"
+    || normalizedCode === "MAX_INIT_DATA_REQUIRED"
+    || normalizedCode === "MAX_INIT_DATA_INVALID_PAYLOAD"
+    || normalizedCode === "MAX_INIT_DATA_INVALID_HASH_COUNT"
+    || normalizedCode === "MAX_INIT_DATA_DUPLICATE_FIELDS"
+  ) {
+    return "MAX открыл мини-приложение без данных профиля. Откройте его заново из чата с ботом. Если лента не появится, напишите в поддержку и передайте ваш MAX ID."
+  }
+
+  if (
+    normalizedCode === "MAX_INIT_DATA_EXPIRED"
+    || normalizedCode === "MAX_INIT_DATA_INVALID_SIGNATURE"
+  ) {
+    return "Сессия запуска MAX устарела. Закройте мини-приложение и откройте его заново из чата с ботом."
+  }
+
+  return "Не удалось подтвердить запуск мини-приложения в MAX. Откройте его заново из чата с ботом или напишите в поддержку."
+}
+
 const PersistentGameScreen = memo(GameScreen)
 const IMPORTANT_INFO_TITLE = "Условия акции"
 
@@ -153,10 +180,12 @@ function App() {
   const [projectFinishedOverlay, setProjectFinishedOverlay] = useState(null)
   const [embeddedPage, setEmbeddedPage] = useState(null)
   const [isInitialIntroMounted, setIsInitialIntroMounted] = useState(INTRO_DISABLED)
+  const [maxLaunchError, setMaxLaunchError] = useState("")
   const embeddedPageRequestRef = useRef(0)
   const initialIntroMountCommittedRef = useRef(INTRO_DISABLED)
   const currentScreen = screens[activeScreen]
   const canOpenGame = isTelegramHost || isUserSubscribed === true
+  const miniAppPlatform = getMiniAppPlatform()
   const projectFinishedPrizeImageSources = useCachedImageSources(
     projectFinishedMyPrizes.map((item) => item?.image || ""),
   )
@@ -223,6 +252,10 @@ function App() {
           return
         }
 
+        if (isMaxHost) {
+          setMaxLaunchError(getMaxLaunchErrorMessage(response?.user?.errorCode, miniAppPlatform))
+        }
+
         setIsProjectFinished(projectFinished)
 
         if (projectFinished || isTelegramHost) {
@@ -237,6 +270,12 @@ function App() {
 
           if (isCancelled) {
             return
+          }
+
+          if (isMaxHost) {
+            setMaxLaunchError(
+              getMaxLaunchErrorMessage(subscriptionStatus?.user?.errorCode, miniAppPlatform),
+            )
           }
 
           setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
@@ -256,6 +295,7 @@ function App() {
         setIsProjectFinishedPrizesOpen(false)
         setProjectFinishedOverlay(null)
         setIsProjectFinished(false)
+        setMaxLaunchError("")
       }
     }
 
@@ -264,7 +304,7 @@ function App() {
     return () => {
       isCancelled = true
     }
-  }, [isMaxHost, isTelegramHost, pollSubscriptionStatus])
+  }, [isMaxHost, isTelegramHost, miniAppPlatform, pollSubscriptionStatus])
 
   useEffect(() => {
     if (INTRO_DISABLED || isProjectFinished === true || isProjectFinished === null) {
@@ -508,10 +548,25 @@ function App() {
     setIsSubscriptionCheckPending(true)
 
     try {
-      const { isSubscribed } = await pollSubscriptionStatus({
+      const { isSubscribed, subscriptionStatus } = await pollSubscriptionStatus({
         attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
         reason: "manual",
       })
+
+      if (isMaxHost) {
+        setMaxLaunchError(getMaxLaunchErrorMessage(subscriptionStatus?.user?.errorCode, miniAppPlatform))
+        setIsUserSubscribed(subscriptionStatus?.user?.subscribedToChannel === true)
+
+        if (subscriptionStatus?.user?.subscribedToChannel === true) {
+          handleStartGame()
+          return
+        }
+
+        startTransition(() => {
+          setActiveScreen(2)
+        })
+        return
+      }
 
       setIsUserSubscribed(isSubscribed)
 
@@ -1016,6 +1071,11 @@ function App() {
                           {isSubscriptionCheckPending ? "Проверяем..." : screen.secondaryActionLabel}
                         </button>
                       </div>
+                      {maxLaunchError ? (
+                        <p className="content-description">
+                          <span className="content-line">{maxLaunchError}</span>
+                        </p>
+                      ) : null}
                     </>
                   ) : screen.variant === "subscription-failed" ? (
                     <>

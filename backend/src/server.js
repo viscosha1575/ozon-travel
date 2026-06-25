@@ -116,6 +116,52 @@ function buildAdminInitDataRequiredError() {
   return error;
 }
 
+function buildPublicMiniAppUserPayload(user, {
+  subscribedToChannel = false,
+  isResolved = true,
+  userInfo = null,
+} = {}) {
+  const payload = {
+    id: user ? Number(user.id) : null,
+    externalId: user?.external_id || "",
+    subscribedToChannel,
+  };
+
+  if (userInfo?.platform) {
+    payload.platform = String(userInfo.platform || "").trim().toLowerCase();
+  }
+
+  if (payload.platform === "max") {
+    payload.isResolved = Boolean(isResolved);
+
+    if (!isResolved) {
+      payload.errorCode = String(userInfo?.errorCode || "MAX_INIT_DATA_INVALID").trim();
+    }
+  }
+
+  return payload;
+}
+
+function logUnresolvedMaxMiniAppRequest(req, userInfo, source) {
+  const path = String(req.originalUrl || req.path || "").trim() || "/";
+  const userAgent = String(req.get("user-agent") || "").trim();
+  const hasInitDataHeader = Boolean(
+    req.headers["x-mini-app-init-data"]
+    || req.headers["x-max-init-data"],
+  );
+  const hasUserHeader = Boolean(req.headers["x-mini-app-user-id"]);
+
+  console.warn("MAX mini app user resolution failed", {
+    source,
+    path,
+    errorCode: String(userInfo?.errorCode || "MAX_INIT_DATA_INVALID").trim(),
+    sessionId: String(userInfo?.sessionId || "").trim(),
+    hasInitDataHeader,
+    hasUserHeader,
+    userAgent,
+  });
+}
+
 function requireAdminTelegramUser(req) {
   const telegramUser = resolveTelegramInitDataUser(req);
   const telegramUserId = String(telegramUser?.platformUserId || "").trim();
@@ -141,6 +187,8 @@ async function resolveSubscriptionContext(req) {
   const isResolved = userInfo?.isResolved !== false;
 
   if (!isResolved && userInfo.platform === "max") {
+    logUnresolvedMaxMiniAppRequest(req, userInfo, "subscription_context");
+
     return {
       userInfo,
       user: null,
@@ -269,7 +317,7 @@ app.get("/api/game/bootstrap", async (req, res, next) => {
 app.get("/api/game/subscription-status", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const { user, subscribedToChannel } = await resolveSubscriptionContext(req);
+    const { user, userInfo, subscribedToChannel, isResolved } = await resolveSubscriptionContext(req);
 
     if (user && !subscribedToChannel) {
       await trackSubscriptionRequiredAnalytics(
@@ -284,11 +332,11 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
 
     res.json({
       ok: true,
-      user: {
-        id: user ? Number(user.id) : null,
-        externalId: user?.external_id || "",
+      user: buildPublicMiniAppUserPayload(user, {
         subscribedToChannel,
-      },
+        isResolved,
+        userInfo,
+      }),
     });
   } catch (error) {
     next(error);
@@ -361,11 +409,11 @@ app.post("/api/game/open", async (req, res, next) => {
       ok: true,
       projectFinished: projectState.projectFinished,
       shouldShowControlsGuide: Boolean(user) && !Boolean(user.has_seen_game_controls_guide),
-      user: {
-        id: user ? Number(user.id) : null,
-        externalId: user?.external_id || "",
+      user: buildPublicMiniAppUserPayload(user, {
         subscribedToChannel: isResolved ? subscribedToChannel : false,
-      },
+        isResolved,
+        userInfo,
+      }),
       attempts,
       referral,
     });
