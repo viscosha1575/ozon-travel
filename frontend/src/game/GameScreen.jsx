@@ -36,6 +36,7 @@ const RESULT_COPY_TOAST_VISIBLE_DURATION = 3000
 const RESULT_BAG_FINAL_SCALE_MULTIPLIER = 1.3
 const NON_PRIZE_RESULT_FINAL_SCALE_MULTIPLIER = 1.24
 const SPIN_TRANSITION_EASING = "cubic-bezier(0.22, 0.72, 0.3, 1)"
+const SPIN_COMPLETION_FALLBACK_BUFFER_MS = 240
 const IDLE_SPIN_CYCLE_DURATION = 36000
 const BOOTSTRAP_CACHE_KEY = "ozon-travel-bootstrap-cache"
 const BOOTSTRAP_CACHE_SCHEMA_VERSION = 3
@@ -710,6 +711,7 @@ export default function GameScreen({
   const idleStartRetryFrameRef = useRef(0)
   const transitionResetFrameRef = useRef(0)
   const spinCompletionTimeoutRef = useRef(0)
+  const spinTransitionCleanupRef = useRef(null)
   const spinResultRecoveryTimeoutRef = useRef(0)
   const idleSpinTimeoutRef = useRef(0)
   const overlayTimeoutRef = useRef(0)
@@ -977,6 +979,32 @@ export default function GameScreen({
     return currentTranslate
   }
 
+  const clearSpinTransitionListener = useCallback(() => {
+    if (typeof spinTransitionCleanupRef.current === "function") {
+      spinTransitionCleanupRef.current()
+    }
+
+    spinTransitionCleanupRef.current = null
+  }, [])
+
+  const snapTrackToProgressSteps = useCallback((progressSteps) => {
+    const step = measureStep()
+
+    if (!step) {
+      return null
+    }
+
+    const normalizedProgressSteps = Math.max(0, Number(progressSteps) || 0)
+    const snappedTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + normalizedProgressSteps) * step)
+
+    setCarouselMotionTransition("none")
+    applyTrackStyles(snappedTranslate)
+    virtualTranslateRef.current = snappedTranslate
+    setTrackTranslate(snappedTranslate)
+
+    return snappedTranslate
+  }, [])
+
   const scheduleIdleSpinRetry = () => {
     cancelAnimationFrame(idleStartRetryFrameRef.current)
     idleStartRetryFrameRef.current = requestAnimationFrame(() => {
@@ -1108,6 +1136,7 @@ export default function GameScreen({
     const shouldAnimateBagEntry = Boolean(options.resultOriginRect && nextResultBag)
 
     clearIdleSpin()
+    clearSpinTransitionListener()
     clearSpinResultRecoveryTimeout()
     clearTimeout(spinCompletionTimeoutRef.current)
     clearTimeout(resultRevealTimeoutRef.current)
@@ -1150,7 +1179,7 @@ export default function GameScreen({
     })
 
     return true
-  }, [activeRouletteItems, clearSpinResultRecoveryTimeout])
+  }, [activeRouletteItems, clearSpinResultRecoveryTimeout, clearSpinTransitionListener])
 
   const restorePendingSpinResult = useCallback(async (pendingSpinRecovery = readPendingSpinRecovery()) => {
     if (!pendingSpinRecovery) {
@@ -1401,6 +1430,7 @@ export default function GameScreen({
     cancelAnimationFrame(animationFrameRef.current)
     cancelAnimationFrame(transitionResetFrameRef.current)
     clearTimeout(spinCompletionTimeoutRef.current)
+    clearSpinTransitionListener()
     clearSpinResultRecoveryTimeout()
     spinResultRecoveryTimeoutRef.current = window.setTimeout(() => {
       if (resultBag || !readPendingSpinRecovery()) {
@@ -1414,6 +1444,61 @@ export default function GameScreen({
         }
       })
     }, durationMs + RESULT_REVEAL_DELAY + RESULT_BAG_ANIMATION_DURATION + SPIN_RESULT_RECOVERY_TIMEOUT_BUFFER_MS)
+    const spinStateSnapshot = {
+      currentCenterBagIndex,
+      targetBagIndex,
+      result: nextResult,
+      myPrizes: nextMyPrizes,
+      attempts: canonicalSpinResponse.attempts || null,
+      totalSteps,
+    }
+
+    let hasCompletedSpin = false
+    const finalizeSpinCompletion = () => {
+      if (hasCompletedSpin) {
+        return
+      }
+
+      hasCompletedSpin = true
+      clearSpinTransitionListener()
+      clearTimeout(spinCompletionTimeoutRef.current)
+
+      const activeSpinState = pendingSpinRef.current || spinStateSnapshot
+      const snappedTranslate = snapTrackToProgressSteps(activeSpinState.totalSteps)
+      const settledCenterTrackIndex = TRACK_CENTER_OFFSET + activeSpinState.totalSteps
+
+      setCarouselMotionTransition("")
+
+      if (snappedTranslate != null) {
+        virtualTranslateRef.current = snappedTranslate
+        setTrackTranslate(snappedTranslate)
+      }
+
+      pendingSpinRef.current = null
+      centerBagIndexRef.current = activeSpinState.targetBagIndex
+
+      clearTimeout(resultRevealTimeoutRef.current)
+      resultRevealTimeoutRef.current = window.setTimeout(() => {
+        const resultOriginRect = measureContainedImageRect(trackSlotImageRefs.current[settledCenterTrackIndex])
+          || measureRectSnapshot(trackSlotMediaRefs.current[settledCenterTrackIndex])
+          || measureContainedImageRect(centerSlotImageRef.current)
+          || measureRectSnapshot(centerSlotMediaRef.current)
+
+        presentSpinResult({
+          spin: {
+            id: spinId,
+          },
+          result: activeSpinState.result,
+          myPrizes: activeSpinState.myPrizes,
+          attempts: activeSpinState.attempts || {},
+        }, {
+          myPrizes: activeSpinState.myPrizes,
+          targetBagIndex: activeSpinState.targetBagIndex,
+          resultOriginRect,
+        })
+      }, RESULT_REVEAL_DELAY)
+    }
+
     animationFrameRef.current = requestAnimationFrame(() => {
       const spinState = pendingSpinRef.current
 
@@ -1430,40 +1515,28 @@ export default function GameScreen({
           return
         }
 
+        clearSpinTransitionListener()
+        const motionNode = carouselMotionRef.current
+        const handleTransitionEnd = (event) => {
+          if (event.target !== motionNode || event.propertyName !== "transform") {
+            return
+          }
+
+          finalizeSpinCompletion()
+        }
+
+        motionNode.addEventListener("transitionend", handleTransitionEnd)
+        spinTransitionCleanupRef.current = () => {
+          motionNode.removeEventListener("transitionend", handleTransitionEnd)
+        }
+
         setCarouselMotionTransition(`transform ${durationMs}ms ${SPIN_TRANSITION_EASING}`)
         applyTrackStyles(finalTranslate)
 
-        spinCompletionTimeoutRef.current = window.setTimeout(() => {
-          const settledCenterTrackIndex = TRACK_CENTER_OFFSET + spinState.totalSteps
-
-          setCarouselMotionTransition("")
-
-          virtualTranslateRef.current = finalTranslate
-          setTrackTranslate(finalTranslate)
-          pendingSpinRef.current = null
-          centerBagIndexRef.current = spinState.targetBagIndex
-
-          clearTimeout(resultRevealTimeoutRef.current)
-          resultRevealTimeoutRef.current = window.setTimeout(() => {
-            const resultOriginRect = measureContainedImageRect(trackSlotImageRefs.current[settledCenterTrackIndex])
-              || measureRectSnapshot(trackSlotMediaRefs.current[settledCenterTrackIndex])
-              || measureContainedImageRect(centerSlotImageRef.current)
-              || measureRectSnapshot(centerSlotMediaRef.current)
-
-            presentSpinResult({
-              spin: {
-                id: spinId,
-              },
-              result: spinState.result,
-              myPrizes: spinState.myPrizes,
-              attempts: spinState.attempts || {},
-            }, {
-              myPrizes: spinState.myPrizes,
-              targetBagIndex: spinState.targetBagIndex,
-              resultOriginRect,
-            })
-          }, RESULT_REVEAL_DELAY)
-        }, durationMs)
+        spinCompletionTimeoutRef.current = window.setTimeout(
+          finalizeSpinCompletion,
+          durationMs + SPIN_COMPLETION_FALLBACK_BUFFER_MS,
+        )
       })
     })
   }
@@ -1889,11 +1962,12 @@ export default function GameScreen({
       clearIdleSpin()
       cancelAnimationFrame(animationFrameRef.current)
       clearTimeout(spinCompletionTimeoutRef.current)
+      clearSpinTransitionListener()
       clearSpinResultRecoveryTimeout()
       clearTimeout(overlayTimeoutRef.current)
       clearTimeout(resultRevealTimeoutRef.current)
     }
-  }, [activeRouletteItemsKey, clearSpinResultRecoveryTimeout])
+  }, [activeRouletteItemsKey, clearSpinResultRecoveryTimeout, clearSpinTransitionListener])
 
   useEffect(() => {
     if (!activeRouletteItems.length) {
