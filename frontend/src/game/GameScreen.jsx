@@ -4,7 +4,7 @@ import { postJson, trackGameEvent } from "../api.js"
 import { buildBootstrapAssetVersion } from "../bootstrapAssets.js"
 import { logDevWarn } from "../devLogger.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "../gameBootstrap.js"
-import { resolveCachedImageSource, useCachedImageSources } from "../imageCache.js"
+import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "../imageCache.js"
 import {
   getMiniApp,
   openExternalLink,
@@ -771,6 +771,14 @@ export default function GameScreen({
   const carouselImagePaths = collectUniqueImagePaths(
     activeRouletteItems.map((item) => item.slotPath || item.path || ""),
   )
+  const prioritizedCarouselImagePaths = collectUniqueImagePaths(
+    visibleTrackItems
+      .slice(
+        Math.max(0, TRACK_CENTER_OFFSET - 3),
+        Math.min(visibleTrackItems.length, TRACK_CENTER_OFFSET + 4),
+      )
+      .map((item) => item?.slotPath || item?.path || ""),
+  )
   const hasAvailableAttempts = availableAttempts > 0
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag)
@@ -781,7 +789,7 @@ export default function GameScreen({
     resultBag?.path || "",
     resultPrize?.image || "",
   )
-  const cachedCarouselImageSources = useCachedImageSources(carouselImagePaths, { prune: true })
+  const cachedCarouselImageSources = useCachedImageSources(prioritizedCarouselImagePaths)
   const cachedPrizeImageSources = useCachedImageSources(
     isPrizeMediaVisible ? prizeImagePaths : [],
   )
@@ -802,6 +810,16 @@ export default function GameScreen({
       ? NON_PRIZE_RESULT_PREVIEW_SCALE_FACTOR
       : 1
   )
+
+  useEffect(() => {
+    if (!carouselImagePaths.length) {
+      return
+    }
+
+    void warmImageCache(carouselImagePaths).catch((error) => {
+      logDevWarn("Carousel image warmup failed", error)
+    })
+  }, [activeRouletteItemsKey])
 
   const resetResultState = useCallback(() => {
     cancelAnimationFrame(resultAnimationFrameRef.current)
@@ -2175,8 +2193,9 @@ export default function GameScreen({
                           alt=""
                           className="game-carousel-slot-image"
                           aria-hidden="true"
-                          fetchPriority="low"
+                          fetchPriority={Math.abs(index - TRACK_CENTER_OFFSET) <= 1 ? "high" : "auto"}
                           loading="eager"
+                          decoding="async"
                           onError={handleCarouselSlotImageError}
                         />
                       </div>
