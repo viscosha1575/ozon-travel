@@ -103,9 +103,9 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/russian_trusted_root_ca_pem.crt
       MAX_SUBSCRIPTION_CHECK_MODE: ${MAX_SUBSCRIPTION_CHECK_MODE:-api}
       MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel_official}
-      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:--68089406059881}
       MAX_BANK_CHANNEL_URL: ${MAX_BANK_CHANNEL_URL:-https://max.ru/ozonbank}
-      MAX_BANK_CHANNEL_CHAT_ID: ${MAX_BANK_CHANNEL_CHAT_ID:-}
+      MAX_BANK_CHANNEL_CHAT_ID: ${MAX_BANK_CHANNEL_CHAT_ID:--68148401886527}
       GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-http://localhost:4173}
       SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
       GAME_API_URL: ${GAME_API_URL:-http://backend:3001}
