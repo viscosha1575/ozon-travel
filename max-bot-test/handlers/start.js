@@ -526,13 +526,10 @@ bot.action('check_subscription', async (ctx) => {
 
     flow = pendingSubscriptionFlowByUserId.get(userId)
       || (registered.user?.subscribedToChannel ? 'bank' : 'new');
-    const requiredChannels = flow === 'new'
-      ? ['travel', 'bank']
-      : [flow === 'travel' ? 'travel' : 'bank'];
     const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'callback',
       attempts: MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS,
-      requiredChannels,
+      requiredChannels: ['travel', 'bank'],
     });
 
     if (subscriptionResult.isSubscribed) {
@@ -552,6 +549,12 @@ bot.action('check_subscription', async (ctx) => {
       });
       await sendGameMenu(ctx);
     } else {
+      flow = subscriptionResult.subscriptions.travel
+        ? 'bank'
+        : subscriptionResult.subscriptions.bank
+          ? 'travel'
+          : 'new';
+      pendingSubscriptionFlowByUserId.set(userId, flow);
       await createMaxLog({
         maxUserId: userId,
         eventType: 'system',
