@@ -5,7 +5,7 @@ import { logDevWarn } from "./devLogger.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "./gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { getMiniAppPlatform, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { getMiniApp, getMiniAppPlatform, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -473,12 +473,12 @@ function App() {
     })
   }, [currentScreen.id, isProjectFinished])
 
-  const handleStartGame = () => {
+  const handleStartGame = (skipSubscriptionGate = false) => {
     if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
 
-    if (!canOpenGame) {
+    if (!skipSubscriptionGate && !canOpenGame) {
       setIsGameLaunchPending(false)
       setIsGameActive(false)
       setActiveScreen(1)
@@ -513,12 +513,7 @@ function App() {
         return
       }
 
-      if (isUserSubscribed) {
-        handleStartGame()
-        return
-      }
-
-      setActiveScreen(1)
+      void handleSubscriptionCheck()
       return
     }
 
@@ -535,6 +530,17 @@ function App() {
 
   const handleSubscriptionAction = () => {
     openExternalLink(SUBSCRIPTION_CHANNEL_URL)
+  }
+
+  const handleSubscriptionReturn = () => {
+    const miniApp = getMiniApp()
+
+    if (typeof miniApp?.close === "function") {
+      miniApp.close()
+      return
+    }
+
+    window.close()
   }
 
   const handleSubscriptionCheck = async () => {
@@ -558,12 +564,12 @@ function App() {
         setIsUserSubscribed(subscriptionStatus?.user?.subscribedToChannel === true)
 
         if (subscriptionStatus?.user?.subscribedToChannel === true) {
-          handleStartGame()
+          handleStartGame(true)
           return
         }
 
         startTransition(() => {
-          setActiveScreen(2)
+          setActiveScreen(1)
         })
         return
       }
@@ -571,10 +577,10 @@ function App() {
       setIsUserSubscribed(isSubscribed)
 
       if (isSubscribed) {
-        handleStartGame()
+        handleStartGame(true)
       } else {
         startTransition(() => {
-          setActiveScreen(2)
+          setActiveScreen(1)
         })
       }
     } catch (error) {
@@ -1049,33 +1055,24 @@ function App() {
                   {screen.variant === "subscription" ? (
                     <>
                       <h1 className="content-title content-title--subscription">
-                        {screen.titleLines.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
+                        <span className="content-line">Для старта подпишитесь</span>
+                        <span className="content-line">
+                          на каналы <span className="subscription-brand subscription-brand--travel">Ozon Travel</span>
+                        </span>
+                        <span className="content-line">
+                          и <span className="subscription-brand subscription-brand--bank">Ozon Банк</span>
+                        </span>
                       </h1>
-
-                      <div className="content-actions-stack">
-                        <button
-                          type="button"
-                          className="content-action"
-                          onClick={handleSubscriptionAction}
-                        >
-                          {screen.actionLabel}
-                        </button>
-                        <button
-                          type="button"
-                          className="content-action content-action--secondary"
-                          onClick={handleSubscriptionCheck}
-                          disabled={isSubscriptionCheckPending}
-                        >
-                          {isSubscriptionCheckPending ? "Проверяем..." : screen.secondaryActionLabel}
-                        </button>
-                      </div>
-                      {maxLaunchError ? (
-                        <p className="content-description">
-                          <span className="content-line">{maxLaunchError}</span>
-                        </p>
-                      ) : null}
+                      <p className="content-description content-description--subscription">
+                        и получите <strong>+3 попытки</strong> крутить Ленту призов
+                      </p>
+                      <button
+                        type="button"
+                        className="content-action"
+                        onClick={handleSubscriptionReturn}
+                      >
+                        Вернуться
+                      </button>
                     </>
                   ) : screen.variant === "subscription-failed" ? (
                     <>
@@ -1141,6 +1138,7 @@ function App() {
                         type="button"
                         className="content-action"
                         onClick={handlePrimaryAction}
+                        disabled={screen.id === "intro" && isSubscriptionCheckPending}
                       >
                         {screen.actionLabel}
                       </button>
