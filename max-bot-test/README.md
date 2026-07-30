@@ -1,0 +1,52 @@
+# MAX Bot
+
+Бот под мессенджер MAX на JavaScript с официальной библиотекой `@maxhub/max-bot-api`.
+
+## Что уже есть
+
+- отдельный MAX-бот;
+- подключение через официальный MAX Bot API;
+- создание пользователя в backend при `/start`;
+- стартовый экран с переходом к подписке;
+- inline-клавиатура подписки;
+- проверка подписки на MAX-канал через бота-админа;
+- меню с кнопками открытия игры и поддержки.
+
+## Что ещё можно улучшить
+
+- полноценное меню вместо мокапа;
+- финальные тексты, ссылки и поддержку.
+
+## Текущий сценарий
+
+1. Пользователь нажимает `/start`.
+2. Бот создает пользователя в backend и показывает стартовое сообщение.
+3. Бот предлагает подписаться на канал и проверить подписку.
+4. После успешной проверки бот показывает экран с кнопками `Открыть` и `Поддержка`.
+
+## Размещение
+
+- production webhook host: `https://bot.ozon-travel-max.ru`
+- рекомендуемый webhook path: `/max/webhook`
+- кнопка открытия игры ведет по MAX deep link из `GAME_WEBAPP_URL`
+
+## Переменные окружения
+
+- `MAX_BOT_TOKEN` - токен бота из Master Bot в MAX;
+- `MAX_BOT_MODE` - `webhook` (по умолчанию) или `polling` для локальной отладки;
+- `MAX_WEBHOOK_BASE_URL` - базовый HTTPS URL для webhook, например `https://bot.ozon-travel-max.ru`;
+- `MAX_WEBHOOK_PATH` - путь webhook, например `/max/webhook`;
+- `MAX_WEBHOOK_SECRET` - optional, секрет для проверки заголовка `X-Max-Bot-Api-Secret`;
+- `MAX_AUTO_REGISTER_WEBHOOK` - если `true`, бот регистрирует webhook в MAX API при старте;
+- `MAX_WEBHOOK_RETRY_MS` - интервал повторной регистрации webhook;
+- `MAX_WEBHOOK_UPDATE_TYPES` - optional, список типов событий через запятую;
+- `MAX_SUBSCRIPTION_CHECK_MODE` - `api` для реальной проверки подписки или `mock` для мокап-сценария;
+- `MAX_CHANNEL_URL` - ссылка на канал проекта в MAX, например `https://max.ru/ozontravel_official`;
+- `MAX_CHANNEL_CHAT_ID` - optional, id канала MAX для ускорения проверки подписки;
+- `GAME_WEBAPP_URL` - deep link на мини-приложение в MAX, например `https://max.ru/ozontravel_lenta_bot?startapp`;
+- `SUPPORT_CONTACT` - контакт поддержки;
+- `GAME_API_URL` - адрес backend API;
+- `LOG_LEVEL` - уровень логирования сервиса;
+- `BROADCAST_INTERNAL_TOKEN` - токен для внутренних broadcast endpoint;
+- `REQUEST_BODY_SECRET` - ключ для шифрования тела запроса;
+- `REQUIRE_ENCRYPTED_REQUESTS` - включить шифрование запросов.

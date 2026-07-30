@@ -174,6 +174,34 @@ services:
       - default
       - proxy
 
+  max-bot-test:
+    build:
+      context: ./max-bot-test
+    container_name: max-bot-test
+    restart: unless-stopped
+    env_file:
+      - path: .env.max-bot-test
+        required: false
+    environment:
+      MAX_BOT_MODE: polling
+      MAX_BOT_PORT: 3011
+      NODE_EXTRA_CA_CERTS: /app/certs/russian_trusted_root_ca_pem.crt
+      MAX_SUBSCRIPTION_CHECK_MODE: ${MAX_SUBSCRIPTION_CHECK_MODE:-api}
+      MAX_CHANNEL_URL: ${MAX_CHANNEL_URL:-https://max.ru/ozontravel_official}
+      MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:-}
+      MAX_BANK_CHANNEL_URL: ${MAX_BANK_CHANNEL_URL:-https://max.ru/ozonbank}
+      MAX_BANK_CHANNEL_CHAT_ID: ${MAX_BANK_CHANNEL_CHAT_ID:-}
+      GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-https://${DOMAIN}}
+      SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
+      GAME_API_URL: http://backend:3001
+      REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}
+      REQUIRE_ENCRYPTED_REQUESTS: ${REQUIRE_ENCRYPTED_REQUESTS:-false}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
+      BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./certs:/app/certs:ro
+
   worker:
     build:
       context: ./worker

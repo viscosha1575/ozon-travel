@@ -6,6 +6,7 @@ frontend/.cache/
 admin/dist/
 backend/node_modules/
 max-bot/node_modules/
+max-bot-test/node_modules/
 worker/node_modules/
 backend/uploads/
 admin-panel/

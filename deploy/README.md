@@ -21,7 +21,9 @@ The workflow syncs the repository to `/opt/ozon-travel` with `rsync` and then ru
 The server must already have a production `.env` file at `/opt/ozon-travel/.env` because the workflow does not upload env files.
 The deploy script first builds the requested application images and only then runs `docker compose up -d --no-build`, so an unsuccessful build does not stop the current production containers.
 
-The GitHub Actions workflow is currently configured to deploy only `frontend`.
+The GitHub Actions workflow is currently configured to deploy only `max-bot-test`.
+Its token is stored in the `MAX_BOT_TEST_TOKEN` repository secret and uploaded to
+`/opt/ozon-travel/.env.max-bot-test` during deployment.
 By default the deploy script itself can deploy the full stack: `backend frontend admin max-bot worker`.
 
 To deploy only specific services, pass `DEPLOY_SERVICES` before running the script. Example:

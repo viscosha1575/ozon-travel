@@ -17,7 +17,7 @@ jobs:
       contents: read
     env:
       DEPLOY_PATH: /opt/ozon-travel
-      DEPLOY_SERVICES: backend,frontend,admin,max-bot,worker
+      DEPLOY_SERVICES: max-bot-test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,6 +58,21 @@ jobs:
             --exclude 'frontend/dist/' \
             -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT || '22' }}" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Upload MAX test bot environment
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          MAX_BOT_TEST_TOKEN: ${{ secrets.MAX_BOT_TEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$MAX_BOT_TEST_TOKEN"
+          printf 'MAX_BOT_TOKEN=%s\n' "$MAX_BOT_TEST_TOKEN" | ssh \
+            -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT || '22' }}" \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "umask 077 && cat > '$DEPLOY_PATH/.env.max-bot-test'"
 
       - name: Run remote deploy
         shell: bash
