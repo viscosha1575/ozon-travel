@@ -1604,6 +1604,8 @@ function mapAwardedPrizeForMyPrizesRow(row) {
     image: normalizeStoredImage(row.image),
     expiresAt: row.expires_at,
     type: row.prize_type || "Приз",
+    category: row.prize_category || "",
+    promoCodeType: row.prize_promo_code_type || "",
     hasPrizeLimit: Boolean(row.has_prize_limit),
     description: row.prize_description || "",
     createdAt: row.created_at,
@@ -1644,6 +1646,8 @@ function serializeMyPrizesForFrontend(prizes = []) {
     expiresAt: item.expiresAt,
     promoCode: item.promoCode,
     type: item.type,
+    category: item.category,
+    promoCodeType: item.promoCodeType,
   }));
 }
 
@@ -1660,6 +1664,8 @@ async function listAwardedPrizesForUser(userId, client = null) {
         awarded_prizes.expires_at,
         awarded_prizes.created_at,
         prize_positions.type AS prize_type,
+        prize_positions.category AS prize_category,
+        prize_positions.promo_code_type AS prize_promo_code_type,
         prize_positions.has_prize_limit,
         prize_positions.title AS prize_title,
         prize_positions.roulette_description AS prize_description
@@ -1680,6 +1686,8 @@ function buildFrontendPrize(prize) {
     id: prize.id,
     title: prize.title,
     type: prize.type,
+    category: prize.category,
+    promoCodeType: prize.promoCodeType,
     chanceValue: prize.chanceValue,
     image: prize.rouletteImage?.previewUrl || "",
     description: prize.rouletteDescription || "",
@@ -1815,6 +1823,8 @@ function buildSpinResultPayload(prize, promoCode = "", awardedPrizeId = null) {
   return {
     positionId: prize?.id ?? null,
     type: prize?.type || "Приз",
+    category: prize?.category || "",
+    promoCodeType: prize?.promoCodeType || "",
     title: prize?.title || "",
     myPrizeText: prize?.myPrizeText || prize?.title || "",
     fullTitle: prize?.title || "",
