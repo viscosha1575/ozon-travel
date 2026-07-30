@@ -1,0 +1,2598 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "GT Eesti Pro Display";
+  src: url("/font/GT Eesti Pro Display Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GT Eesti Pro Display";
+  src: url("/font/gteestiprodisplay_medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GT Eesti Pro Display";
+  src: url("/font/GT Eesti Pro Display Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg-action-primary: rgba(0, 91, 255, 1);
+  --graphic-accent-primary: rgba(241, 17, 126, 1);
+  --bg-app-primary: rgba(226, 231, 236, 1);
+  --text-secondary: rgba(0, 26, 52, 0.6);
+  --game-center-block-max-width: 360px;
+  --game-center-block-side-padding: 32px;
+  --game-carousel-pattern-max-width: 286px;
+  --game-carousel-side-rail-width: 20px;
+  --game-carousel-visual-max-width: min(
+    var(--game-carousel-pattern-max-width),
+    calc(100vw - var(--game-center-block-side-padding) * 2)
+  );
+  --game-carousel-scene-width: calc(
+    var(--game-carousel-visual-max-width) + var(--game-carousel-side-rail-width) * 2
+  );
+  --game-carousel-pattern-buffer: max(calc(var(--app-viewport-height) * 18), 16000px);
+  --game-carousel-pattern-buffer-bottom: max(calc(var(--app-viewport-height) * 28), 26000px);
+  --game-carousel-slot-height: clamp(150px, 23svh, 188px);
+  --game-carousel-slot-gap: 24px;
+  --game-spin-easing: cubic-bezier(0.22, 0.72, 0.3, 1);
+  --game-surface-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --game-surface-duration: 420ms;
+  --game-result-bag-enter-duration: 720ms;
+  --game-result-bag-enter-easing: cubic-bezier(0.2, 0.84, 0.24, 1);
+  --game-result-sheet-enter-duration: 980ms;
+  --game-result-sheet-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --game-plaque-enter-duration: 460ms;
+  --game-plaque-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --game-result-bag-scale: 1.24;
+  --game-result-bag-offset-y: 8px;
+  --intro-sheet-side-padding: 20px;
+  --app-sheet-side-padding: var(--intro-sheet-side-padding);
+  --app-sheet-actions-side-padding: var(--intro-sheet-side-padding);
+  --app-sheet-content-max-width: 390px;
+  --app-button-width: 272px;
+  --app-button-height: 60px;
+  --app-button-radius: 14px;
+  --font-display: clamp(22px, 6.1vw, 24px);
+  --font-title: clamp(19px, 5.3vw, 21px);
+  --font-body: clamp(14px, 4.1vw, 16px);
+  --font-body-sm: clamp(13px, 3.7vw, 14px);
+  --font-caption: clamp(12px, 3.3vw, 13px);
+  --font-button: clamp(16px, 4.3vw, 17px);
+  --app-button-font-size: var(--font-button);
+  --app-muted-copy-font-size: var(--font-body-sm);
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 700;
+  --intro-screen-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --intro-screen-duration: 460ms;
+  --background-vector-scale: 0.4;
+  --intro-panel-max-height: 336px;
+  --content-panel-padding-top: 37.5px;
+  --content-panel-padding-bottom: 37.5px;
+  --content-panel-padding: var(--content-panel-padding-top) var(--intro-sheet-side-padding)
+    calc(var(--content-panel-padding-bottom) + var(--app-safe-bottom));
+  --content-panel-gap: 20px;
+  --tg-viewport-height: 100svh;
+  --tg-viewport-stable-height: 100svh;
+  --tg-safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --tg-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --tg-safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --tg-safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --tg-content-safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --tg-content-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --tg-content-safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --tg-content-safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --app-viewport-height: var(--tg-viewport-stable-height);
+  --app-safe-top: max(var(--tg-safe-area-inset-top), var(--tg-content-safe-area-inset-top));
+  --app-safe-bottom: max(var(--tg-safe-area-inset-bottom), var(--tg-content-safe-area-inset-bottom));
+  color-scheme: only light;
+  color: #18222c;
+  background: var(--bg-app-primary);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color-scheme: only light;
+}
+
+body {
+  min-width: 320px;
+  background: var(--bg-app-primary);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+}
+
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: var(--app-viewport-height);
+  overflow: hidden;
+  background: var(--bg-app-primary);
+}
+
+.app-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.app-layer.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.app-layer.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.intro-layer {
+  transition: opacity 220ms ease, visibility 0ms linear 220ms;
+}
+
+.intro-layer.is-visible {
+  transition-delay: 0ms;
+}
+
+.project-finished-loading {
+  width: 100%;
+  height: var(--app-viewport-height);
+  background: var(--bg-app-primary);
+}
+
+.project-finished-screen {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100vw;
+  height: var(--app-viewport-height);
+  overflow: hidden;
+  background: var(--bg-app-primary);
+}
+
+.project-finished-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.project-finished-scene {
+  height: 100%;
+}
+
+.project-finished-pattern {
+  opacity: 0.92;
+}
+
+.project-finished-banner {
+  animation: none;
+}
+
+.project-finished-hands {
+  position: absolute;
+  left: 50%;
+  bottom: calc(160px + var(--app-safe-bottom));
+  z-index: 3;
+  display: block;
+  width: min(78vw, 360px);
+  max-width: 360px;
+  max-height: min(48vh, 430px);
+  object-fit: contain;
+  transform: translate(-50%, 118%);
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  animation: project-finished-hands-rise-in 1840ms var(--intro-screen-easing) 2ms both;
+}
+
+.project-finished-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  border-radius: 44px 44px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 32px rgba(20, 34, 50, 0.06);
+  transform: translateY(100%);
+  animation: panel-rise-in 1440ms var(--intro-screen-easing) 2ms forwards;
+}
+
+.project-finished-sheet-inner {
+  display: grid;
+  justify-items: center;
+  gap: clamp(8px, 1.185svh, 12px);
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--intro-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
+  padding:
+    clamp(22px, 3.317svh, 28px)
+    0
+    calc(clamp(22px, 3.317svh, 28px) + var(--app-safe-bottom));
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.project-finished-title {
+  margin: 0;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-title);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  letter-spacing: 0.32px;
+  text-align: center;
+}
+
+.project-finished-description {
+  margin: clamp(4px, 0.948svh, 8px) 0 0;
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+  text-align: center;
+}
+
+.project-finished-action {
+  width: var(--app-button-width);
+  margin-top: clamp(8px, 1.422svh, 12px);
+}
+
+.game-layer {
+  transition: opacity 220ms ease, visibility 0ms linear 220ms;
+}
+
+.game-layer.is-visible {
+  transition-delay: 0ms;
+}
+
+.game-screen {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100vw;
+  height: var(--app-viewport-height);
+  overflow: hidden;
+  background: var(--bg-app-primary);
+}
+
+.game-preload-image {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  inset: 0 auto auto 0;
+}
+
+.game-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.game-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.game-stage.is-result-mode .game-carousel-track {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game-stage.is-result-entering .game-carousel-track {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game-carousel-scene {
+  position: relative;
+  width: var(--game-carousel-scene-width);
+  height: 100%;
+  opacity: 1;
+  transition:
+    opacity 220ms ease,
+    transform 260ms ease;
+  contain: layout;
+}
+
+.game-carousel-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(209, 209, 209, 1) 0%, rgba(192, 192, 192, 1) 100%);
+  box-shadow:
+    inset 18px 0 28px rgba(255, 255, 255, 0.14),
+    inset -18px 0 28px rgba(255, 255, 255, 0.14);
+}
+
+.game-carousel-pattern-motion-layer,
+.game-carousel-track-motion-layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.game-carousel-pattern-motion-layer {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.game-carousel-track-motion-layer {
+  z-index: 2;
+}
+
+.game-carousel-pattern-underlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 0;
+  width: min(100%, var(--game-carousel-visual-max-width));
+  transform: translateX(-50%);
+  background: #595959;
+}
+
+.game-carousel-pattern {
+  position: absolute;
+  top: calc(-1 * var(--game-carousel-pattern-buffer));
+  bottom: calc(-1 * var(--game-carousel-pattern-buffer-bottom));
+  left: 50%;
+  z-index: 1;
+  width: min(100%, var(--game-carousel-visual-max-width));
+  transform: translate3d(-50%, 0, 0);
+  opacity: 0.92;
+  background:
+    transparent url("/game/center.webp")
+    center top / 100% auto
+    repeat-y;
+}
+
+.game-carousel-pattern.is-animating {
+  transition: transform 5000ms var(--game-spin-easing);
+}
+
+.game-carousel-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.game-carousel-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: var(--game-carousel-slot-gap);
+  min-height: 100%;
+  width: 100%;
+  opacity: 1;
+  transition: opacity 180ms ease;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+}
+
+.game-carousel-track.is-animating {
+  transition: transform 5000ms var(--game-spin-easing);
+}
+
+.game-carousel-slot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  height: calc((var(--app-viewport-height) - var(--game-carousel-slot-gap) * 2) / 3);
+  padding: 0 14px;
+  box-sizing: border-box;
+}
+
+.game-carousel-slot-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, var(--game-carousel-visual-max-width));
+  height: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.game-carousel-slot-image {
+  display: block;
+  width: 108%;
+  height: 108%;
+  max-width: 108%;
+  max-height: 108%;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.game-carousel-triangle {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: block;
+  height: clamp(44px, 8.8svh, 60px);
+  width: auto;
+  opacity: 1;
+  transition:
+    opacity 260ms ease,
+    transform 420ms var(--game-surface-easing);
+  pointer-events: none;
+}
+
+.game-carousel-triangle-left {
+  left: -4px;
+  transform: translate3d(0, -50%, 0);
+}
+
+.game-carousel-triangle-right {
+  right: -4px;
+  transform: translate3d(0, -50%, 0);
+}
+
+.game-stage.is-result-mode .game-carousel-triangle,
+.game-stage.is-result-entering .game-carousel-triangle {
+  opacity: 0;
+}
+
+.game-stage.is-result-mode .game-carousel-triangle-left,
+.game-stage.is-result-entering .game-carousel-triangle-left {
+  transform: translate3d(-72px, -50%, 0);
+}
+
+.game-stage.is-result-mode .game-carousel-triangle-right,
+.game-stage.is-result-entering .game-carousel-triangle-right {
+  transform: translate3d(72px, -50%, 0);
+}
+
+.game-top-banner {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  row-gap: 14px;
+  width: calc(
+    min(
+      var(--game-center-block-max-width),
+      calc(100% - var(--game-center-block-side-padding) * 2)
+    ) - 16px
+  );
+  height: clamp(142px, 25svh, 208px);
+  border-radius: 0 0 50px 50px;
+  background: linear-gradient(
+    180deg,
+    rgba(192, 192, 192, 1) 0%,
+    rgba(255, 255, 255, 1) 100%
+  );
+  box-sizing: border-box;
+  padding: calc(18px + var(--app-safe-top)) 14px 18px;
+  transform: translate3d(-50%, 0, 0);
+  filter: blur(0);
+  pointer-events: auto;
+  z-index: 4;
+  transition:
+    opacity 260ms ease,
+    transform var(--game-surface-duration) var(--game-surface-easing),
+    filter 260ms ease;
+  animation: game-top-banner-drop-in 520ms var(--game-surface-easing) 120ms backwards;
+}
+
+.game-top-banner.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, -12px, 0) scale(0.985);
+  filter: blur(6px);
+}
+
+.game-top-banner-section {
+  min-height: 0;
+}
+
+.game-top-banner-section--primary {
+  display: flex;
+  justify-content: center;
+}
+
+.game-top-banner-section--secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.game-top-banner-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 46px);
+  gap: 10px;
+}
+
+.game-top-banner-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  width: 46px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 6px 18px rgba(154, 154, 154, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  padding: 0;
+  cursor: pointer;
+}
+
+.game-top-banner-action-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.game-top-banner-logo {
+  display: block;
+  width: min(170px, 65.6%);
+  height: auto;
+  object-fit: contain;
+}
+
+.game-fade-overlay {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: clamp(52px, 10svh, 88px);
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 220ms ease;
+}
+
+.game-fade-overlay-top {
+  top: 0;
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.game-fade-overlay-bottom {
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.game-fade-overlay.is-hidden {
+  opacity: 0;
+}
+
+.game-dev-widget {
+  position: absolute;
+  top: calc(18px + var(--app-safe-top));
+  left: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.game-dev-widget-toggle {
+  width: 40px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: rgba(7, 7, 7, 0.92);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-title);
+  cursor: pointer;
+}
+
+.game-dev-widget-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(20, 34, 50, 0.18);
+}
+
+.game-dev-widget-action {
+  min-width: 132px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.game-dev-widget-action--danger {
+  background: rgba(255, 88, 88, 0.14);
+  color: #d63f3f;
+}
+
+.game-carousel-debug-panel {
+  position: absolute;
+  top: calc(12px + var(--app-safe-top));
+  left: 50%;
+  z-index: 11;
+  display: grid;
+  gap: 4px;
+  width: min(92vw, 360px);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(7, 7, 7, 0.82);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: 11px;
+  line-height: 1.25;
+  transform: translateX(-50%);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.game-carousel-debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-carousel-debug-row span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.game-carousel-debug-row--wide span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(23px + var(--app-safe-bottom));
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--app-sheet-side-padding);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 6;
+  transition:
+    opacity 240ms ease,
+    transform 320ms var(--game-surface-easing),
+    filter 240ms ease;
+  filter: blur(0);
+}
+
+.game-controls.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 12px, 0) scale(0.985);
+  filter: blur(6px);
+}
+
+.game-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: end;
+}
+
+.game-overlay--controls-guide {
+  pointer-events: none;
+}
+
+.game-overlay--controls-guide .game-overlay-sheet {
+  pointer-events: auto;
+}
+
+.game-overlay.is-closing {
+  pointer-events: none;
+}
+
+.game-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(226, 231, 236, 0.5);
+  animation: game-overlay-backdrop-in 240ms ease-out both;
+}
+
+.game-overlay-sheet {
+  position: relative;
+  width: 100%;
+  border-radius: 44px 44px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 32px rgba(20, 34, 50, 0.06);
+  animation: game-sheet-rise-in var(--game-surface-duration) var(--game-surface-easing) both;
+}
+
+.game-overlay.is-closing .game-overlay-backdrop {
+  animation: game-overlay-backdrop-out 220ms ease both;
+}
+
+.game-overlay.is-closing .game-overlay-sheet {
+  animation: game-sheet-exit 320ms var(--game-surface-easing) both;
+}
+
+.game-overlay-sheet-inner {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--app-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
+  padding: 28px 0 24px;
+  text-align: center;
+}
+
+.game-overlay-sheet-inner--controls-guide {
+  justify-items: stretch;
+  gap: 11px;
+  padding-top: 34px;
+  padding-bottom: 30px;
+}
+
+.game-overlay-sheet--controls-guide {
+  transform: translateY(100%);
+  animation: panel-rise-in 1440ms cubic-bezier(0.22, 1, 0.36, 1) 2ms forwards;
+}
+
+.game-overlay-title {
+  margin: 0;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-title);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.2;
+  letter-spacing: 0.42px;
+}
+
+.game-overlay-title--multiline {
+  line-height: 1.12;
+}
+
+.game-overlay-title--controls-guide {
+  text-align: center;
+}
+
+.game-overlay-description {
+  margin: 0;
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+.game-overlay-description--rich {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  line-height: 1.24;
+}
+
+.game-overlay-description-line-fixed {
+  display: block;
+  white-space: nowrap;
+}
+
+.game-overlay-description-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.game-overlay-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: #f1177e;
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  letter-spacing: 0.14px;
+  white-space: nowrap;
+}
+
+.game-overlay-actions {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.game-controls-guide-list {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+}
+
+.game-controls-guide-item {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.game-controls-guide-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 6px 18px rgba(154, 154, 154, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.game-controls-guide-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.game-controls-guide-text {
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+  text-align: left;
+}
+
+.game-overlay-action {
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  border: 0;
+  border-radius: var(--app-button-radius);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--app-button-font-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-overlay-action--primary {
+  background: var(--bg-action-primary);
+  color: #fff;
+}
+
+.game-overlay-action--secondary {
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+}
+
+.game-prizes-page {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  justify-content: center;
+  background:
+    linear-gradient(0deg, #fff 0%, #fff 100%),
+    #fff;
+  pointer-events: auto;
+  animation: fade-in-layer 260ms ease-out both;
+}
+
+.game-prizes-page.is-closing {
+  pointer-events: none;
+  animation: fade-out-layer 220ms ease both;
+}
+
+.game-prizes-page-inner {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding:
+    calc(18px + var(--app-safe-top))
+    30px
+    calc(23px + var(--app-safe-bottom));
+  animation: game-page-rise-in 460ms var(--game-surface-easing) both;
+}
+
+.game-prizes-page.is-closing .game-prizes-page-inner {
+  animation: game-page-exit 320ms var(--game-surface-easing) both;
+}
+
+.game-prizes-title {
+  margin: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-display);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.05;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.game-prizes-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.game-prizes-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.game-prizes-empty-description {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.game-prize-card {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  container-type: inline-size;
+  width: 100%;
+  min-height: 92px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(245, 247, 250, 1) 0%, rgba(240, 243, 248, 1) 100%);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.game-prize-card-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 108px;
+  height: 92px;
+  overflow: hidden;
+}
+
+.game-prize-card-image {
+  display: block;
+  width: min(100%, 132px);
+  height: min(100%, 132px);
+  object-fit: contain;
+  object-position: center;
+  max-width: 100%;
+  max-height: 100%;
+  transform: scale(1.5);
+  transform-origin: center;
+}
+
+.game-prize-card-content {
+  display: grid;
+  gap: 8px;
+  justify-self: stretch;
+  min-width: 0;
+  padding: 12px 14px 12px 2px;
+}
+
+.game-prize-card-title {
+  margin: 0;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: clamp(12px, 5.8cqi, 16px);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: block;
+  max-height: calc(1.08em * 2);
+  overflow: hidden;
+}
+
+.game-prize-card-date {
+  margin: 0;
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-caption);
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+  letter-spacing: 0.16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-prizes-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 18px;
+}
+
+.game-prizes-close {
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  border: 0;
+  border-radius: var(--app-button-radius);
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--app-button-font-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.embedded-page {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  background: #fff;
+}
+
+.embedded-page-inner {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding-top: var(--app-safe-top);
+  background: #fff;
+  animation: game-page-rise-in 460ms var(--game-surface-easing) both;
+}
+
+.embedded-page-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 50%;
+  bottom: calc(23px + var(--app-safe-bottom));
+  z-index: 3;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  padding: 8px 18px;
+  border: 0;
+  border-radius: var(--app-button-radius);
+  background: linear-gradient(180deg, #1d69f8 0%, #155cf0 100%);
+  box-shadow:
+    0 14px 28px rgba(21, 92, 240, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--app-button-font-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.17px;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.embedded-page-frame-wrap {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  height: 100%;
+  background: #fff;
+}
+
+.embedded-page-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  text-align: center;
+  background: #fff;
+}
+
+.embedded-page-frame {
+  display: block;
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.game-result {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: auto;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding-top: var(--app-safe-top);
+  box-sizing: border-box;
+}
+
+.game-result.is-bag-entering {
+  pointer-events: none;
+}
+
+.game-result-hero {
+  grid-row: 1;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.game-result-bag-frame {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(196px, 68vw, 272px);
+  max-width: min(
+    calc(100vw - 8px),
+    var(--game-carousel-visual-max-width)
+  );
+  height: min(calc(var(--app-viewport-height) * 34 / 100), 292px);
+  max-height: 292px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.game-result-bag-visual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(var(--game-result-preview-scale, 1.2));
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  overflow: visible;
+}
+
+.game-result.is-collection-entering .game-result-bag-visual {
+  animation: game-result-bag-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.game-result-bag-visual.is-hidden {
+  opacity: 0;
+}
+
+.game-result-bag {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center center;
+}
+
+.game-result-flight-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.game-result-flight-bag {
+  position: fixed;
+  display: block;
+  top: 0;
+  left: 0;
+  object-fit: contain;
+  object-position: center center;
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+
+.game-result-sheet {
+  grid-row: 2;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  border-radius: 44px 44px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 32px rgba(20, 34, 50, 0.06);
+  visibility: hidden;
+  transform: translateY(100%);
+}
+
+.game-result.is-sheet-visible .game-result-sheet {
+  visibility: visible;
+  transform: translateY(0);
+  animation: panel-rise-in var(--game-result-sheet-enter-duration) var(--game-result-sheet-enter-easing) both;
+}
+
+.game-result-sheet-inner {
+  display: grid;
+  justify-items: center;
+  gap: clamp(4px, 0.711svh, 8px);
+  width: min(
+    var(--app-sheet-content-max-width),
+    calc(100% - (var(--intro-sheet-side-padding) * 2))
+  );
+  margin-inline: auto;
+  box-sizing: border-box;
+  padding: clamp(22px, 3.317svh, 28px) 0 clamp(22px, 3.317svh, 28px);
+  text-align: center;
+}
+
+.game-result-kicker {
+  margin: 0;
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.2;
+  letter-spacing: 0.13px;
+}
+
+.game-result-title {
+  margin: 0;
+  color: #070707;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-title);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  letter-spacing: 0.32px;
+}
+
+.game-result-description {
+  margin: clamp(2px, 0.474svh, 4px) 0 0;
+  color: #6d7d90;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+.game-result-description-stack {
+  display: grid;
+  gap: clamp(6px, 1.067svh, 10px);
+  margin-top: clamp(2px, 0.474svh, 4px);
+}
+
+.game-result-description--paragraph {
+  margin: 0;
+}
+
+.game-result-description-line {
+  display: block;
+}
+
+.game-result-description--dark {
+  color: #070707;
+  font-size: var(--font-body);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+.game-result-actions {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  gap: clamp(8px, 1.422svh, 12px);
+  margin-top: clamp(4px, 0.948svh, 8px);
+}
+
+.game-result-code,
+.game-result-primary-action {
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  border: 0;
+  border-radius: var(--app-button-radius);
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--app-button-font-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-result-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 1.659svh, 14px);
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+  transition:
+    background var(--game-plaque-enter-duration) var(--game-plaque-enter-easing),
+    color var(--game-plaque-enter-duration) var(--game-plaque-enter-easing),
+    transform var(--game-plaque-enter-duration) var(--game-plaque-enter-easing),
+    box-shadow var(--game-plaque-enter-duration) var(--game-plaque-enter-easing),
+    filter var(--game-plaque-enter-duration) var(--game-plaque-enter-easing);
+  will-change: transform, filter;
+}
+
+.game-result-code.is-copied {
+  gap: 0;
+  background: var(--bg-action-primary);
+  color: #fff;
+  transform: translate3d(0, 0, 0) scale(1);
+  box-shadow: 0 10px 22px rgba(0, 91, 255, 0.2);
+  filter: blur(0);
+}
+
+.game-result-code-text {
+  white-space: nowrap;
+}
+
+.game-result-code-icon {
+  display: block;
+  width: clamp(20px, 2.844svh, 24px);
+  height: clamp(20px, 2.844svh, 24px);
+  object-fit: contain;
+}
+
+.game-result-copy-toast {
+  position: fixed;
+  top: calc(var(--app-safe-top) + 25px);
+  left: 50%;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5.5px 12px 5.5px 24px;
+  box-sizing: border-box;
+  gap: 6px;
+  border-radius: 999px;
+  background: #070707;
+  color: #fff;
+  transform: translate3d(-50%, 0, 0) scale(1);
+  box-shadow: 0 12px 24px rgba(7, 7, 7, 0.18);
+  backface-visibility: hidden;
+  will-change: transform, opacity, filter;
+}
+
+.game-result-copy-toast.is-opening {
+  animation: game-plaque-fade-in var(--game-plaque-enter-duration) var(--game-plaque-enter-easing) both;
+}
+
+.game-result-copy-toast.is-closing {
+  animation: game-plaque-fade-out var(--game-plaque-enter-duration) var(--game-plaque-enter-easing) both;
+}
+
+.game-result-copy-toast-text {
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: calc(var(--font-title) * 0.8);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.game-result-copy-toast-check {
+  display: block;
+  width: 28.8px;
+  height: 28.8px;
+  object-fit: contain;
+}
+
+.game-result-primary-action {
+  background: var(--bg-action-primary);
+  color: #fff;
+}
+
+.game-result-primary-action.is-secondary {
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+}
+
+@media (max-height: 760px) {
+  .game-prizes-page-inner {
+    padding-top: calc(14px + var(--app-safe-top));
+    padding-right: 30px;
+    padding-bottom: calc(19px + var(--app-safe-bottom));
+    padding-left: 30px;
+  }
+
+  .game-prizes-list {
+    gap: 10px;
+    padding-top: 18px;
+  }
+
+  .game-prize-card {
+    grid-template-columns: 96px minmax(0, 1fr);
+    min-height: 82px;
+    border-radius: 16px;
+  }
+
+  .game-prize-card-media {
+    width: 96px;
+    height: 82px;
+  }
+
+  .game-prize-card-image {
+    width: min(100%, 120px);
+    height: min(100%, 120px);
+  }
+
+  .game-prize-card-content {
+    gap: 6px;
+    padding: 10px 14px 10px 0;
+  }
+
+  .game-prize-card-date {
+    font-size: var(--font-caption);
+  }
+
+  .game-prizes-footer {
+    padding-top: 14px;
+  }
+
+  .game-result-sheet {
+    border-radius: 36px 36px 0 0;
+  }
+}
+
+.game-spin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  padding: 8px 18px;
+  border: 0;
+  border-radius: var(--app-button-radius);
+  background: linear-gradient(180deg, #1d69f8 0%, #155cf0 100%);
+  box-shadow:
+    0 14px 28px rgba(21, 92, 240, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: center center;
+  animation: logo-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 280ms both;
+}
+
+.game-spin-button:disabled {
+  cursor: default;
+  opacity: 0.9;
+}
+
+.game-spin-button--single {
+  gap: 0;
+}
+
+.game-spin-button-label {
+  font-size: var(--app-button-font-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.17px;
+}
+
+.game-spin-button-attempt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  font-size: var(--font-button);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.17px;
+}
+
+@keyframes fade-in-layer {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out-layer {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes game-overlay-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes game-overlay-backdrop-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes game-sheet-rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 34px, 0) scale(0.985);
+    filter: blur(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes game-sheet-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0) scale(0.99);
+    filter: blur(8px);
+  }
+}
+
+@keyframes game-page-rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.992);
+    filter: blur(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes game-page-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0) scale(0.994);
+    filter: blur(8px);
+  }
+}
+
+@keyframes game-top-banner-drop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, -32px, 0) scale(0.985);
+    filter: blur(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes panel-rise-in {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes center-bag-rise-in {
+  from {
+    transform: translate(-50%, 118%);
+  }
+
+  to {
+    transform: translate(-50%, -73%);
+  }
+}
+
+@keyframes project-finished-hands-rise-in {
+  from {
+    transform: translate(-50%, 118%);
+  }
+
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes side-bag-left-spread-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -73%) rotate(0deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-126%, -73%) rotate(-3deg);
+  }
+}
+
+@keyframes side-bag-right-spread-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -73%) rotate(0deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(18%, -73%) rotate(3deg);
+  }
+}
+
+@keyframes vector-reveal-down {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.5;
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes vector-reveal-right {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.5;
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes vector-reveal-up {
+  from {
+    clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.5;
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes logo-grow-in {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes game-plaque-fade-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 12px, 0) scale(0.92);
+    filter: blur(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes game-plaque-fade-out {
+  from {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(-50%, -10px, 0) scale(0.94);
+    filter: blur(6px);
+  }
+}
+
+@keyframes game-result-bag-grow-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(0);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(calc(var(--game-result-preview-scale, 1.2) * 1.0333333333));
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, var(--game-result-bag-offset-y), 0) scale(var(--game-result-preview-scale, 1.2));
+  }
+}
+
+@keyframes subscribe-grow-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -104%) scale(0);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -104%) scale(1.08);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -104%) scale(1);
+  }
+}
+
+.split-screen {
+  display: grid;
+  width: 100vw;
+  height: var(--app-viewport-height);
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+  background: var(--bg-app-primary);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 0.72fr) minmax(0, 1.28fr);
+}
+
+.split-screen--subscribe {
+  grid-template-rows: minmax(0, 0.9fr) minmax(152px, 0.82fr) auto;
+}
+
+.background-vectors {
+  position: relative;
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  min-height: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.background-vector {
+  position: absolute;
+  display: block;
+  object-fit: contain;
+  transform-origin: top left;
+  overflow: visible;
+  opacity: 0;
+}
+
+.background-vector-path {
+  fill: #fff;
+  stroke: none;
+}
+
+.background-vector-path-left {
+}
+
+.background-vector-path-right {
+}
+
+.background-vector-path-center {
+}
+
+.background-vector-left {
+  top: 6%;
+  left: -14vw;
+  transform: scale(var(--background-vector-scale));
+  animation: vector-reveal-down 980ms ease-out 820ms both;
+}
+
+.background-vector-right {
+  top: -2%;
+  right: -5vw;
+  transform-origin: top right;
+  transform: scale(var(--background-vector-scale));
+  animation: vector-reveal-up 980ms ease-out 1100ms both;
+}
+
+.background-vector-center {
+  left: 50%;
+  top: 78%;
+  transform: translate(-50%, -25%) scale(var(--background-vector-scale)) rotate(-1.3deg);
+  transform-origin: center center;
+  animation: vector-reveal-right 980ms ease-out 920ms both;
+}
+
+.logo-panel {
+  display: flex;
+  grid-row: 1;
+  grid-column: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: calc(24px + var(--app-safe-top)) 24px 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.logo-image {
+  display: block;
+  width: min(66vw, 404px);
+  height: auto;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(0);
+  transform-origin: center center;
+  animation: logo-grow-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 520ms forwards;
+}
+
+.split-screen--subscribe .logo-image {
+  width: clamp(228px, min(68vw, 31svh), 340px);
+}
+
+.spacer-panel {
+  grid-row: 2;
+  grid-column: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.content-bag-layer {
+  grid-row: 3;
+  grid-column: 1;
+  min-height: 0;
+  height: min(100%, var(--intro-panel-max-height));
+  max-height: 100%;
+  align-self: end;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  transition:
+    opacity 320ms ease,
+    transform 520ms var(--intro-screen-easing);
+}
+
+.content-subscribe-layer {
+  grid-row: 2;
+  grid-column: 1;
+  min-height: 0;
+  align-self: stretch;
+  position: relative;
+  z-index: 3;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 0 24px;
+  box-sizing: border-box;
+  pointer-events: none;
+  transition:
+    opacity 320ms ease,
+    transform 520ms var(--intro-screen-easing);
+}
+
+.split-screen--subscribe .background-vectors {
+  grid-row: 1 / span 3;
+}
+
+.split-screen--subscribe .content-subscribe-layer {
+  padding: 0 24px clamp(12px, 2.844svh, 28px);
+}
+
+.content-bag-layer.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.content-bag-layer.is-static {
+  transition: none;
+  transform: translateY(108px);
+}
+
+.content-bag-layer.is-static .content-bag {
+  animation: none;
+  transform: translate(-50%, -73%);
+}
+
+.content-bag-layer.is-static .content-bag-accent-left {
+  animation: none;
+  opacity: 1;
+  transform: translate(-126%, -73%) rotate(-3deg);
+}
+
+.content-bag-layer.is-static .content-bag-accent-right {
+  animation: none;
+  opacity: 1;
+  transform: translate(18%, -73%) rotate(3deg);
+}
+
+.content-bag-layer.is-hidden {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.content-subscribe-layer.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.content-subscribe-layer.is-hidden {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.content-bag-accent {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+  object-fit: contain;
+  opacity: 0;
+}
+
+.content-bag-accent-left {
+  width: clamp(167px, 42.9vw, 194px);
+  aspect-ratio: 223 / 249;
+  height: auto;
+  transform: translate(-50%, -73%) rotate(0deg);
+  animation: side-bag-left-spread-in 560ms cubic-bezier(0.22, 1, 0.36, 1) 900ms forwards;
+}
+
+.content-bag-accent-right {
+  width: clamp(187px, 48.4vw, 213px);
+  aspect-ratio: 200 / 201;
+  height: auto;
+  transform: translate(-50%, -73%) rotate(0deg);
+  animation: side-bag-right-spread-in 560ms cubic-bezier(0.22, 1, 0.36, 1) 900ms forwards;
+}
+
+.content-panel {
+  grid-row: 3;
+  grid-column: 1;
+  min-height: 0;
+  height: min(100%, var(--intro-panel-max-height));
+  max-height: 100%;
+  align-self: end;
+  background: #fff;
+  border-radius: 50px 50px 0 0;
+  position: relative;
+  z-index: 2;
+  transform: translateY(100%);
+  animation: panel-rise-in 1440ms cubic-bezier(0.22, 1, 0.36, 1) 2ms forwards;
+}
+
+.content-panel.is-compact {
+  min-height: auto;
+  height: auto;
+  align-self: end;
+}
+
+.content-bag {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  display: block;
+  width: clamp(268px, 71.5vw, 310px);
+  aspect-ratio: 301 / 354;
+  height: auto;
+  transform: translate(-50%, 118%);
+  object-fit: contain;
+  pointer-events: none;
+  animation: center-bag-rise-in 1840ms cubic-bezier(0.22, 1, 0.36, 1) 2ms forwards;
+}
+
+.content-subscribe-image {
+  position: relative;
+  display: block;
+  width: min(47.6vw, 280px);
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 1;
+  transform: none;
+}
+
+.split-screen--subscribe .content-subscribe-image {
+  width: clamp(150px, min(46vw, 23svh), 248px);
+  align-self: end;
+}
+
+.content-panel-inner {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  opacity: 0;
+  animation: fade-in-layer 1120ms ease-out 240ms forwards;
+}
+
+.content-panel-inner.is-compact {
+  height: auto;
+  overflow: visible;
+}
+
+.content-screen-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.content-screen-stack.is-compact {
+  height: auto;
+}
+
+.content-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  padding: var(--content-panel-padding);
+  grid-template-rows: auto auto;
+  align-content: space-between;
+  justify-items: center;
+  gap: var(--content-panel-gap);
+  box-sizing: border-box;
+  opacity: 0;
+  transform: translate3d(0, 28px, 0) scale(0.985);
+  filter: blur(8px);
+  transition:
+    opacity var(--intro-screen-duration) ease,
+    transform var(--intro-screen-duration) var(--intro-screen-easing),
+    filter 320ms ease;
+  pointer-events: none;
+  will-change: opacity, transform, filter;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-screen.is-active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  pointer-events: auto;
+}
+
+.content-screen.is-before {
+  opacity: 0;
+  transform: translate3d(0, -18px, 0) scale(0.982);
+  filter: blur(6px);
+}
+
+.content-screen.is-after {
+  opacity: 0;
+  transform: translate3d(0, 30px, 0) scale(0.988);
+  filter: blur(8px);
+}
+
+.content-screen-stack.is-compact .content-screen.is-active {
+  position: relative;
+  inset: auto;
+}
+
+.content-screen--subscription {
+  align-content: center;
+  justify-items: center;
+  gap: 34px;
+}
+
+.content-screen--result {
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
+}
+
+.content-screen[data-screen="intro"] {
+  overflow-y: hidden;
+}
+
+.content-copy {
+  display: grid;
+  width: 100%;
+  grid-template-rows: repeat(3, auto);
+  align-content: start;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.content-kicker {
+  margin: 0;
+  color: var(--text-secondary);
+  text-align: center;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+.content-title {
+  margin: 0;
+  color: #070707;
+  text-align: center;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-display);
+  font-style: normal;
+  font-weight: var(--font-weight-bold);
+  line-height: 120%;
+  letter-spacing: 0.64px;
+}
+
+.content-line {
+  display: block;
+  white-space: nowrap;
+}
+
+.content-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 8px 2px;
+  border-radius: 8px;
+  background: var(--graphic-accent-primary);
+  color: #fff;
+}
+
+.content-accent-icon {
+  width: 0.64em;
+  height: 0.64em;
+  display: block;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.content-description {
+  margin: 0;
+  color: var(--text-secondary);
+  text-align: center;
+  font-family: "GT Eesti Pro Display", "Segoe UI", sans-serif;
+  font-size: var(--font-body);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+.content-action {
+  width: var(--app-button-width);
+  height: var(--app-button-height);
+  border: 0;
+  border-radius: var(--app-button-radius);
+  background: var(--bg-action-primary);
+  color: #fff;
+  font-size: var(--app-button-font-size);
+  line-height: 1;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  justify-self: center;
+}
+
+.content-title--subscription {
+  line-height: 112%;
+}
+
+.content-title--result {
+  line-height: 110%;
+}
+
+.content-actions-stack {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  gap: 10px;
+}
+
+.content-action--secondary {
+  background: rgba(0, 91, 255, 0.12);
+  color: rgba(0, 91, 255, 1);
+}
+
+.content-description--result {
+  max-width: 100%;
+  font-size: var(--font-body);
+  line-height: 1.3;
+  letter-spacing: 0.12px;
+}
+
+@media (max-width: 720px) {
+  .content-subscribe-image {
+    width: min(54vw, 220px);
+  }
+
+  .split-screen--subscribe .logo-image {
+    width: clamp(216px, min(70vw, 29svh), 304px);
+  }
+
+  .split-screen--subscribe .content-subscribe-image {
+    width: clamp(142px, min(50vw, 22svh), 216px);
+  }
+
+  .content-panel-inner {
+  }
+
+  .content-screen {
+    padding: clamp(24px, 4.443svh, 48px) var(--intro-sheet-side-padding);
+    gap: clamp(12px, 1.896svh, 20px);
+  }
+
+  .content-screen[data-screen="intro"] {
+    padding-top: clamp(18px, 3.8svh, 28px);
+    gap: 10px;
+  }
+
+  .content-copy {
+    gap: clamp(8px, 1.481svh, 15px);
+  }
+
+  .content-kicker,
+  .content-description {
+    font-size: var(--font-body);
+  }
+
+  .content-title {
+    font-size: var(--font-display);
+  }
+
+  .content-action {
+    height: var(--app-button-height);
+    font-size: var(--app-button-font-size);
+  }
+
+  .content-screen--subscription {
+    gap: clamp(20px, 4.028svh, 34px);
+  }
+
+  .content-screen--result {
+    gap: clamp(14px, 2.37svh, 22px);
+  }
+
+  .content-actions-stack {
+    gap: clamp(10px, 1.422svh, 14px);
+  }
+
+  .content-description--result {
+    font-size: var(--font-body);
+  }
+}
+
+@media (max-height: 760px) {
+  :root {
+    --intro-panel-max-height: 280px;
+    --content-panel-padding-top: 28px;
+    --content-panel-padding-bottom: 24px;
+    --content-panel-gap: 16px;
+    --app-button-height: 54px;
+  }
+
+  .split-screen {
+    grid-template-rows: minmax(0, 0.92fr) minmax(0, 0.54fr) minmax(0, 1.54fr);
+  }
+
+  .split-screen--subscribe {
+    grid-template-rows: minmax(0, 0.84fr) minmax(128px, 0.68fr) auto;
+  }
+
+  .logo-panel {
+    padding: calc(16px + var(--app-safe-top)) 20px 16px;
+  }
+
+  .logo-image {
+    width: min(58vw, 328px);
+  }
+
+  .split-screen--subscribe .logo-image {
+    width: clamp(208px, min(64vw, 28svh), 292px);
+  }
+
+  .content-subscribe-image {
+    width: 184px;
+  }
+
+  .split-screen--subscribe .content-subscribe-image {
+    width: clamp(138px, min(44vw, 21svh), 188px);
+  }
+
+  .content-bag {
+    width: clamp(238px, 63.8vw, 277px);
+  }
+
+  .content-bag-accent-left {
+    width: clamp(145px, 37.4vw, 172px);
+  }
+
+  .content-bag-accent-right {
+    width: clamp(161px, 41.8vw, 189px);
+  }
+
+  .content-copy {
+    gap: 8px;
+  }
+
+  .content-title {
+    font-size: clamp(20px, 5.3vw, 22px);
+  }
+
+  .content-kicker,
+  .content-description {
+    font-size: clamp(13px, 3.7vw, 15px);
+  }
+
+  .content-actions-stack {
+    gap: 8px;
+  }
+
+  .content-bag-layer.is-static {
+    transform: translateY(88px);
+  }
+}
+
+@media (max-height: 680px) {
+  :root {
+    --intro-panel-max-height: 252px;
+    --content-panel-padding-top: 22px;
+    --content-panel-padding-bottom: 18px;
+    --content-panel-gap: 12px;
+    --app-button-height: 50px;
+  }
+
+  .split-screen {
+    grid-template-rows: minmax(0, 0.82fr) minmax(0, 0.46fr) minmax(0, 1.72fr);
+  }
+
+  .split-screen--subscribe {
+    grid-template-rows: minmax(0, 0.74fr) minmax(108px, 0.56fr) auto;
+  }
+
+  .logo-panel {
+    padding: calc(12px + var(--app-safe-top)) 16px 12px;
+  }
+
+  .logo-image {
+    width: min(52vw, 292px);
+  }
+
+  .split-screen--subscribe .logo-image {
+    width: clamp(188px, min(58vw, 26svh), 260px);
+  }
+
+  .split-screen--subscribe .content-subscribe-image {
+    width: clamp(126px, min(40vw, 19svh), 168px);
+  }
+
+  .content-bag {
+    width: clamp(207px, 55vw, 246px);
+  }
+
+  .content-bag-accent-left {
+    width: clamp(130px, 34.1vw, 154px);
+  }
+
+  .content-bag-accent-right {
+    width: clamp(143px, 37.4vw, 169px);
+  }
+
+  .content-screen {
+    gap: 10px;
+  }
+
+  .content-screen--subscription {
+    gap: 16px;
+  }
+
+  .content-screen[data-screen="intro"] {
+    padding-top: clamp(14px, 3.4svh, 22px);
+    gap: 8px;
+    overflow-y: hidden;
+  }
+
+  .content-title {
+    font-size: clamp(18px, 4.9vw, 20px);
+  }
+
+  .content-kicker,
+  .content-description {
+    font-size: clamp(12px, 3.4vw, 14px);
+    line-height: 1.25;
+  }
+}
+
+@media (max-height: 620px) {
+  :root {
+    --intro-panel-max-height: 236px;
+    --content-panel-padding-top: 18px;
+    --content-panel-padding-bottom: 16px;
+    --content-panel-gap: 10px;
+    --app-button-height: 48px;
+  }
+
+  .content-title {
+    font-size: clamp(17px, 4.6vw, 19px);
+  }
+
+  .split-screen--subscribe {
+    grid-template-rows: minmax(0, 0.66fr) minmax(92px, 0.46fr) auto;
+  }
+
+  .split-screen--subscribe .logo-image {
+    width: clamp(176px, min(54vw, 24svh), 230px);
+  }
+
+  .split-screen--subscribe .content-subscribe-image {
+    width: clamp(118px, min(36vw, 17svh), 150px);
+  }
+
+  .content-screen[data-screen="intro"] {
+    padding-top: 12px;
+    gap: 6px;
+  }
+
+  .content-kicker,
+  .content-description {
+    font-size: clamp(12px, 3.2vw, 13px);
+    line-height: 1.2;
+  }
+}
+
+@keyframes subscribe-grow-in-mobile {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -112%) scale(0);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -112%) scale(1.08);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -112%) scale(1);
+  }
+}

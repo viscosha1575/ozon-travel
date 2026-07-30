@@ -112,6 +112,26 @@ services:
     networks:
       - proxy
 
+  frontend-test:
+    build:
+      context: ./frontend-test
+      args:
+        VITE_API_URL: /api
+    container_name: ozon-travel-frontend-test
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.ozon-travel-test.rule=Host(`test.ozon-travel-max.ru`)
+      - traefik.http.routers.ozon-travel-test.entrypoints=websecure
+      - traefik.http.routers.ozon-travel-test.tls.certresolver=le
+      - traefik.http.services.ozon-travel-test.loadbalancer.server.port=80
+    networks:
+      - default
+      - proxy
+
   admin:
     build:
       context: ./admin
@@ -191,7 +211,7 @@ services:
       MAX_CHANNEL_CHAT_ID: ${MAX_CHANNEL_CHAT_ID:--68089406059881}
       MAX_BANK_CHANNEL_URL: ${MAX_BANK_CHANNEL_URL:-https://max.ru/ozonbank}
       MAX_BANK_CHANNEL_CHAT_ID: ${MAX_BANK_CHANNEL_CHAT_ID:--68148401886527}
-      GAME_WEBAPP_URL: ${GAME_WEBAPP_URL:-https://${DOMAIN}}
+      GAME_WEBAPP_URL: ${MAX_BOT_TEST_GAME_WEBAPP_URL:-https://test.ozon-travel-max.ru}
       SUPPORT_CONTACT: ${SUPPORT_CONTACT:-@ozon_travel_max_support}
       GAME_API_URL: http://backend:3001
       REQUEST_BODY_SECRET: ${REQUEST_BODY_SECRET}

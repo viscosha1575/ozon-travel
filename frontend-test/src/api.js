@@ -1,0 +1,148 @@
+import {
+  getMiniAppHost,
+  getMiniAppInitData,
+  getMiniAppUser,
+} from "./telegram.js";
+
+const API_URL = String(
+  import.meta.env.VITE_API_URL || "https://ozon-travel-max.ru/api",
+).replace(/\/$/, "");
+const SESSION_STORAGE_KEY = "ozon-travel-client-session-id";
+let cachedClientSessionId = "";
+
+function encodeHeaderValue(value) {
+  return encodeURIComponent(String(value ?? ""));
+}
+
+function buildApiUrl(path) {
+  return `${API_URL}${String(path || "").startsWith("/") ? path : `/${path}`}`;
+}
+
+function createSessionId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function getClientSessionId() {
+  if (cachedClientSessionId) {
+    return cachedClientSessionId;
+  }
+
+  if (typeof window === "undefined") {
+    cachedClientSessionId = createSessionId();
+    return cachedClientSessionId;
+  }
+
+  const storedValue = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (storedValue) {
+    cachedClientSessionId = storedValue;
+    return cachedClientSessionId;
+  }
+
+  cachedClientSessionId = createSessionId();
+  window.sessionStorage.setItem(SESSION_STORAGE_KEY, cachedClientSessionId);
+  return cachedClientSessionId;
+}
+
+function buildHeaders(headers = {}) {
+  const nextHeaders = {
+    ...headers,
+  };
+  const initData = getMiniAppInitData();
+  const miniAppHost = getMiniAppHost();
+  const miniAppUser = getMiniAppUser();
+
+  if (initData) {
+    nextHeaders["X-Mini-App-Init-Data"] = initData;
+  }
+
+  if (miniAppHost && miniAppHost !== "browser") {
+    nextHeaders["X-Mini-App-Platform"] = miniAppHost;
+
+    if (miniAppHost === "telegram") {
+      nextHeaders["X-Telegram-Init-Data"] = initData;
+    }
+
+    if (miniAppHost === "max") {
+      nextHeaders["X-Max-Init-Data"] = initData;
+    }
+  }
+
+  if (miniAppUser?.platformUserId) {
+    nextHeaders["X-Mini-App-User-Id"] = encodeHeaderValue(miniAppUser.platformUserId);
+    nextHeaders["X-Mini-App-Username"] = encodeHeaderValue(miniAppUser.username);
+    nextHeaders["X-Mini-App-First-Name"] = encodeHeaderValue(miniAppUser.firstName);
+    nextHeaders["X-Mini-App-Last-Name"] = encodeHeaderValue(miniAppUser.lastName);
+    nextHeaders["X-Mini-App-Language-Code"] = encodeHeaderValue(miniAppUser.languageCode);
+  }
+
+  nextHeaders["X-Client-Session-Id"] = getClientSessionId();
+
+  return nextHeaders;
+}
+
+function buildRequestError(data = {}) {
+  const error = new Error(data.message || "Request failed");
+
+  if (data?.code) {
+    error.code = String(data.code);
+  }
+
+  return error;
+}
+
+export async function getJson(path) {
+  const response = await fetch(buildApiUrl(path), {
+    method: "GET",
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw buildRequestError(data);
+  }
+
+  return data;
+}
+
+export async function postJson(path, body = {}) {
+  const response = await fetch(buildApiUrl(path), {
+    method: "POST",
+    headers: buildHeaders({
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw buildRequestError(data);
+  }
+
+  return data;
+}
+
+export function trackGameEvent(eventName, details = {}) {
+  const normalizedEventName = String(eventName || "").trim();
+
+  if (!normalizedEventName) {
+    return Promise.resolve(null);
+  }
+
+  return fetch(buildApiUrl("/game/event"), {
+    method: "POST",
+    headers: buildHeaders({
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify({
+      eventName: normalizedEventName,
+      details,
+    }),
+    keepalive: true,
+  }).catch(() => null);
+}
