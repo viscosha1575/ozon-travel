@@ -71,6 +71,15 @@ async function setSubscriptionStatus({ maxUserId, isSubscribed }) {
   return res.data;
 }
 
+async function grantOzonBankSubscriptionBonus({ maxUserId }) {
+  const res = await post('/api/users/grant-ozon-bank-bonus', {
+    platform: 'max',
+    platformUserId: String(maxUserId),
+  });
+
+  return res.data;
+}
+
 async function getUserByPlatform({ platform, platformUserId, apiBaseUrl }) {
   const res = await post('/api/users/get-by-platform', {
     platform,
@@ -97,5 +106,6 @@ export {
   addUser,
   getUserByMaxCode,
   getUserByPlatform,
+  grantOzonBankSubscriptionBonus,
   setSubscriptionStatus,
 };

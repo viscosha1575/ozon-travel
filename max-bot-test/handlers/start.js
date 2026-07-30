@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { bot, Keyboard } from '../maxInstance.js';
 import {
   addUser,
+  grantOzonBankSubscriptionBonus,
 } from '../services/userService.js';
 import { createMaxLog } from '../services/logService.js';
 import {
@@ -17,8 +18,13 @@ import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
 import { parseStartParam } from '../utils/startParam.js';
 
-const subscriptionKeyboard = Keyboard.inlineKeyboard([
+const newUserSubscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.link('Ozon Travel', MAX_CHANNEL_URL)],
+  [Keyboard.button.link('Ozon Банк', MAX_BANK_CHANNEL_URL)],
+  [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
+]);
+
+const bankSubscriptionKeyboard = Keyboard.inlineKeyboard([
   [Keyboard.button.link('Ozon Банк', MAX_BANK_CHANNEL_URL)],
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
 ]);
@@ -77,11 +83,19 @@ const subscriptionMessage = [
   'Проверьте подписку на каналы Ozon Travel и Ozon Банк, а сразу после получите +3 попытки крутить Ленту призов',
 ].join('\n');
 
+const bankSubscriptionMessage =
+  'Подпишитесь на канал Ozon Банк и получите +3 попытки крутить Ленту призов';
+
 const subscriptionRetryMessage =
   'Подписки пока не найдены. Подпишитесь на каналы Ozon Travel и Ozon Банк и нажмите\n«Проверить подписку» ещё раз';
+const bankSubscriptionRetryMessage =
+  'Подписка пока не найдена. Подпишитесь на канал Ozon Банк и нажмите\n«Проверить подписку» ещё раз';
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000;
 const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
 const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
+const START_DEDUP_WINDOW_MS = 15_000;
+const recentStartByUserId = new Map();
+const pendingSubscriptionFlowByUserId = new Map();
 
 const menuMessage = [
   'Всё готово для участия!',
@@ -243,15 +257,20 @@ async function checkSubscriptionWithRetry(userId, {
   source = 'unknown',
   attempts = 1,
   delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+  requiredChannels = ['travel', 'bank'],
 } = {}) {
   const totalAttempts = Math.max(1, Number(attempts) || 1);
-  let isSubscribed = false;
+  let subscriptions = { travel: false, bank: false };
 
   for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-    isSubscribed = await refreshSubscriptionStatus(userId, { source });
+    subscriptions = await refreshSubscriptionStatus(userId, { source, requiredChannels });
+    const isSubscribed = requiredChannels.every((channel) => subscriptions[channel]);
 
     if (isSubscribed || attempt >= totalAttempts) {
-      return isSubscribed;
+      return {
+        isSubscribed,
+        subscriptions,
+      };
     }
 
     logger.info('MAX subscription not visible yet, retrying', {
@@ -264,7 +283,10 @@ async function checkSubscriptionWithRetry(userId, {
     await wait(delayMs);
   }
 
-  return isSubscribed;
+  return {
+    isSubscribed: false,
+    subscriptions,
+  };
 }
 
 async function registerUser(ctx, { logEntry = true } = {}) {
@@ -320,23 +342,40 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 }
 
 async function sendStartStep(ctx) {
-  const registrationResult = await registerUser(ctx);
   const { userId } = extractUser(ctx);
+  const now = Date.now();
+  const lastStartAt = recentStartByUserId.get(userId) || 0;
+
+  if (userId && now - lastStartAt < START_DEDUP_WINDOW_MS) {
+    logger.info('Skipping duplicate MAX start event', { userId });
+    return;
+  }
+
+  if (userId) {
+    recentStartByUserId.set(userId, now);
+  }
+
+  const registrationResult = await registerUser(ctx);
 
   if (!registrationResult?.ok) {
     await safeReply(ctx, welcomeMessage, {
-      attachments: [subscriptionKeyboard],
+      attachments: [newUserSubscriptionKeyboard],
     }, 'sendStartStep:registration-missing');
     return;
   }
 
+  const isNewUser = Boolean(registrationResult.user?.wasCreated);
+  const requiredChannels = isNewUser ? ['travel', 'bank'] : ['bank'];
+
   try {
-    const isSubscribed = await checkSubscriptionWithRetry(userId, {
+    const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'start',
       attempts: 1,
+      requiredChannels,
     });
 
-    if (isSubscribed) {
+    if (subscriptionResult.isSubscribed) {
+      pendingSubscriptionFlowByUserId.delete(userId);
       await sendGameMenu(ctx);
       return;
     }
@@ -347,14 +386,20 @@ async function sendStartStep(ctx) {
     });
   }
 
-  await safeReply(ctx, welcomeMessage, {
-    attachments: [subscriptionKeyboard],
-  }, 'sendStartStep');
+  pendingSubscriptionFlowByUserId.set(userId, isNewUser ? 'new' : 'bank');
+  await safeReply(
+    ctx,
+    isNewUser ? welcomeMessage : bankSubscriptionMessage,
+    {
+      attachments: [isNewUser ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
+    },
+    'sendStartStep',
+  );
 }
 
 async function sendSubscriptionStep(ctx) {
   await safeReply(ctx, subscriptionMessage, {
-    attachments: [subscriptionKeyboard],
+    attachments: [newUserSubscriptionKeyboard],
   }, 'sendSubscriptionStep');
 }
 
@@ -443,16 +488,27 @@ bot.action('check_subscription', async (ctx) => {
     });
     callbackAcknowledged = true;
 
-    const isSubscribed = await checkSubscriptionWithRetry(userId, {
+    const flow = pendingSubscriptionFlowByUserId.get(userId)
+      || (registered.user?.subscribedToChannel ? 'bank' : 'new');
+    const requiredChannels = flow === 'new' ? ['travel', 'bank'] : ['bank'];
+    const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'callback',
       attempts: MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS,
+      requiredChannels,
     });
 
-    if (isSubscribed) {
+    if (subscriptionResult.isSubscribed) {
+      const bonusResult = await grantOzonBankSubscriptionBonus({ maxUserId: userId });
+      pendingSubscriptionFlowByUserId.delete(userId);
       await createMaxLog({
         maxUserId: userId,
         eventType: 'system',
         eventName: 'subscription_confirmed',
+      });
+      logger.info('MAX Ozon Bank subscription bonus processed', {
+        userId,
+        granted: Boolean(bonusResult?.granted),
+        flow,
       });
       await sendGameMenu(ctx);
     } else {
@@ -461,8 +517,8 @@ bot.action('check_subscription', async (ctx) => {
         eventType: 'system',
         eventName: 'subscription_missing',
       });
-      await safeReply(ctx, subscriptionRetryMessage, {
-        attachments: [subscriptionKeyboard],
+      await safeReply(ctx, flow === 'new' ? subscriptionRetryMessage : bankSubscriptionRetryMessage, {
+        attachments: [flow === 'new' ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
       }, 'check_subscription:missing');
     }
   } catch (error) {
@@ -479,7 +535,7 @@ bot.action('check_subscription', async (ctx) => {
     }
 
     await safeReply(ctx, 'Не удалось проверить подписку. Попробуйте ещё раз через пару секунд.', {
-      attachments: [subscriptionKeyboard],
+      attachments: [newUserSubscriptionKeyboard],
     }, 'check_subscription:error');
   }
 });

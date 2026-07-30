@@ -21,6 +21,7 @@ const ALLOW_LOCAL_DEMO_USER = (
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 const INITIAL_ATTEMPT_REASON = "initial_attempt";
+const OZON_BANK_SUBSCRIPTION_BONUS_REASON = "ozon_bank_subscription_bonus";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.mp4"];
 const REFERRAL_BONUS_NOTIFICATION_BUTTON = buildOpenAppNotificationButton("Крутить Ленту");
@@ -641,6 +642,46 @@ export async function grantUserAttempts(userId, count = 10, client = null) {
   return getAttemptSummaryInternal(executor, userId);
 }
 
+export async function grantOzonBankSubscriptionBonus(payload = {}, client = null) {
+  const platform = normalizePlatform(payload.platform);
+  const platformUserId = String(payload.platformUserId || "").trim();
+
+  if (!platformUserId) {
+    const error = new Error("platformUserId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const runGrant = async (executor) => {
+    const user = await getOrCreateUser({ platform, platformUserId }, executor);
+    const grantResult = await executor.query(
+      `
+        INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
+        VALUES ($1, 3, $2, $3::jsonb)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+      `,
+      [
+        Number(user.id),
+        OZON_BANK_SUBSCRIPTION_BONUS_REASON,
+        JSON.stringify({ source: "max_bot_subscription" }),
+      ],
+    );
+
+    return {
+      ok: true,
+      granted: grantResult.rowCount > 0,
+      attempts: await getAttemptSummaryInternal(executor, Number(user.id)),
+    };
+  };
+
+  if (client) {
+    return runGrant(client);
+  }
+
+  return withTransaction(runGrant);
+}
+
 export async function deleteUserById(userId, client = null) {
   const executor = client || { query };
   const result = await executor.query(
@@ -698,6 +739,7 @@ export async function createUserFromPlatform(payload = {}, client = null) {
       lastName: user.last_name || "",
       referralCode: user.referral_code || "",
       subscribedToChannel: Boolean(user.subscribed_to_channel),
+      wasCreated: Boolean(user.was_inserted),
     },
   };
 }

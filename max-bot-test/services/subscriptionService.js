@@ -70,15 +70,22 @@ async function resolveChannelChatId(channel) {
   return channel.chatId;
 }
 
-export async function checkChannelSubscription(userId) {
+export async function checkChannelSubscriptions(userId, requiredChannels = ['travel', 'bank']) {
+  const requiredChannelSet = new Set(requiredChannels);
+
   if (MAX_SUBSCRIPTION_CHECK_MODE === 'mock') {
     logger.info('MAX subscription check is mocked', {
       userId,
     });
-    return true;
+    return {
+      travel: true,
+      bank: true,
+    };
   }
 
-  const subscriptionChecks = await Promise.all(channels.map(async (channel) => {
+  const subscriptionChecks = await Promise.all(channels
+    .filter((channel) => requiredChannelSet.has(channel.name === 'Ozon Банк' ? 'bank' : 'travel'))
+    .map(async (channel) => {
     const channelChatId = await resolveChannelChatId(channel);
     const response = await bot.api.getChatMembers(channelChatId, {
       user_ids: [Number(userId)],
@@ -93,29 +100,39 @@ export async function checkChannelSubscription(userId) {
       isSubscribed,
     });
 
-    return isSubscribed;
-  }));
+    return [channel.name === 'Ozon Банк' ? 'bank' : 'travel', isSubscribed];
+    }));
 
-  return subscriptionChecks.every(Boolean);
+  return Object.fromEntries(subscriptionChecks);
 }
 
-export async function refreshSubscriptionStatus(userId, { source = 'unknown' } = {}) {
+export async function checkChannelSubscription(userId) {
+  const subscriptions = await checkChannelSubscriptions(userId);
+  return subscriptions.travel && subscriptions.bank;
+}
+
+export async function refreshSubscriptionStatus(userId, {
+  source = 'unknown',
+  requiredChannels = ['travel', 'bank'],
+} = {}) {
   if (!userId) {
     return false;
   }
 
-  const isSubscribed = await checkChannelSubscription(userId);
+  const subscriptions = await checkChannelSubscriptions(userId, requiredChannels);
 
-  await setSubscriptionStatus({
-    maxUserId: userId,
-    isSubscribed,
-  });
+  if (Object.hasOwn(subscriptions, 'travel')) {
+    await setSubscriptionStatus({
+      maxUserId: userId,
+      isSubscribed: subscriptions.travel,
+    });
+  }
 
   logger.info('MAX subscription status refreshed', {
     userId,
-    isSubscribed,
+    subscriptions,
     source,
   });
 
-  return isSubscribed;
+  return subscriptions;
 }

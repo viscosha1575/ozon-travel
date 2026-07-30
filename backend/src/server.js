@@ -66,6 +66,7 @@ import {
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
+  grantOzonBankSubscriptionBonus,
   markGameControlsGuideSeen,
   setUserSubscriptionStatus,
 } from "./userStore.js";
@@ -294,6 +295,7 @@ app.use("/api/game/controls-guide/seen", controlsGuideRateLimit);
 app.use("/api/game/event", eventRateLimit);
 app.use("/api/users/create", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/users/set-subscription-status", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/users/grant-ozon-bank-bonus", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/logs/create", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/internal/notifications", requireInternalApiToken, internalNotificationRateLimit);
 app.use("/api/internal", requireInternalApiToken, internalWriteRateLimit);
@@ -525,6 +527,17 @@ app.post("/api/users/set-subscription-status", async (req, res, next) => {
 
   try {
     const response = await setUserSubscriptionStatus(body);
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/users/grant-ozon-bank-bonus", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    const response = await grantOzonBankSubscriptionBonus(body);
     res.json(response);
   } catch (error) {
     next(error);
