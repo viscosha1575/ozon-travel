@@ -60,6 +60,8 @@ const PROMO_CODE_TYPE_OPTIONS = [
   { value: "Первый заказ", label: "Первый заказ" },
   { value: "Повторный заказ", label: "Повторный заказ" },
   { value: "Заказ на сумму от", label: "Заказ на сумму от" },
+  { value: "Тур", label: "Тур" },
+  { value: "Доп. попытки", label: "Доп. попытки" },
 ];
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
