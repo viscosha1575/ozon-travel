@@ -466,6 +466,7 @@ bot.action('show_support', async (ctx) => {
 bot.action('check_subscription', async (ctx) => {
   const { userId } = extractUser(ctx);
   let callbackAcknowledged = false;
+  let flow = pendingSubscriptionFlowByUserId.get(userId) || 'bank';
 
   try {
     const registered = await registerUser(ctx, { logEntry: false });
@@ -488,7 +489,7 @@ bot.action('check_subscription', async (ctx) => {
     });
     callbackAcknowledged = true;
 
-    const flow = pendingSubscriptionFlowByUserId.get(userId)
+    flow = pendingSubscriptionFlowByUserId.get(userId)
       || (registered.user?.subscribedToChannel ? 'bank' : 'new');
     const requiredChannels = flow === 'new' ? ['travel', 'bank'] : ['bank'];
     const subscriptionResult = await checkSubscriptionWithRetry(userId, {
@@ -535,7 +536,7 @@ bot.action('check_subscription', async (ctx) => {
     }
 
     await safeReply(ctx, 'Не удалось проверить подписку. Попробуйте ещё раз через пару секунд.', {
-      attachments: [newUserSubscriptionKeyboard],
+      attachments: [flow === 'new' ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
     }, 'check_subscription:error');
   }
 });
