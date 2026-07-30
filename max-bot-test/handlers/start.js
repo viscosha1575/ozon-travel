@@ -365,20 +365,25 @@ async function sendStartStep(ctx) {
   }
 
   const isNewUser = Boolean(registrationResult.user?.wasCreated);
-  const requiredChannels = isNewUser ? ['travel', 'bank'] : ['bank'];
+  let flow = isNewUser ? 'new' : 'bank';
 
   try {
     const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'start',
       attempts: 1,
-      requiredChannels,
+      requiredChannels: ['travel', 'bank'],
     });
 
-    if (subscriptionResult.isSubscribed) {
+    if (
+      subscriptionResult.isSubscribed
+      || (!isNewUser && subscriptionResult.subscriptions.bank)
+    ) {
       pendingSubscriptionFlowByUserId.delete(userId);
       await sendGameMenu(ctx);
       return;
     }
+
+    flow = !isNewUser && subscriptionResult.subscriptions.travel ? 'bank' : 'new';
   } catch (error) {
     logger.error('MAX start subscription refresh failed', {
       userId,
@@ -386,12 +391,12 @@ async function sendStartStep(ctx) {
     });
   }
 
-  pendingSubscriptionFlowByUserId.set(userId, isNewUser ? 'new' : 'bank');
+  pendingSubscriptionFlowByUserId.set(userId, flow);
   await safeReply(
     ctx,
-    isNewUser ? welcomeMessage : bankSubscriptionMessage,
+    flow === 'new' ? welcomeMessage : bankSubscriptionMessage,
     {
-      attachments: [isNewUser ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
+      attachments: [flow === 'new' ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
     },
     'sendStartStep',
   );
