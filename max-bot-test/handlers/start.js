@@ -92,10 +92,11 @@ const bankSubscriptionRetryMessage =
   'Подписка пока не найдена. Подпишитесь на канал Ozon Банк и нажмите\n«Проверить подписку» ещё раз';
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000;
 const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
-const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
+const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 1;
 const START_DEDUP_WINDOW_MS = 15_000;
 const recentStartByUserId = new Map();
 const pendingSubscriptionFlowByUserId = new Map();
+const subscriptionCheckInFlight = new Set();
 
 const menuMessage = [
   'Всё готово для участия!',
@@ -473,6 +474,15 @@ bot.action('check_subscription', async (ctx) => {
   let callbackAcknowledged = false;
   let flow = pendingSubscriptionFlowByUserId.get(userId) || 'bank';
 
+  if (subscriptionCheckInFlight.has(userId)) {
+    await ctx.answerOnCallback({
+      notification: 'Проверка уже идёт',
+    });
+    return;
+  }
+
+  subscriptionCheckInFlight.add(userId);
+
   try {
     const registered = await registerUser(ctx, { logEntry: false });
 
@@ -543,5 +553,7 @@ bot.action('check_subscription', async (ctx) => {
     await safeReply(ctx, 'Не удалось проверить подписку. Попробуйте ещё раз через пару секунд.', {
       attachments: [flow === 'new' ? newUserSubscriptionKeyboard : bankSubscriptionKeyboard],
     }, 'check_subscription:error');
+  } finally {
+    subscriptionCheckInFlight.delete(userId);
   }
 });
