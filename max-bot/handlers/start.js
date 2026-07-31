@@ -4,7 +4,6 @@ import { fileURLToPath } from 'url';
 import { bot, Keyboard } from '../maxInstance.js';
 import {
   addUser,
-  deleteUserByMaxId,
   grantOzonBankSubscriptionBonus,
 } from '../services/userService.js';
 import { createMaxLog } from '../services/logService.js';
@@ -477,33 +476,6 @@ bot.command('id', async (ctx) => {
   }
 
   await safeReply(ctx, userId ? `Ваш MAX ID: ${userId}` : 'Не удалось определить ваш MAX ID.', undefined, 'command:id');
-});
-bot.command('delete', async (ctx) => {
-  const { userId } = extractUser(ctx);
-
-  if (!userId) {
-    await safeReply(ctx, 'Не удалось определить ваш MAX ID.', undefined, 'command:delete:no-user');
-    return;
-  }
-
-  try {
-    const result = await deleteUserByMaxId({ maxUserId: userId });
-    recentStartByUserId.delete(userId);
-    pendingSubscriptionFlowByUserId.delete(userId);
-    subscriptionCheckInFlight.delete(userId);
-    await safeReply(
-      ctx,
-      result?.deleted ? 'Ваш пользователь удалён.' : 'Пользователь уже удалён.',
-      undefined,
-      'command:delete',
-    );
-  } catch (error) {
-    logger.error('MAX user deletion failed', {
-      userId,
-      error: error?.response?.data || error?.message || String(error),
-    });
-    await safeReply(ctx, 'Не удалось удалить пользователя. Попробуйте ещё раз.', undefined, 'command:delete:error');
-  }
 });
 bot.command('support', async (ctx) => {
   await safeReply(ctx, supportMessage, undefined, 'command:support');

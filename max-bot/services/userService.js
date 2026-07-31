@@ -81,15 +81,6 @@ async function grantOzonBankSubscriptionBonus({ maxUserId, markClaimedOnly = fal
   return res.data;
 }
 
-async function deleteUserByMaxId({ maxUserId }) {
-  const res = await post('/api/users/delete-by-platform', {
-    platform: 'max',
-    platformUserId: String(maxUserId),
-  });
-
-  return res.data;
-}
-
 async function getUserByPlatform({ platform, platformUserId, apiBaseUrl }) {
   const res = await post('/api/users/get-by-platform', {
     platform,
@@ -114,7 +105,6 @@ async function getUserByMaxCode({ maxUniqueCode, platform, apiBaseUrl }) {
 
 export {
   addUser,
-  deleteUserByMaxId,
   getUserByMaxCode,
   getUserByPlatform,
   grantOzonBankSubscriptionBonus,
