@@ -66,6 +66,7 @@ const PROMO_CODE_TYPE_OPTIONS = [
   { value: "Доп. попытки", label: "Доп. попытки" },
 ];
 const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", "Доп. попытки"]);
+const ALWAYS_LIMITED_PRIZE_CATEGORIES = new Set(["Тур"]);
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
 const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
@@ -1649,7 +1650,9 @@ export default function PromoCodesPage() {
                           setForm((current) => ({
                             ...current,
                             category: nextCategory,
-                            hasPrizeLimit: isPromoCodeFreePrize ? true : current.hasPrizeLimit,
+                            hasPrizeLimit: ALWAYS_LIMITED_PRIZE_CATEGORIES.has(nextCategory)
+                              ? true
+                              : current.hasPrizeLimit,
                             promoCodeType: isPromoCodeFreePrize ? "" : current.promoCodeType,
                             promoCodesFile: isPromoCodeFreePrize ? null : current.promoCodesFile,
                             promoCodes: isPromoCodeFreePrize ? [] : current.promoCodes,
@@ -1696,7 +1699,7 @@ export default function PromoCodesPage() {
                 isInvalid={Boolean(formValidation.sections.limits)}
               >
                 <Stack spacing="16px">
-                  {!PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? <FormControl>
+                  {!ALWAYS_LIMITED_PRIZE_CATEGORIES.has(form.category) ? <FormControl>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Есть ли ограничение призов
                     </FormLabel>
@@ -1710,7 +1713,7 @@ export default function PromoCodesPage() {
                     />
                   </FormControl> : (
                     <Text color={textColorSecondary} fontSize="sm">
-                      Для этой категории выдача всегда ограничена указанным количеством подарков.
+                      Для тура выдача всегда ограничена указанным количеством подарков.
                     </Text>
                   )}
 

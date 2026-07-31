@@ -27,6 +27,7 @@ const PRIZE_CATEGORIES = new Set([
 const EXTRA_ATTEMPTS_PRIZE_CATEGORY = "Доп. попытки";
 const EXTRA_ATTEMPTS_PRIZE_COUNT = 3;
 const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", EXTRA_ATTEMPTS_PRIZE_CATEGORY]);
+const ALWAYS_LIMITED_PRIZE_CATEGORIES = new Set(["Тур"]);
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -468,7 +469,7 @@ function validatePrizePayload(payload = {}) {
   const category = String(payload.category || "").trim();
   const isPromoCodeFreePrize = type !== "Не приз" && PROMO_CODE_FREE_PRIZE_CATEGORIES.has(category);
   const promoCodeType = String(payload.promoCodeType || "").trim();
-  const hasPrizeLimit = isPromoCodeFreePrize || Boolean(payload.hasPrizeLimit);
+  const hasPrizeLimit = ALWAYS_LIMITED_PRIZE_CATEGORIES.has(category) || Boolean(payload.hasPrizeLimit);
   const promoCodesFileName = String(payload.promoCodesFileName || "").trim();
   const promoCodes = Array.isArray(payload.promoCodes)
     ? payload.promoCodes.map((item) => String(item || "").trim()).filter(Boolean)
