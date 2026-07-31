@@ -163,6 +163,7 @@ services:
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
       MAX_BOT_MODE: ${MAX_BOT_MODE:-webhook}
       MAX_BOT_PORT: 3011
+      NODE_EXTRA_CA_CERTS: /app/certs/russian_trusted_root_ca_pem.crt
       MAX_API_REQUESTS_PER_SECOND: ${MAX_API_REQUESTS_PER_SECOND:-25}
       MAX_ATTACHMENT_CACHE_TTL_MS: ${MAX_ATTACHMENT_CACHE_TTL_MS:-86400000}
       MAX_ATTACHMENT_READY_DELAY_MS: ${MAX_ATTACHMENT_READY_DELAY_MS:-2000}
@@ -185,6 +186,8 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       BROADCAST_INTERNAL_TOKEN: ${BROADCAST_INTERNAL_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./certs:/app/certs:ro
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
