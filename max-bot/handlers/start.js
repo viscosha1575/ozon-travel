@@ -540,9 +540,7 @@ bot.action('check_subscription', async (ctx) => {
     });
 
     if (subscriptionResult.isSubscribed) {
-      const bonusResult = flow === 'travel'
-        ? { granted: false }
-        : await grantOzonBankSubscriptionBonus({ maxUserId: userId });
+      const bonusResult = await grantOzonBankSubscriptionBonus({ maxUserId: userId });
       pendingSubscriptionFlowByUserId.delete(userId);
       await createMaxLog({
         maxUserId: userId,
