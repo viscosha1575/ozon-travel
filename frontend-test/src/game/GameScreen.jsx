@@ -71,7 +71,8 @@ const getLoopedIndex = (value, length) => ((value % length) + length) % length
 const normalizeEntityId = (value) => String(value ?? "").trim()
 
 function getPrizeRewardKind(prize = {}) {
-  const source = [prize.rewardType, prize.prizeType, prize.category, prize.promoCodeType, prize.type]
+  const safePrize = prize || {}
+  const source = [safePrize.rewardType, safePrize.prizeType, safePrize.category, safePrize.promoCodeType, safePrize.type]
     .map((value) => String(value || "").trim().toLowerCase())
     .join(" ")
 
