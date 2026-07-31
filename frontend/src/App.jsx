@@ -13,7 +13,7 @@ const SUBSCRIPTION_CHANNEL_URL = String(
   import.meta.env.VITE_MAX_CHANNEL_URL || "https://max.ru/ozontravel_official",
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
-const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260630-11"
+const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html"
 const INITIAL_INTRO_VISIBILITY_FALLBACK_MS = 1200
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 let embeddedPageModulePromise = null
