@@ -2600,7 +2600,7 @@ export default function GameScreen({
                 <button
                   key={prize.id}
                   type="button"
-                  className={`game-prize-card ${isExtraAttemptsPrize ? "game-prize-card--extra-attempts" : ""}`.trim()}
+                  className="game-prize-card"
                   onClick={() => openPrizeResult(prize)}
                 >
                   <div className="game-prize-card-media">

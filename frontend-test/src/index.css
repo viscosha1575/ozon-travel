@@ -1073,15 +1073,6 @@ body {
   white-space: nowrap;
 }
 
-.game-prize-card--extra-attempts .game-prize-card-title {
-  font-weight: var(--font-weight-bold);
-}
-
-.game-prize-card--extra-attempts .game-prize-card-date {
-  font-size: clamp(14px, 5.4cqi, 18px);
-  font-weight: var(--font-weight-medium);
-}
-
 .game-prizes-footer {
   display: flex;
   justify-content: center;
