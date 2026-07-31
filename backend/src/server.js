@@ -63,6 +63,7 @@ import {
 import { resolveMiniAppUser, resolveTelegramInitDataUser } from "./miniAppUser.js";
 import {
   createUserFromPlatform,
+  deleteUserByPlatform,
   ensureDailyAttemptGrant,
   getOrCreateUser,
   getReferralData,
@@ -297,6 +298,7 @@ app.use("/api/game/spin", (req, res, next) => {
 app.use("/api/game/controls-guide/seen", controlsGuideRateLimit);
 app.use("/api/game/event", eventRateLimit);
 app.use("/api/users/create", requireInternalApiToken, internalWriteRateLimit);
+app.use("/api/users/delete-by-platform", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/users/set-subscription-status", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/users/grant-ozon-bank-bonus", requireInternalApiToken, internalWriteRateLimit);
 app.use("/api/logs/create", requireInternalApiToken, internalWriteRateLimit);
@@ -520,6 +522,17 @@ app.post("/api/users/create", async (req, res, next) => {
   try {
     const response = await createUserFromPlatform(body);
     res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/users/delete-by-platform", async (req, res, next) => {
+  const body = decodeRequestBody(req.body, REQUEST_BODY_SECRET);
+
+  try {
+    const response = await deleteUserByPlatform(body);
+    res.json({ ok: true, ...response });
   } catch (error) {
     next(error);
   }

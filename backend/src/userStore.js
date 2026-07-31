@@ -699,6 +699,28 @@ export async function deleteUserById(userId, client = null) {
   };
 }
 
+export async function deleteUserByPlatform(payload = {}, client = null) {
+  const executor = client || { query };
+  const platform = normalizePlatform(payload.platform);
+  const platformUserId = String(payload.platformUserId || "").trim();
+
+  if (!platformUserId) {
+    const error = new Error("platformUserId is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await executor.query(
+    "DELETE FROM app_users WHERE platform = $1 AND platform_user_id = $2 RETURNING id",
+    [platform, platformUserId],
+  );
+
+  return {
+    deleted: result.rowCount > 0,
+    playerId: result.rowCount ? Number(result.rows[0].id) : null,
+  };
+}
+
 export async function createUserFromPlatform(payload = {}, client = null) {
   const platform = normalizePlatform(payload.platform);
   const platformUserId = String(payload.platformUserId || "").trim();
