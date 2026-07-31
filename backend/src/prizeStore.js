@@ -11,10 +11,22 @@ import {
   getOrCreateUser,
   getReferralData,
   getUserAttemptSummary,
+  grantPrizeAttempts,
 } from "./userStore.js";
 import { getProjectState } from "./appStateStore.js";
 
 const APP_TIMEZONE = String(process.env.APP_TIMEZONE || "Europe/Belgrade").trim() || "Europe/Belgrade";
+const PRIZE_CATEGORIES = new Set([
+  "Отели",
+  "Авиа",
+  "Баллы Ozon",
+  "Мили",
+  "Тур",
+  "Доп. попытки",
+]);
+const EXTRA_ATTEMPTS_PRIZE_CATEGORY = "Доп. попытки";
+const EXTRA_ATTEMPTS_PRIZE_COUNT = 3;
+const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", EXTRA_ATTEMPTS_PRIZE_CATEGORY]);
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -485,6 +497,12 @@ function validatePrizePayload(payload = {}) {
 
   if (type !== "Не приз" && !category) {
     throw new Error("Prize category is required");
+  }
+
+  if (type !== "Не приз" && !PRIZE_CATEGORIES.has(category)) {
+    const error = new Error("Unsupported prize category");
+    error.statusCode = 400;
+    throw error;
   }
 
   if (hasPrizeLimit && !totalCount) {
@@ -2012,7 +2030,7 @@ export async function spinPrize(userInfo = {}) {
       throw error;
     }
 
-    const attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
+    let attemptsAfterConsume = await consumeUserAttempt(rawUser.id, {
       sessionId: userInfo.sessionId || "",
     }, client);
     const selectablePrizes = [...selectablePrizePool];
@@ -2074,10 +2092,12 @@ export async function spinPrize(userInfo = {}) {
         );
       } else if (selectedPrize.hasPrizeLimit) {
         const usedCount = Math.max(0, selectedPrize.totalCount - selectedPrize.remainingCount);
-        promoCode =
-          selectedPrize.promoCodes[usedCount]
-          || selectedPrize.promoCodes[selectedPrize.promoCodes.length ? usedCount % selectedPrize.promoCodes.length : 0]
-          || buildFallbackPromoCode(selectedPrize, usedCount);
+        if (!PROMO_CODE_FREE_PRIZE_CATEGORIES.has(selectedPrize.category)) {
+          promoCode =
+            selectedPrize.promoCodes[usedCount]
+            || selectedPrize.promoCodes[selectedPrize.promoCodes.length ? usedCount % selectedPrize.promoCodes.length : 0]
+            || buildFallbackPromoCode(selectedPrize, usedCount);
+        }
 
         await client.query(
           `
@@ -2087,7 +2107,7 @@ export async function spinPrize(userInfo = {}) {
           `,
           [selectedPrize.id],
         );
-      } else {
+      } else if (!PROMO_CODE_FREE_PRIZE_CATEGORIES.has(selectedPrize.category)) {
         promoCode = selectedPrize.promoCodeValue || "";
       }
 
@@ -2107,6 +2127,14 @@ export async function spinPrize(userInfo = {}) {
         ],
       );
       awardedPrizeId = Number(awardedPrizeResult.rows[0]?.id || 0) || null;
+
+      if (selectedPrize.category === EXTRA_ATTEMPTS_PRIZE_CATEGORY) {
+        attemptsAfterConsume = await grantPrizeAttempts(rawUser.id, EXTRA_ATTEMPTS_PRIZE_COUNT, {
+          prizeId: selectedPrize.id,
+          awardedPrizeId,
+          sessionId: userInfo.sessionId || "",
+        }, client);
+      }
 
       if (claimedPromoCodeEntry?.id && awardedPrizeId) {
         await client.query(

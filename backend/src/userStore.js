@@ -642,6 +642,29 @@ export async function grantUserAttempts(userId, count = 10, client = null) {
   return getAttemptSummaryInternal(executor, userId);
 }
 
+export async function grantPrizeAttempts(userId, count = 3, details = {}, client = null) {
+  const safeCount = Math.max(1, Math.round(Number(count) || 0));
+  const executor = client || { query };
+
+  await executor.query(
+    `
+      INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
+      VALUES ($1, $2, 'prize_extra_attempts', $3::jsonb)
+    `,
+    [
+      userId,
+      safeCount,
+      JSON.stringify({
+        ...details,
+        grantedAttempts: safeCount,
+        source: "roulette_prize",
+      }),
+    ],
+  );
+
+  return getAttemptSummaryInternal(executor, userId);
+}
+
 export async function grantOzonBankSubscriptionBonus(payload = {}, client = null) {
   const platform = normalizePlatform(payload.platform);
   const platformUserId = String(payload.platformUserId || "").trim();

@@ -53,6 +53,8 @@ const PRIZE_CATEGORY_OPTIONS = [
   "Авиа",
   "Баллы Ozon",
   "Мили",
+  "Тур",
+  "Доп. попытки",
 ];
 
 const PROMO_CODE_TYPE_OPTIONS = [
@@ -63,6 +65,7 @@ const PROMO_CODE_TYPE_OPTIONS = [
   { value: "Тур", label: "Тур" },
   { value: "Доп. попытки", label: "Доп. попытки" },
 ];
+const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", "Доп. попытки"]);
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
 const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
@@ -396,10 +399,12 @@ function validatePrizeForm(form = {}) {
   const activeFrom = String(form.activeFrom || "").trim();
   const activeTo = String(form.activeTo || "").trim();
   const userLimitCount = Math.max(0, Number(form.userLimitCount) || 0);
+  const totalCount = Math.max(0, Number(form.totalCount) || 0);
   const hasPromoCodes = Array.isArray(form.promoCodes) && form.promoCodes.length > 0;
   const hasRouletteImage = Boolean(form.rouletteImage);
   const rouletteDescription = String(form.rouletteDescription || "").trim();
   const rouletteDescriptions = normalizeRouletteDescriptions(form.rouletteDescriptions);
+  const requiresPromoCode = type !== "Не приз" && !PROMO_CODE_FREE_PRIZE_CATEGORIES.has(category);
 
   if (!title) {
     markField("title", "main", "Заполните имя позиции.");
@@ -410,11 +415,15 @@ function validatePrizeForm(form = {}) {
   }
 
   if (type !== "Не приз") {
-    if (form.hasPrizeLimit) {
+    if (form.hasPrizeLimit && !totalCount) {
+      markField("totalCount", "limits", "Укажите количество призов.");
+    }
+
+    if (requiresPromoCode && form.hasPrizeLimit) {
       if (!hasPromoCodes) {
         markField("promoCodes", "limits", "Загрузите промокоды для ограниченного приза.");
       }
-    } else if (!promoCodeValue) {
+    } else if (requiresPromoCode && !promoCodeValue) {
       markField("promoCodeValue", "limits", "Введите промокод.");
     }
 
@@ -1687,7 +1696,24 @@ export default function PromoCodesPage() {
                     />
                   </FormControl>
 
-                  {form.hasPrizeLimit ? (
+                  {form.hasPrizeLimit && PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? (
+                    <FormControl isInvalid={Boolean(formValidation.fields.totalCount)}>
+                      <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                        Количество призов
+                      </FormLabel>
+                      <Input
+                        h="52px"
+                        borderRadius="16px"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={form.totalCount}
+                        onChange={(event) => setForm((current) => ({ ...current, totalCount: event.target.value }))}
+                        placeholder="Например: 10"
+                      />
+                      <FormErrorMessage>{formValidation.fields.totalCount}</FormErrorMessage>
+                    </FormControl>
+                  ) : form.hasPrizeLimit ? (
                     <>
                       <FormControl isInvalid={Boolean(formValidation.fields.promoCodes)}>
                         <FormLabel color={textColor} fontSize="sm" fontWeight="700">
@@ -1825,7 +1851,7 @@ export default function PromoCodesPage() {
                         </Flex>
                       ) : null}
                     </>
-                  ) : (
+                  ) : !PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? (
                     <FormControl isInvalid={Boolean(formValidation.fields.promoCodeValue)}>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Промокод
@@ -1839,7 +1865,7 @@ export default function PromoCodesPage() {
                       />
                       <FormErrorMessage>{formValidation.fields.promoCodeValue}</FormErrorMessage>
                     </FormControl>
-                  )}
+                  ) : null}
 
                   <FormControl>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
