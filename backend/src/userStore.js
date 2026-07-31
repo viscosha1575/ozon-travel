@@ -20,6 +20,7 @@ const ALLOW_LOCAL_DEMO_USER = (
   : String(process.env.ALLOW_LOCAL_DEMO_USER).trim().toLowerCase() === "true";
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
+const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const OZON_BANK_SUBSCRIPTION_BONUS_REASON = "ozon_bank_subscription_bonus";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.mp4"];
@@ -482,15 +483,15 @@ async function getInvitedReferralIdsInternal(executor, userId) {
   return result.rows.map((row) => Number(row.id));
 }
 
-async function grantInitialAttemptsInternal(executor, userId) {
+async function grantInitialAttemptInternal(executor, userId) {
   await executor.query(
     `
       INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
-      VALUES ($1, 3, $2, $3::jsonb)
+      VALUES ($1, 1, $2, $3::jsonb)
     `,
     [
       userId,
-      OZON_BANK_SUBSCRIPTION_BONUS_REASON,
+      INITIAL_ATTEMPT_REASON,
       JSON.stringify({
         source: "user_created",
       }),
@@ -503,7 +504,7 @@ async function runGetOrCreate(executor, userInfo = {}) {
   const linkedUser = await attachReferrer(executor, upsertedUser);
 
   if (upsertedUser.was_inserted) {
-    await grantInitialAttemptsInternal(executor, Number(linkedUser.id));
+    await grantInitialAttemptInternal(executor, Number(linkedUser.id));
     await trackNewUserAnalytics(executor, linkedUser, "system");
   }
 
