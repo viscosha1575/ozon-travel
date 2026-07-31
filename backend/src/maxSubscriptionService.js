@@ -6,6 +6,9 @@ const MAX_SUBSCRIPTION_CHECK_MODE = String(process.env.MAX_SUBSCRIPTION_CHECK_MO
 const MAX_INTERNAL_SUBSCRIPTION_CHECK_URL = String(
   process.env.MAX_INTERNAL_SUBSCRIPTION_CHECK_URL || "http://max-bot:3011/internal/subscription/check",
 ).trim();
+const MAX_INTERNAL_TEST_SUBSCRIPTION_CHECK_URL = String(
+  process.env.MAX_INTERNAL_TEST_SUBSCRIPTION_CHECK_URL || "http://max-bot-test:3011/internal/subscription/check",
+).trim();
 const MAX_INTERNAL_SUBSCRIPTION_CHECK_TOKEN = String(
   process.env.BROADCAST_INTERNAL_TOKEN || process.env.REQUEST_BODY_SECRET || "",
 ).trim();
@@ -27,12 +30,12 @@ async function parseJsonSafely(response) {
   }
 }
 
-async function checkMaxChannelSubscription(platformUserId) {
+async function checkMaxChannelSubscription(platformUserId, checkUrl = MAX_INTERNAL_SUBSCRIPTION_CHECK_URL) {
   if (MAX_SUBSCRIPTION_CHECK_MODE === "mock") {
     return true;
   }
 
-  if (!MAX_INTERNAL_SUBSCRIPTION_CHECK_URL) {
+  if (!checkUrl) {
     return null;
   }
 
@@ -45,7 +48,7 @@ async function checkMaxChannelSubscription(platformUserId) {
     controller.abort();
   }, MAX_INTERNAL_SUBSCRIPTION_CHECK_TIMEOUT_MS);
 
-  const response = await fetch(MAX_INTERNAL_SUBSCRIPTION_CHECK_URL, {
+  const response = await fetch(checkUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -71,7 +74,9 @@ async function checkMaxChannelSubscription(platformUserId) {
   return data.subscribed;
 }
 
-export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackValue = false) {
+export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackValue = false, {
+  useTestSubscriptionCheck = false,
+} = {}) {
   const platform = String(userInfo?.platform || "").trim().toLowerCase();
   const platformUserId = String(userInfo?.platformUserId || "").trim();
   const externalId = String(userInfo?.externalId || "").trim();
@@ -97,7 +102,10 @@ export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackVa
   }
 
   try {
-    const isSubscribed = await checkMaxChannelSubscription(platformUserId);
+    const checkUrl = useTestSubscriptionCheck
+      ? MAX_INTERNAL_TEST_SUBSCRIPTION_CHECK_URL
+      : MAX_INTERNAL_SUBSCRIPTION_CHECK_URL;
+    const isSubscribed = await checkMaxChannelSubscription(platformUserId, checkUrl);
 
     if (typeof isSubscribed !== "boolean") {
       return Boolean(fallbackValue);

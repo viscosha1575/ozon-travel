@@ -186,6 +186,8 @@ function requireAdminTelegramUser(req) {
 async function resolveSubscriptionContext(req) {
   const userInfo = resolveMiniAppUser(req);
   const isResolved = userInfo?.isResolved !== false;
+  const requestHostname = String(req.hostname || "").trim().toLowerCase();
+  const useTestSubscriptionCheck = requestHostname === "test.ozon-travel-max.ru";
 
   if (!isResolved && userInfo.platform === "max") {
     logUnresolvedMaxMiniAppRequest(req, userInfo, "subscription_context");
@@ -202,6 +204,7 @@ async function resolveSubscriptionContext(req) {
   const subscribedToChannel = await refreshMiniAppSubscriptionStatus(
     userInfo,
     Boolean(user.subscribed_to_channel),
+    { useTestSubscriptionCheck },
   );
 
   return {
