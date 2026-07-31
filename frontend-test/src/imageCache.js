@@ -8,7 +8,27 @@ const pendingImageSources = new Map()
 let cacheMaintenancePromise = null
 
 function normalizeImageUrl(value) {
-  return String(value || "").trim()
+  const normalizedValue = String(value || "").trim()
+
+  if (!normalizedValue || typeof window === "undefined") {
+    return normalizedValue
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue, window.location.origin)
+
+    if (
+      window.location.hostname === "test.ozon-travel-max.ru"
+      && parsedUrl.hostname === "ozon-travel-max.ru"
+      && parsedUrl.pathname.startsWith("/uploads/")
+    ) {
+      return `${window.location.origin}${parsedUrl.pathname}${parsedUrl.search}`
+    }
+  } catch {
+    return normalizedValue
+  }
+
+  return normalizedValue
 }
 
 function canUsePersistentImageCache() {
