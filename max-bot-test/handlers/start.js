@@ -391,9 +391,9 @@ async function sendStartStep(ctx) {
       return;
     }
 
-    if (!isNewUser && subscriptionResult.subscriptions.travel) {
+    if (subscriptionResult.subscriptions.travel) {
       flow = 'bank';
-    } else if (!isNewUser && subscriptionResult.subscriptions.bank) {
+    } else if (subscriptionResult.subscriptions.bank) {
       flow = 'travel';
     } else {
       flow = 'new';
