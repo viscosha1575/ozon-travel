@@ -1672,8 +1672,18 @@ function dedupeUnlimitedPromoCodePrizes(prizes = []) {
   }
 
   const seenPromoCodes = new Set();
+  let hasExtraAttemptsPrize = false;
 
   return prizes.filter((prize) => {
+    if (String(prize?.category || "").trim() === EXTRA_ATTEMPTS_PRIZE_CATEGORY) {
+      if (hasExtraAttemptsPrize) {
+        return false;
+      }
+
+      hasExtraAttemptsPrize = true;
+      return true;
+    }
+
     const promoCodeKey = normalizeSearch(prize?.promoCode);
 
     if (!promoCodeKey || prize?.type !== "Приз" || prize?.hasPrizeLimit) {
