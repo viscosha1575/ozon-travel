@@ -28,6 +28,7 @@ const EXTRA_ATTEMPTS_PRIZE_CATEGORY = "Доп. попытки";
 const EXTRA_ATTEMPTS_PRIZE_COUNT = 3;
 const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", EXTRA_ATTEMPTS_PRIZE_CATEGORY]);
 const ALWAYS_LIMITED_PRIZE_CATEGORIES = new Set(["Тур"]);
+const RELEASE_SCHEDULE_PRIZE_CATEGORIES = new Set(["Тур"]);
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
@@ -481,10 +482,11 @@ function validatePrizePayload(payload = {}) {
   const userLimitCount = hasUserLimit ? Math.max(0, Number(payload.userLimitCount) || 0) : 0;
   const activeFrom = String(payload.activeFrom || "").trim() || null;
   const activeTo = String(payload.activeTo || "").trim() || null;
-  const codeReleaseStart = isPromoCodeFreePrize
+  const supportsReleaseSchedule = RELEASE_SCHEDULE_PRIZE_CATEGORIES.has(category) || !isPromoCodeFreePrize;
+  const codeReleaseStart = !supportsReleaseSchedule
     ? null
     : parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
-  const codeReleaseEnd = isPromoCodeFreePrize
+  const codeReleaseEnd = !supportsReleaseSchedule
     ? null
     : parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
   const rouletteImage = payload.rouletteImage ?? null;
@@ -538,8 +540,8 @@ function validatePrizePayload(payload = {}) {
     userLimitCount: type === "Не приз" ? 0 : userLimitCount,
     activeFrom,
     activeTo,
-    codeReleaseStart: type === "Не приз" || isPromoCodeFreePrize ? null : codeReleaseStart,
-    codeReleaseEnd: type === "Не приз" || isPromoCodeFreePrize ? null : codeReleaseEnd,
+    codeReleaseStart: type === "Не приз" || !supportsReleaseSchedule ? null : codeReleaseStart,
+    codeReleaseEnd: type === "Не приз" || !supportsReleaseSchedule ? null : codeReleaseEnd,
     rouletteImage,
     myPrizeText: type === "Не приз" ? title : myPrizeText,
     rouletteDescription,
@@ -1542,11 +1544,39 @@ function isPrizeEligibleForUser(prize, awardedPrizeCountsByPrizeId) {
 }
 
 function isPrizeAvailableByPromoPool(prize) {
-  if (!requiresPromoCodePool(prize)) {
+  if (requiresPromoCodePool(prize)) {
+    return Number(prize.availablePromoCodesCount || 0) > 0;
+  }
+
+  if (prize.type !== "Приз" || !prize.hasPrizeLimit) {
     return true;
   }
 
-  return Number(prize.availablePromoCodesCount || 0) > 0;
+  const totalCount = Math.max(0, Number(prize.totalCount || 0));
+  const remainingCount = Math.max(0, Number(prize.remainingCount || 0));
+
+  if (!totalCount || !remainingCount) {
+    return false;
+  }
+
+  if (!RELEASE_SCHEDULE_PRIZE_CATEGORIES.has(prize.category) || !prize.codeReleaseStart) {
+    return true;
+  }
+
+  const nowMs = Date.now();
+  const startMs = new Date(prize.codeReleaseStart).getTime();
+  const endMs = prize.codeReleaseEnd ? new Date(prize.codeReleaseEnd).getTime() : startMs;
+
+  if (!Number.isFinite(startMs) || nowMs < startMs) {
+    return false;
+  }
+
+  const releasedCount = !Number.isFinite(endMs) || endMs <= startMs || nowMs >= endMs
+    ? totalCount
+    : Math.min(totalCount, Math.floor(((nowMs - startMs) / (endMs - startMs)) * (totalCount - 1)) + 1);
+  const awardedCount = Math.max(0, totalCount - remainingCount);
+
+  return releasedCount > awardedCount;
 }
 
 function preventConsecutiveNonPrizePrizes(prizes = [], lastSpinType = "") {

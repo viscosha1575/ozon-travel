@@ -67,6 +67,7 @@ const PROMO_CODE_TYPE_OPTIONS = [
 ];
 const PROMO_CODE_FREE_PRIZE_CATEGORIES = new Set(["Тур", "Доп. попытки"]);
 const ALWAYS_LIMITED_PRIZE_CATEGORIES = new Set(["Тур"]);
+const RELEASE_SCHEDULE_PRIZE_CATEGORIES = new Set(["Тур"]);
 
 const DEFAULT_DRAW_ACTIVE_FROM = "2026-06-10";
 const DEFAULT_DRAW_ACTIVE_TO = "2026-09-10";
@@ -1647,6 +1648,8 @@ export default function PromoCodesPage() {
                         onChange={(event) => {
                           const nextCategory = event.target.value;
                           const isPromoCodeFreePrize = PROMO_CODE_FREE_PRIZE_CATEGORIES.has(nextCategory);
+                          const supportsReleaseSchedule = RELEASE_SCHEDULE_PRIZE_CATEGORIES.has(nextCategory)
+                            || !isPromoCodeFreePrize;
                           setForm((current) => ({
                             ...current,
                             category: nextCategory,
@@ -1657,8 +1660,8 @@ export default function PromoCodesPage() {
                             promoCodesFile: isPromoCodeFreePrize ? null : current.promoCodesFile,
                             promoCodes: isPromoCodeFreePrize ? [] : current.promoCodes,
                             promoCodeValue: isPromoCodeFreePrize ? "" : current.promoCodeValue,
-                            codeReleaseStart: isPromoCodeFreePrize ? "" : current.codeReleaseStart,
-                            codeReleaseEnd: isPromoCodeFreePrize ? "" : current.codeReleaseEnd,
+                            codeReleaseStart: supportsReleaseSchedule ? current.codeReleaseStart : "",
+                            codeReleaseEnd: supportsReleaseSchedule ? current.codeReleaseEnd : "",
                           }));
                         }}
                       >
@@ -1718,22 +1721,57 @@ export default function PromoCodesPage() {
                   )}
 
                   {form.hasPrizeLimit && PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? (
-                    <FormControl isInvalid={Boolean(formValidation.fields.totalCount)}>
-                      <FormLabel color={textColor} fontSize="sm" fontWeight="700">
-                        Количество призов
-                      </FormLabel>
-                      <Input
-                        h="52px"
-                        borderRadius="16px"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={form.totalCount}
-                        onChange={(event) => setForm((current) => ({ ...current, totalCount: event.target.value }))}
-                        placeholder="Например: 10"
-                      />
-                      <FormErrorMessage>{formValidation.fields.totalCount}</FormErrorMessage>
-                    </FormControl>
+                    <>
+                      <FormControl isInvalid={Boolean(formValidation.fields.totalCount)}>
+                        <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                          Количество призов
+                        </FormLabel>
+                        <Input
+                          h="52px"
+                          borderRadius="16px"
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={form.totalCount}
+                          onChange={(event) => setForm((current) => ({ ...current, totalCount: event.target.value }))}
+                          placeholder="Например: 10"
+                        />
+                        <FormErrorMessage>{formValidation.fields.totalCount}</FormErrorMessage>
+                      </FormControl>
+                      {RELEASE_SCHEDULE_PRIZE_CATEGORIES.has(form.category) ? (
+                        <>
+                          <SimpleGrid columns={{ base: 1, md: 2 }} spacing="16px">
+                            <FormControl>
+                              <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                                Старт выхода в пул
+                              </FormLabel>
+                              <Input
+                                h="52px"
+                                borderRadius="16px"
+                                type="datetime-local"
+                                value={form.codeReleaseStart}
+                                onChange={(event) => setForm((current) => ({ ...current, codeReleaseStart: event.target.value }))}
+                              />
+                            </FormControl>
+                            <FormControl>
+                              <FormLabel color={textColor} fontSize="sm" fontWeight="700">
+                                Конец выхода в пул
+                              </FormLabel>
+                              <Input
+                                h="52px"
+                                borderRadius="16px"
+                                type="datetime-local"
+                                value={form.codeReleaseEnd}
+                                onChange={(event) => setForm((current) => ({ ...current, codeReleaseEnd: event.target.value }))}
+                              />
+                            </FormControl>
+                          </SimpleGrid>
+                          <Text color={textColorSecondary} fontSize="sm">
+                            Туры будут равномерно становиться доступными в течение указанного периода.
+                          </Text>
+                        </>
+                      ) : null}
+                    </>
                   ) : form.hasPrizeLimit ? (
                     <>
                       <FormControl isInvalid={Boolean(formValidation.fields.promoCodes)}>
