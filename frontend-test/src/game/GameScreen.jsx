@@ -1076,8 +1076,8 @@ export default function GameScreen({
 
     clearIdleSpin()
     isIdleSpinActiveRef.current = true
-    setTrackTranslate(finalTranslate)
-    virtualTranslateRef.current = finalTranslate
+    setTrackTranslate(baseTranslate)
+    virtualTranslateRef.current = baseTranslate
 
     const runIdleCycle = () => {
       idleAnimationFrameRef.current = requestAnimationFrame(() => {
@@ -1089,7 +1089,7 @@ export default function GameScreen({
         }
 
         setCarouselMotionTransition("none")
-        applyTrackStyles(finalTranslate)
+        applyTrackStyles(baseTranslate)
         void carouselMotionRef.current.offsetWidth
 
         idleAnimationFrameRef.current = requestAnimationFrame(() => {
@@ -1101,8 +1101,8 @@ export default function GameScreen({
           }
 
           setCarouselMotionTransition(`transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`)
-          applyTrackStyles(baseTranslate)
-          virtualTranslateRef.current = baseTranslate
+          applyTrackStyles(finalTranslate)
+          virtualTranslateRef.current = finalTranslate
 
           idleSpinTimeoutRef.current = window.setTimeout(() => {
             if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
@@ -1113,8 +1113,8 @@ export default function GameScreen({
             }
 
             setCarouselMotionTransition("none")
-            applyTrackStyles(finalTranslate)
-            virtualTranslateRef.current = finalTranslate
+            applyTrackStyles(baseTranslate)
+            virtualTranslateRef.current = baseTranslate
             runIdleCycle()
           }, IDLE_SPIN_CYCLE_DURATION)
         })
