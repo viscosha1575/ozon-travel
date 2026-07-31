@@ -253,6 +253,7 @@ function App() {
 
         if (isMaxHost) {
           setMaxLaunchError(getMaxLaunchErrorMessage(response?.user?.errorCode, miniAppPlatform))
+          setIsUserSubscribed(response?.user?.subscribedToChannel === true)
         }
 
         setIsProjectFinished(projectFinished)

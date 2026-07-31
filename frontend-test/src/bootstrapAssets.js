@@ -17,7 +17,7 @@ export function buildBootstrapAssetVersion(payload) {
   rouletteItems.forEach((item, index) => appendImageEntry(chunks, item, `roulette-${index}`))
   myPrizes.forEach((item, index) => appendImageEntry(chunks, item, `my-prize-${index}`))
 
-  const source = chunks.join("|")
+  const source = chunks.sort().join("|")
 
   if (!source) {
     return "bootstrap-empty"
