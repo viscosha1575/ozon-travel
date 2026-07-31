@@ -41,7 +41,7 @@ let startBannerAttachmentPromise = null;
 
 function buildOpenAppButton(url) {
   const normalizedUrl = String(url || '').trim();
-  const fallbackWebApp = 'ozontravel_lenta_bot';
+  const fallbackWebApp = 'ozontraveltest_lenta_bot';
 
   if (!normalizedUrl) {
     return {

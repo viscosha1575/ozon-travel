@@ -112,7 +112,7 @@ function isVideoUrl(url) {
 }
 
 function buildMiniAppButton(url, text) {
-  const fallbackWebApp = 'ozontravel_lenta_bot';
+  const fallbackWebApp = 'ozontraveltest_lenta_bot';
 
   try {
     const parsedUrl = new URL(String(url || "").trim());
