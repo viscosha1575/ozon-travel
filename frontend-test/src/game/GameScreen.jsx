@@ -1076,56 +1076,38 @@ export default function GameScreen({
 
     const idleSteps = activeRouletteItems.length
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
-    const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + idleSteps) * step)
+    const cycleDistance = idleSteps * step
+    let startedAt = 0
 
     clearIdleSpin()
     isIdleSpinActiveRef.current = true
     setTrackTranslate(baseTranslate)
     virtualTranslateRef.current = baseTranslate
+    setCarouselMotionTransition("none")
+    applyTrackStyles(baseTranslate)
 
-    const runIdleCycle = () => {
-      idleAnimationFrameRef.current = requestAnimationFrame(() => {
-        if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-          if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-            scheduleIdleSpinRetry()
-          }
-          return
-        }
+    const animateIdle = (timestamp) => {
+      if (!carouselMotionRef.current || !patternMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
+        return
+      }
 
-        setCarouselMotionTransition("none")
-        applyTrackStyles(baseTranslate)
-        void carouselMotionRef.current.offsetWidth
+      if (!startedAt) {
+        startedAt = timestamp
+      }
 
-        idleAnimationFrameRef.current = requestAnimationFrame(() => {
-          if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-            if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-              scheduleIdleSpinRetry()
-            }
-            return
-          }
+      const elapsed = Math.max(0, timestamp - startedAt)
+      const cycleProgress = (elapsed % IDLE_SPIN_CYCLE_DURATION) / IDLE_SPIN_CYCLE_DURATION
+      const totalProgress = elapsed / IDLE_SPIN_CYCLE_DURATION
+      const carouselTranslate = roundToDevicePixel(baseTranslate - cycleDistance * cycleProgress)
+      const patternTranslate = roundToDevicePixel(baseTranslate - cycleDistance * totalProgress)
 
-          setCarouselMotionTransition(`transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`)
-          applyTrackStyles(finalTranslate)
-          virtualTranslateRef.current = finalTranslate
-
-          idleSpinTimeoutRef.current = window.setTimeout(() => {
-            if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-              if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-                scheduleIdleSpinRetry()
-              }
-              return
-            }
-
-            setCarouselMotionTransition("none")
-            applyTrackStyles(baseTranslate)
-            virtualTranslateRef.current = baseTranslate
-            runIdleCycle()
-          }, IDLE_SPIN_CYCLE_DURATION)
-        })
-      })
+      carouselMotionRef.current.style.transform = `translate3d(0, ${carouselTranslate}px, 0)`
+      patternMotionRef.current.style.transform = `translate3d(0, ${patternTranslate}px, 0)`
+      virtualTranslateRef.current = carouselTranslate
+      idleAnimationFrameRef.current = requestAnimationFrame(animateIdle)
     }
 
-    runIdleCycle()
+    idleAnimationFrameRef.current = requestAnimationFrame(animateIdle)
   }
 
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
