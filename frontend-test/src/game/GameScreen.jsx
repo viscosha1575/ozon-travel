@@ -2593,11 +2593,14 @@ export default function GameScreen({
               Мои призы
             </h2>
             <div className="game-prizes-list" aria-label="Список призов">
-              {myPrizes.length ? myPrizes.map((prize) => (
+              {myPrizes.length ? myPrizes.map((prize) => {
+                const isExtraAttemptsPrize = getPrizeRewardKind(prize) === "extra_attempts"
+
+                return (
                 <button
                   key={prize.id}
                   type="button"
-                  className="game-prize-card"
+                  className={`game-prize-card ${isExtraAttemptsPrize ? "game-prize-card--extra-attempts" : ""}`.trim()}
                   onClick={() => openPrizeResult(prize)}
                 >
                   <div className="game-prize-card-media">
@@ -2609,11 +2612,16 @@ export default function GameScreen({
                     />
                   </div>
                   <div className="game-prize-card-content">
-                    <h3 className="game-prize-card-title">{prize.myPrizeText || prize.title}</h3>
-                    <p className="game-prize-card-date">{prize.expiresAt}</p>
+                    <h3 className="game-prize-card-title">
+                      {isExtraAttemptsPrize ? "+3 попытки крутить Ленту" : prize.myPrizeText || prize.title}
+                    </h3>
+                    <p className="game-prize-card-date">
+                      {isExtraAttemptsPrize ? "Уже начислены" : prize.expiresAt}
+                    </p>
                   </div>
                 </button>
-              )) : (
+                )
+              }) : (
                 <p className="game-overlay-description game-prizes-empty-description">
                   Пока призов нет. Крутите ленту, чтобы получить первый.
                 </p>
