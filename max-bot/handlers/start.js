@@ -4,10 +4,13 @@ import { fileURLToPath } from 'url';
 import { bot, Keyboard } from '../maxInstance.js';
 import {
   addUser,
+  deleteUserByMaxId,
+  grantOzonBankSubscriptionBonus,
 } from '../services/userService.js';
 import { createMaxLog } from '../services/logService.js';
 import {
   MAX_CHANNEL_URL,
+  MAX_BANK_CHANNEL_URL,
   GAME_WEBAPP_URL,
   SUPPORT_CONTACT,
 } from '../config.js';
@@ -16,8 +19,19 @@ import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
 import { parseStartParam } from '../utils/startParam.js';
 
-const subscriptionKeyboard = Keyboard.inlineKeyboard([
-  [Keyboard.button.link('Подписаться', MAX_CHANNEL_URL)],
+const newUserSubscriptionKeyboard = Keyboard.inlineKeyboard([
+  [Keyboard.button.link('Ozon Travel', MAX_CHANNEL_URL)],
+  [Keyboard.button.link('Ozon Банк', MAX_BANK_CHANNEL_URL)],
+  [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
+]);
+
+const bankSubscriptionKeyboard = Keyboard.inlineKeyboard([
+  [Keyboard.button.link('Ozon Банк', MAX_BANK_CHANNEL_URL)],
+  [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
+]);
+
+const travelSubscriptionKeyboard = Keyboard.inlineKeyboard([
+  [Keyboard.button.link('Ozon Travel', MAX_CHANNEL_URL)],
   [Keyboard.button.callback('Проверить подписку', 'check_subscription')],
 ]);
 
@@ -68,18 +82,31 @@ const gameMenuKeyboard = Keyboard.inlineKeyboard([
 ]);
 
 const welcomeMessage = [
-  'Перед стартом подпишитесь на канал Ozon Travel.',
+  'Для старта подпишитесь на каналы Ozon Travel и Ozon Банк и получите +3 попытки крутить Ленту призов',
 ].join('\n');
 
 const subscriptionMessage = [
-  'Перед стартом подпишитесь на канал Ozon Travel.',
+  'Проверьте подписку на каналы Ozon Travel и Ozon Банк, а сразу после получите +3 попытки крутить Ленту призов',
 ].join('\n');
 
+const bankSubscriptionMessage =
+  'Подпишитесь на канал Ozon Банк и получите +3 попытки крутить Ленту призов';
+const travelSubscriptionMessage =
+  'Подпишитесь на канал Ozon Travel, чтобы продолжить';
+
 const subscriptionRetryMessage =
-  'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите «Проверить подписку» еще раз.';
+  'Подписки пока не найдены. Подпишитесь на каналы Ozon Travel и Ozon Банк и нажмите\n«Проверить подписку» ещё раз';
+const bankSubscriptionRetryMessage =
+  'Подписка пока не найдена. Подпишитесь на канал Ozon Банк и нажмите\n«Проверить подписку» ещё раз';
+const travelSubscriptionRetryMessage =
+  'Подписка пока не найдена. Подпишитесь на канал Ozon Travel и нажмите\n«Проверить подписку» ещё раз';
 const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000;
 const MAX_START_SUBSCRIPTION_RETRY_ATTEMPTS = 5;
-const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6;
+const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 1;
+const START_DEDUP_WINDOW_MS = 15_000;
+const recentStartByUserId = new Map();
+const pendingSubscriptionFlowByUserId = new Map();
+const subscriptionCheckInFlight = new Set();
 
 const menuMessage = [
   'Всё готово для участия!',
@@ -241,15 +268,20 @@ async function checkSubscriptionWithRetry(userId, {
   source = 'unknown',
   attempts = 1,
   delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+  requiredChannels = ['travel', 'bank'],
 } = {}) {
   const totalAttempts = Math.max(1, Number(attempts) || 1);
-  let isSubscribed = false;
+  let subscriptions = { travel: false, bank: false };
 
   for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-    isSubscribed = await refreshSubscriptionStatus(userId, { source });
+    subscriptions = await refreshSubscriptionStatus(userId, { source, requiredChannels });
+    const isSubscribed = requiredChannels.every((channel) => subscriptions[channel]);
 
     if (isSubscribed || attempt >= totalAttempts) {
-      return isSubscribed;
+      return {
+        isSubscribed,
+        subscriptions,
+      };
     }
 
     logger.info('MAX subscription not visible yet, retrying', {
@@ -262,7 +294,10 @@ async function checkSubscriptionWithRetry(userId, {
     await wait(delayMs);
   }
 
-  return isSubscribed;
+  return {
+    isSubscribed: false,
+    subscriptions,
+  };
 }
 
 async function registerUser(ctx, { logEntry = true } = {}) {
@@ -318,25 +353,57 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 }
 
 async function sendStartStep(ctx) {
-  const registrationResult = await registerUser(ctx);
   const { userId } = extractUser(ctx);
+  const now = Date.now();
+  const lastStartAt = recentStartByUserId.get(userId) || 0;
+
+  if (userId && now - lastStartAt < START_DEDUP_WINDOW_MS) {
+    logger.info('Skipping duplicate MAX start event', { userId });
+    return;
+  }
+
+  if (userId) {
+    recentStartByUserId.set(userId, now);
+  }
+
+  const registrationResult = await registerUser(ctx);
 
   if (!registrationResult?.ok) {
     await safeReply(ctx, welcomeMessage, {
-      attachments: [subscriptionKeyboard],
+      attachments: [newUserSubscriptionKeyboard],
     }, 'sendStartStep:registration-missing');
     return;
   }
 
+  const isNewUser = Boolean(registrationResult.user?.wasCreated);
+  let flow = isNewUser ? 'new' : 'bank';
+
   try {
-    const isSubscribed = await checkSubscriptionWithRetry(userId, {
+    if (isNewUser) {
+      await grantOzonBankSubscriptionBonus({
+        maxUserId: userId,
+        markClaimedOnly: true,
+      });
+    }
+
+    const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'start',
       attempts: 1,
+      requiredChannels: ['travel', 'bank'],
     });
 
-    if (isSubscribed) {
+    if (subscriptionResult.isSubscribed) {
+      pendingSubscriptionFlowByUserId.delete(userId);
       await sendGameMenu(ctx);
       return;
+    }
+
+    if (subscriptionResult.subscriptions.travel) {
+      flow = 'bank';
+    } else if (subscriptionResult.subscriptions.bank) {
+      flow = 'travel';
+    } else {
+      flow = 'new';
     }
   } catch (error) {
     logger.error('MAX start subscription refresh failed', {
@@ -345,14 +412,28 @@ async function sendStartStep(ctx) {
     });
   }
 
-  await safeReply(ctx, welcomeMessage, {
-    attachments: [subscriptionKeyboard],
-  }, 'sendStartStep');
+  pendingSubscriptionFlowByUserId.set(userId, flow);
+  await safeReply(
+    ctx,
+    flow === 'new'
+      ? welcomeMessage
+      : flow === 'travel'
+        ? travelSubscriptionMessage
+        : bankSubscriptionMessage,
+    {
+      attachments: [flow === 'new'
+        ? newUserSubscriptionKeyboard
+        : flow === 'travel'
+          ? travelSubscriptionKeyboard
+          : bankSubscriptionKeyboard],
+    },
+    'sendStartStep',
+  );
 }
 
 async function sendSubscriptionStep(ctx) {
   await safeReply(ctx, subscriptionMessage, {
-    attachments: [subscriptionKeyboard],
+    attachments: [newUserSubscriptionKeyboard],
   }, 'sendSubscriptionStep');
 }
 
@@ -397,6 +478,33 @@ bot.command('id', async (ctx) => {
 
   await safeReply(ctx, userId ? `Ваш MAX ID: ${userId}` : 'Не удалось определить ваш MAX ID.', undefined, 'command:id');
 });
+bot.command('delete', async (ctx) => {
+  const { userId } = extractUser(ctx);
+
+  if (!userId) {
+    await safeReply(ctx, 'Не удалось определить ваш MAX ID.', undefined, 'command:delete:no-user');
+    return;
+  }
+
+  try {
+    const result = await deleteUserByMaxId({ maxUserId: userId });
+    recentStartByUserId.delete(userId);
+    pendingSubscriptionFlowByUserId.delete(userId);
+    subscriptionCheckInFlight.delete(userId);
+    await safeReply(
+      ctx,
+      result?.deleted ? 'Ваш пользователь удалён.' : 'Пользователь уже удалён.',
+      undefined,
+      'command:delete',
+    );
+  } catch (error) {
+    logger.error('MAX user deletion failed', {
+      userId,
+      error: error?.response?.data || error?.message || String(error),
+    });
+    await safeReply(ctx, 'Не удалось удалить пользователя. Попробуйте ещё раз.', undefined, 'command:delete:error');
+  }
+});
 bot.command('support', async (ctx) => {
   await safeReply(ctx, supportMessage, undefined, 'command:support');
 });
@@ -419,6 +527,16 @@ bot.action('show_support', async (ctx) => {
 bot.action('check_subscription', async (ctx) => {
   const { userId } = extractUser(ctx);
   let callbackAcknowledged = false;
+  let flow = pendingSubscriptionFlowByUserId.get(userId) || 'bank';
+
+  if (subscriptionCheckInFlight.has(userId)) {
+    await ctx.answerOnCallback({
+      notification: 'Проверка уже идёт',
+    });
+    return;
+  }
+
+  subscriptionCheckInFlight.add(userId);
 
   try {
     const registered = await registerUser(ctx, { logEntry: false });
@@ -441,26 +559,54 @@ bot.action('check_subscription', async (ctx) => {
     });
     callbackAcknowledged = true;
 
-    const isSubscribed = await checkSubscriptionWithRetry(userId, {
+    flow = pendingSubscriptionFlowByUserId.get(userId)
+      || (registered.user?.subscribedToChannel ? 'bank' : 'new');
+    const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'callback',
       attempts: MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS,
+      requiredChannels: ['travel', 'bank'],
     });
 
-    if (isSubscribed) {
+    if (subscriptionResult.isSubscribed) {
+      const bonusResult = flow === 'travel'
+        ? { granted: false }
+        : await grantOzonBankSubscriptionBonus({ maxUserId: userId });
+      pendingSubscriptionFlowByUserId.delete(userId);
       await createMaxLog({
         maxUserId: userId,
         eventType: 'system',
         eventName: 'subscription_confirmed',
       });
+      logger.info('MAX Ozon Bank subscription bonus processed', {
+        userId,
+        granted: Boolean(bonusResult?.granted),
+        flow,
+      });
       await sendGameMenu(ctx);
     } else {
+      flow = subscriptionResult.subscriptions.travel
+        ? 'bank'
+        : subscriptionResult.subscriptions.bank
+          ? 'travel'
+          : 'new';
+      pendingSubscriptionFlowByUserId.set(userId, flow);
       await createMaxLog({
         maxUserId: userId,
         eventType: 'system',
         eventName: 'subscription_missing',
       });
-      await safeReply(ctx, subscriptionRetryMessage, {
-        attachments: [subscriptionKeyboard],
+      const retryMessage = flow === 'new'
+        ? subscriptionRetryMessage
+        : flow === 'travel'
+          ? travelSubscriptionRetryMessage
+          : bankSubscriptionRetryMessage;
+      const retryKeyboard = flow === 'new'
+        ? newUserSubscriptionKeyboard
+        : flow === 'travel'
+          ? travelSubscriptionKeyboard
+          : bankSubscriptionKeyboard;
+      await safeReply(ctx, retryMessage, {
+        attachments: [retryKeyboard],
       }, 'check_subscription:missing');
     }
   } catch (error) {
@@ -477,7 +623,13 @@ bot.action('check_subscription', async (ctx) => {
     }
 
     await safeReply(ctx, 'Не удалось проверить подписку. Попробуйте ещё раз через пару секунд.', {
-      attachments: [subscriptionKeyboard],
+      attachments: [flow === 'new'
+        ? newUserSubscriptionKeyboard
+        : flow === 'travel'
+          ? travelSubscriptionKeyboard
+          : bankSubscriptionKeyboard],
     }, 'check_subscription:error');
+  } finally {
+    subscriptionCheckInFlight.delete(userId);
   }
 });

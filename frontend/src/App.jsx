@@ -5,7 +5,7 @@ import { logDevWarn } from "./devLogger.js"
 import { fetchGameBootstrap, getBootstrapAssetVersion } from "./gameBootstrap.js"
 import { resolveCachedImageSource, useCachedImageSources, warmImageCache } from "./imageCache.js"
 import GameScreen from "./game/GameScreen.jsx"
-import { getMiniAppPlatform, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
+import { getMiniApp, getMiniAppPlatform, isMaxMiniApp, isTelegramMiniApp, openExternalLink } from "./telegram.js"
 
 const INTRO_DISABLED = false
 const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
@@ -14,9 +14,6 @@ const SUBSCRIPTION_CHANNEL_URL = String(
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260630-11"
-const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
-const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
-const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
 const INITIAL_INTRO_VISIBILITY_FALLBACK_MS = 1200
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 let embeddedPageModulePromise = null
@@ -199,7 +196,7 @@ function App() {
 
   const pollSubscriptionStatus = useCallback(async ({
     attempts,
-    delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+    delayMs = 0,
     onProgress,
   }) => {
     const totalAttempts = Math.max(1, Number(attempts) || 1)
@@ -220,7 +217,9 @@ function App() {
         }
       }
 
-      await wait(delayMs)
+      if (delayMs > 0) {
+        await wait(delayMs)
+      }
     }
 
     return {
@@ -262,28 +261,6 @@ function App() {
           return
         }
 
-        try {
-          const { subscriptionStatus } = await pollSubscriptionStatus({
-            attempts: isMaxHost ? MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
-            reason: "initial",
-          })
-
-          if (isCancelled) {
-            return
-          }
-
-          if (isMaxHost) {
-            setMaxLaunchError(
-              getMaxLaunchErrorMessage(subscriptionStatus?.user?.errorCode, miniAppPlatform),
-            )
-          }
-
-          setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
-        } catch (error) {
-          if (!isCancelled) {
-            logDevWarn("Initial subscription status refresh failed", error)
-          }
-        }
       } catch (error) {
         if (isCancelled) {
           return
@@ -321,38 +298,29 @@ function App() {
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
         setIsGameBootstrapPreloading(true)
+        let bootstrapResponse = prefetchedGameBootstrap
+        let assetVersion = prefetchedGameAssetVersion
 
-        void (async () => {
-          let bootstrapResponse = prefetchedGameBootstrap
-          let assetVersion = prefetchedGameAssetVersion
-
-          if (canPreloadRemoteBootstrap && !bootstrapResponse) {
-            try {
-              bootstrapResponse = await fetchGameBootstrap()
-              assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
-
-              void warmImageCache(
-                collectBootstrapCarouselImageUrls(bootstrapResponse, assetVersion),
-              ).catch((error) => {
-                logDevWarn("Carousel image warmup failed", error)
-              })
-            } catch (error) {
-              logDevWarn("Intro bootstrap preload failed", error)
-            }
+        if (canPreloadRemoteBootstrap && !bootstrapResponse) {
+          try {
+            bootstrapResponse = await fetchGameBootstrap()
+            assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
+            await warmImageCache(
+              collectBootstrapCarouselImageUrls(bootstrapResponse, assetVersion),
+            )
+          } catch (error) {
+            logDevWarn("Intro bootstrap preload failed", error)
           }
-
-          if (isCancelled) {
-            return
-          }
-
-          setPrefetchedGameBootstrap(bootstrapResponse)
-          setPrefetchedGameAssetVersion(assetVersion)
-          setIsGameBootstrapPreloading(false)
-        })()
-
-        if (!isCancelled) {
-          setIsGameSceneReady(true)
         }
+
+        if (isCancelled) {
+          return
+        }
+
+        setPrefetchedGameBootstrap(bootstrapResponse)
+        setPrefetchedGameAssetVersion(assetVersion)
+        setIsGameBootstrapPreloading(false)
+        setIsGameSceneReady(true)
       }
 
       void preloadGameScene()
@@ -461,6 +429,7 @@ function App() {
     startTransition(() => {
       setIsGameActive(true)
     })
+    setIsSubscriptionCheckPending(false)
   }, [canOpenGame, isGameLaunchPending, isGameSceneReady])
 
   useEffect(() => {
@@ -473,12 +442,12 @@ function App() {
     })
   }, [currentScreen.id, isProjectFinished])
 
-  const handleStartGame = () => {
+  const handleStartGame = (skipSubscriptionGate = false) => {
     if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
 
-    if (!canOpenGame) {
+    if (!skipSubscriptionGate && !canOpenGame) {
       setIsGameLaunchPending(false)
       setIsGameActive(false)
       setActiveScreen(1)
@@ -489,13 +458,6 @@ function App() {
       screenId: currentScreen.id,
     })
     setIsGameLaunchPending(true)
-
-    if (isMiniAppHost) {
-      startTransition(() => {
-        setIsGameActive(true)
-      })
-      return
-    }
 
     if (!isGameSceneReady) {
       return
@@ -513,12 +475,7 @@ function App() {
         return
       }
 
-      if (isUserSubscribed) {
-        handleStartGame()
-        return
-      }
-
-      setActiveScreen(1)
+      void handleSubscriptionCheck()
       return
     }
 
@@ -537,6 +494,17 @@ function App() {
     openExternalLink(SUBSCRIPTION_CHANNEL_URL)
   }
 
+  const handleSubscriptionReturn = () => {
+    const miniApp = getMiniApp()
+
+    if (typeof miniApp?.close === "function") {
+      miniApp.close()
+      return
+    }
+
+    window.close()
+  }
+
   const handleSubscriptionCheck = async () => {
     if (isTelegramHost) {
       startTransition(() => {
@@ -549,7 +517,7 @@ function App() {
 
     try {
       const { isSubscribed, subscriptionStatus } = await pollSubscriptionStatus({
-        attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
+        attempts: 1,
         reason: "manual",
       })
 
@@ -558,12 +526,12 @@ function App() {
         setIsUserSubscribed(subscriptionStatus?.user?.subscribedToChannel === true)
 
         if (subscriptionStatus?.user?.subscribedToChannel === true) {
-          handleStartGame()
+          handleStartGame(true)
           return
         }
 
         startTransition(() => {
-          setActiveScreen(2)
+          setActiveScreen(1)
         })
         return
       }
@@ -571,10 +539,10 @@ function App() {
       setIsUserSubscribed(isSubscribed)
 
       if (isSubscribed) {
-        handleStartGame()
+        handleStartGame(true)
       } else {
         startTransition(() => {
-          setActiveScreen(2)
+          setActiveScreen(1)
         })
       }
     } catch (error) {
@@ -1049,33 +1017,24 @@ function App() {
                   {screen.variant === "subscription" ? (
                     <>
                       <h1 className="content-title content-title--subscription">
-                        {screen.titleLines.map((line) => (
-                          <span key={line} className="content-line">{line}</span>
-                        ))}
+                        <span className="content-line">Для старта подпишитесь</span>
+                        <span className="content-line">
+                          на каналы <span className="subscription-brand subscription-brand--travel">Ozon Travel</span>
+                        </span>
+                        <span className="content-line">
+                          и <span className="subscription-brand subscription-brand--bank">Ozon Банк</span>
+                        </span>
                       </h1>
-
-                      <div className="content-actions-stack">
-                        <button
-                          type="button"
-                          className="content-action"
-                          onClick={handleSubscriptionAction}
-                        >
-                          {screen.actionLabel}
-                        </button>
-                        <button
-                          type="button"
-                          className="content-action content-action--secondary"
-                          onClick={handleSubscriptionCheck}
-                          disabled={isSubscriptionCheckPending}
-                        >
-                          {isSubscriptionCheckPending ? "Проверяем..." : screen.secondaryActionLabel}
-                        </button>
-                      </div>
-                      {maxLaunchError ? (
-                        <p className="content-description">
-                          <span className="content-line">{maxLaunchError}</span>
-                        </p>
-                      ) : null}
+                      <p className="content-description content-description--subscription">
+                        и получите <strong>+3 попытки</strong> крутить Ленту призов
+                      </p>
+                      <button
+                        type="button"
+                        className="content-action"
+                        onClick={handleSubscriptionReturn}
+                      >
+                        Вернуться
+                      </button>
                     </>
                   ) : screen.variant === "subscription-failed" ? (
                     <>
@@ -1141,8 +1100,11 @@ function App() {
                         type="button"
                         className="content-action"
                         onClick={handlePrimaryAction}
+                        disabled={screen.id === "intro" && (isSubscriptionCheckPending || isGameLaunchPending)}
                       >
-                        {screen.actionLabel}
+                        {screen.id === "intro" && (isSubscriptionCheckPending || isGameLaunchPending)
+                          ? "Проверяем..."
+                          : screen.actionLabel}
                       </button>
                     </>
                   )}

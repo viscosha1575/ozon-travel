@@ -53,6 +53,7 @@ const REFERRAL_SHARE_MESSAGE = [
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260630-11"
 const IMPORTANT_INFO_TITLE = "Условия акции"
 const OZON_TRAVEL_APP_URL = "https://www.ozon.ru/travel/?utm_source=telegram&utm_medium=special_project&utm_campaign=oztravel_06_26_lenta_prizov_promo_activation"
+const TOUR_FORM_URL = "https://forms.ozon.ru/form/060c52af-87c5-400e-814f-1077933c2b42"
 const DEFAULT_ROULETTE_IMAGE_PATH = "/game/bags/case.webp"
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const DEFAULT_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте еще раз."
@@ -68,6 +69,17 @@ const EMPTY_ITEMS = []
 let embeddedPageModulePromise = null
 const getLoopedIndex = (value, length) => ((value % length) + length) % length
 const normalizeEntityId = (value) => String(value ?? "").trim()
+
+function getPrizeRewardKind(prize = {}) {
+  const safePrize = prize || {}
+  const source = [safePrize.rewardType, safePrize.prizeType, safePrize.category, safePrize.promoCodeType, safePrize.type]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .join(" ")
+
+  if (source.includes("тур") || source.includes("tour")) return "tour"
+  if (source.includes("попыт") || source.includes("attempt")) return "extra_attempts"
+  return "standard"
+}
 
 function loadEmbeddedPageModule() {
   if (!embeddedPageModulePromise) {
@@ -365,6 +377,9 @@ function normalizeRouletteItems(items, assetVersion) {
     expiresAt: item.expiresAt || "",
     chanceValue: item.chanceValue || "1x",
     type: item.type || "Приз",
+    category: item.category || "",
+    promoCodeType: item.promoCodeType || "",
+    rewardType: item.rewardType || "",
   }))
 }
 
@@ -493,6 +508,9 @@ function buildResultBag(result, rouletteItems) {
     expiresAt: result.expiresAt || matchedItem?.expiresAt || "",
     chanceValue: matchedItem?.chanceValue || "1x",
     type: result.type || matchedItem?.type || "Приз",
+    category: result.category || matchedItem?.category || "",
+    promoCodeType: result.promoCodeType || matchedItem?.promoCodeType || "",
+    rewardType: result.rewardType || matchedItem?.rewardType || "",
   }
 }
 
@@ -504,6 +522,9 @@ function buildResultPrize(result, fallbackBag) {
   return {
     positionId: result?.positionId ?? fallbackBag?.id ?? null,
     type: result?.type || fallbackBag?.type || "Приз",
+    category: result?.category || fallbackBag?.category || "",
+    promoCodeType: result?.promoCodeType || fallbackBag?.promoCodeType || "",
+    rewardType: result?.rewardType || fallbackBag?.rewardType || "",
     title: result?.title || fallbackBag?.title || "",
     myPrizeText: result?.myPrizeText || fallbackBag?.myPrizeText || result?.title || fallbackBag?.title || "",
     description: result?.description || fallbackBag?.description || "",
@@ -780,6 +801,7 @@ export default function GameScreen({
       .map((item) => item?.slotPath || item?.path || ""),
   )
   const hasAvailableAttempts = availableAttempts > 0
+  const resultRewardKind = getPrizeRewardKind(resultPrize || resultBag)
   const isResultBagAnimating = resultRevealPhase === "bag-enter"
   const isResultSheetVisible = Boolean(resultBag)
   const isGiftOverlayVisible = activeOverlay === "gift" || renderedOverlay === "gift"
@@ -1024,6 +1046,10 @@ export default function GameScreen({
   }, [])
 
   const scheduleIdleSpinRetry = () => {
+    if (isIdleSpinActiveRef.current) {
+      return
+    }
+
     cancelAnimationFrame(idleStartRetryFrameRef.current)
     idleStartRetryFrameRef.current = requestAnimationFrame(() => {
       idleStartRetryFrameRef.current = 0
@@ -1037,7 +1063,7 @@ export default function GameScreen({
   }
 
   const startIdleSpin = () => {
-    if (isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
+    if (isIdleSpinActiveRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
       return
     }
 
@@ -1050,56 +1076,38 @@ export default function GameScreen({
 
     const idleSteps = activeRouletteItems.length
     const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * step)
-    const finalTranslate = roundToDevicePixel(-(TRACK_VISIBLE_START_OFFSET + idleSteps) * step)
+    const cycleDistance = idleSteps * step
+    let startedAt = 0
 
     clearIdleSpin()
     isIdleSpinActiveRef.current = true
     setTrackTranslate(baseTranslate)
     virtualTranslateRef.current = baseTranslate
+    setCarouselMotionTransition("none")
+    applyTrackStyles(baseTranslate)
 
-    const runIdleCycle = () => {
-      idleAnimationFrameRef.current = requestAnimationFrame(() => {
-        if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-          if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-            scheduleIdleSpinRetry()
-          }
-          return
-        }
+    const animateIdle = (timestamp) => {
+      if (!carouselMotionRef.current || !patternMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
+        return
+      }
 
-        setCarouselMotionTransition("none")
-        applyTrackStyles(baseTranslate)
-        void carouselMotionRef.current.offsetWidth
+      if (!startedAt) {
+        startedAt = timestamp
+      }
 
-        idleAnimationFrameRef.current = requestAnimationFrame(() => {
-          if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-            if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-              scheduleIdleSpinRetry()
-            }
-            return
-          }
+      const elapsed = Math.max(0, timestamp - startedAt)
+      const cycleProgress = (elapsed % IDLE_SPIN_CYCLE_DURATION) / IDLE_SPIN_CYCLE_DURATION
+      const totalProgress = elapsed / IDLE_SPIN_CYCLE_DURATION
+      const carouselTranslate = roundToDevicePixel(baseTranslate - cycleDistance * cycleProgress)
+      const patternTranslate = roundToDevicePixel(baseTranslate - cycleDistance * totalProgress)
 
-          setCarouselMotionTransition(`transform ${IDLE_SPIN_CYCLE_DURATION}ms linear`)
-          applyTrackStyles(finalTranslate)
-          virtualTranslateRef.current = finalTranslate
-
-          idleSpinTimeoutRef.current = window.setTimeout(() => {
-            if (!carouselMotionRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !isIdleSpinActiveRef.current) {
-              if (!isSpinActiveRef.current && !isSpinResultPendingRef.current && !resultBag && activeRouletteItems.length) {
-                scheduleIdleSpinRetry()
-              }
-              return
-            }
-
-            setCarouselMotionTransition("none")
-            applyTrackStyles(baseTranslate)
-            virtualTranslateRef.current = baseTranslate
-            runIdleCycle()
-          }, IDLE_SPIN_CYCLE_DURATION)
-        })
-      })
+      carouselMotionRef.current.style.transform = `translate3d(0, ${carouselTranslate}px, 0)`
+      patternMotionRef.current.style.transform = `translate3d(0, ${patternTranslate}px, 0)`
+      virtualTranslateRef.current = carouselTranslate
+      idleAnimationFrameRef.current = requestAnimationFrame(animateIdle)
     }
 
-    runIdleCycle()
+    idleAnimationFrameRef.current = requestAnimationFrame(animateIdle)
   }
 
   const resetCarousel = (nextCenterBagIndex = centerBagIndexRef.current) => {
@@ -1796,6 +1804,9 @@ export default function GameScreen({
     const basePrizeResult = {
       positionId: prize.positionId ?? prize.id,
       type: prize.type || "Приз",
+      category: prize.category || "",
+      promoCodeType: prize.promoCodeType || "",
+      rewardType: prize.rewardType || "",
       title: prize.title || "",
       myPrizeText: prize.myPrizeText || prize.title || "",
       description: prize.description || "",
@@ -1848,6 +1859,17 @@ export default function GameScreen({
     })
 
     openExternalLink(OZON_TRAVEL_APP_URL)
+  }
+
+  const handleOpenTourForm = () => {
+    void trackGameEvent("external_link_opened", {
+      actionId: "tour_form",
+      url: TOUR_FORM_URL,
+      source: "result_prize",
+      prizeId: resultBag?.id ?? resultPrize?.positionId ?? null,
+    })
+
+    openExternalLink(TOUR_FORM_URL)
   }
 
   const handleCarouselSlotImageError = (event) => {
@@ -1949,6 +1971,11 @@ export default function GameScreen({
 
       if (step > SLOT_GAP) {
         stepRef.current = roundToDevicePixel(step)
+
+        if (isIdleSpinActiveRef.current) {
+          return
+        }
+
         const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * stepRef.current)
         setTrackTranslate(baseTranslate)
         virtualTranslateRef.current = baseTranslate
@@ -2455,7 +2482,11 @@ export default function GameScreen({
                   false,
                 )}
                 <div className="game-result-actions">
-                  {resultPrize?.promoCode ? (
+                  {resultRewardKind === "tour" ? (
+                    <button type="button" className="game-result-primary-action" onClick={handleOpenTourForm}>
+                      Заполнить форму
+                    </button>
+                  ) : resultRewardKind !== "extra_attempts" && resultPrize?.promoCode ? (
                     <button
                       type="button"
                       className={`game-result-code ${isResultCopied ? "is-copied" : ""}`.trim()}
@@ -2474,13 +2505,19 @@ export default function GameScreen({
                       ) : null}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className={`game-result-primary-action ${isResultCopied && resultPrize?.promoCode ? "is-secondary" : ""}`.trim()}
-                    onClick={handleBackToGame}
-                  >
-                    К Ленте призов
-                  </button>
+                  {resultRewardKind === "extra_attempts" ? (
+                    <button type="button" className="game-result-primary-action" onClick={handleBackToGame}>
+                      Крутить ещё
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`game-result-primary-action ${resultRewardKind === "tour" || (isResultCopied && resultPrize?.promoCode) ? "is-secondary" : ""}`.trim()}
+                      onClick={handleBackToGame}
+                    >
+                      К Ленте призов
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

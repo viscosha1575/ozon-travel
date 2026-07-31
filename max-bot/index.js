@@ -17,7 +17,7 @@ const MAX_WEBHOOK_SECRET = String(process.env.MAX_WEBHOOK_SECRET || '').trim();
 const MAX_AUTO_REGISTER_WEBHOOK = String(process.env.MAX_AUTO_REGISTER_WEBHOOK || 'false').toLowerCase() === 'true';
 const MAX_WEBHOOK_RETRY_MS = Math.max(Number(process.env.MAX_WEBHOOK_RETRY_MS || 60000), 1000);
 const MAX_SUBSCRIPTIONS_API_URL = String(
-  process.env.MAX_SUBSCRIPTIONS_API_URL || 'https://platform-api.max.ru/subscriptions'
+  process.env.MAX_SUBSCRIPTIONS_API_URL || 'https://platform-api2.max.ru/subscriptions'
 ).trim();
 const MAX_WEBHOOK_UPDATE_TYPES = String(process.env.MAX_WEBHOOK_UPDATE_TYPES || '')
   .split(',')

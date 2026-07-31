@@ -2121,6 +2121,7 @@ body {
 
 .content-subscribe-image {
   position: relative;
+  top: 48px;
   display: block;
   width: min(47.6vw, 280px);
   max-width: 100%;
@@ -2129,7 +2130,7 @@ body {
   object-fit: contain;
   pointer-events: none;
   opacity: 1;
-  transform: none;
+  transform: scale(2);
 }
 
 .split-screen--subscribe .content-subscribe-image {
@@ -2311,7 +2312,36 @@ body {
 }
 
 .content-title--subscription {
+  display: grid;
+  row-gap: 8px;
   line-height: 112%;
+}
+
+.subscription-brand {
+  display: inline-block;
+  padding: 2px 4px;
+  border-radius: 8px;
+  color: #fff;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.subscription-brand--travel {
+  background: #ee168a;
+}
+
+.subscription-brand--bank {
+  background: #075eff;
+}
+
+.content-description--subscription {
+  color: #718092;
+  text-align: center;
+}
+
+.content-description--subscription strong {
+  color: #142338;
+  font-weight: var(--font-weight-semibold);
 }
 
 .content-title--result {
