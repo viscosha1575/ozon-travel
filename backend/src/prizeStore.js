@@ -466,8 +466,9 @@ function validatePrizePayload(payload = {}) {
   const title = String(payload.title || "").trim();
   const type = String(payload.type || "").trim();
   const category = String(payload.category || "").trim();
+  const isPromoCodeFreePrize = type !== "Не приз" && PROMO_CODE_FREE_PRIZE_CATEGORIES.has(category);
   const promoCodeType = String(payload.promoCodeType || "").trim();
-  const hasPrizeLimit = Boolean(payload.hasPrizeLimit);
+  const hasPrizeLimit = isPromoCodeFreePrize || Boolean(payload.hasPrizeLimit);
   const promoCodesFileName = String(payload.promoCodesFileName || "").trim();
   const promoCodes = Array.isArray(payload.promoCodes)
     ? payload.promoCodes.map((item) => String(item || "").trim()).filter(Boolean)
@@ -479,8 +480,12 @@ function validatePrizePayload(payload = {}) {
   const userLimitCount = hasUserLimit ? Math.max(0, Number(payload.userLimitCount) || 0) : 0;
   const activeFrom = String(payload.activeFrom || "").trim() || null;
   const activeTo = String(payload.activeTo || "").trim() || null;
-  const codeReleaseStart = parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
-  const codeReleaseEnd = parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
+  const codeReleaseStart = isPromoCodeFreePrize
+    ? null
+    : parseOptionalDateTime(payload.codeReleaseStart, "codeReleaseStart");
+  const codeReleaseEnd = isPromoCodeFreePrize
+    ? null
+    : parseOptionalDateTime(payload.codeReleaseEnd, "codeReleaseEnd");
   const rouletteImage = payload.rouletteImage ?? null;
   const myPrizeText = normalizeMultilineText(payload.myPrizeText);
   const incomingRouletteDescription = normalizeMultilineText(payload.rouletteDescription);
@@ -520,20 +525,20 @@ function validatePrizePayload(payload = {}) {
   return {
     title,
     category: type === "Не приз" ? "" : category,
-    promoCodeType: type === "Не приз" ? "" : promoCodeType,
+    promoCodeType: type === "Не приз" || isPromoCodeFreePrize ? "" : promoCodeType,
     type,
     hasPrizeLimit: type === "Не приз" ? false : hasPrizeLimit,
-    promoCodesFileName: type === "Не приз" ? "" : promoCodesFileName,
-    promoCodes: type === "Не приз" ? [] : promoCodes,
-    promoCodeValue: type === "Не приз" ? "" : promoCodeValue,
+    promoCodesFileName: type === "Не приз" || isPromoCodeFreePrize ? "" : promoCodesFileName,
+    promoCodes: type === "Не приз" || isPromoCodeFreePrize ? [] : promoCodes,
+    promoCodeValue: type === "Не приз" || isPromoCodeFreePrize ? "" : promoCodeValue,
     totalCount: type === "Не приз" ? 0 : totalCount,
     chanceValue,
     hasUserLimit: type === "Не приз" ? false : hasUserLimit,
     userLimitCount: type === "Не приз" ? 0 : userLimitCount,
     activeFrom,
     activeTo,
-    codeReleaseStart: type === "Не приз" ? null : codeReleaseStart,
-    codeReleaseEnd: type === "Не приз" ? null : codeReleaseEnd,
+    codeReleaseStart: type === "Не приз" || isPromoCodeFreePrize ? null : codeReleaseStart,
+    codeReleaseEnd: type === "Не приз" || isPromoCodeFreePrize ? null : codeReleaseEnd,
     rouletteImage,
     myPrizeText: type === "Не приз" ? title : myPrizeText,
     rouletteDescription,

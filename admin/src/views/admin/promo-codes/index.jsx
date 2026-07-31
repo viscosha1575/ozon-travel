@@ -1643,7 +1643,21 @@ export default function PromoCodesPage() {
                         h="52px"
                         borderRadius="16px"
                         value={form.category}
-                        onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                        onChange={(event) => {
+                          const nextCategory = event.target.value;
+                          const isPromoCodeFreePrize = PROMO_CODE_FREE_PRIZE_CATEGORIES.has(nextCategory);
+                          setForm((current) => ({
+                            ...current,
+                            category: nextCategory,
+                            hasPrizeLimit: isPromoCodeFreePrize ? true : current.hasPrizeLimit,
+                            promoCodeType: isPromoCodeFreePrize ? "" : current.promoCodeType,
+                            promoCodesFile: isPromoCodeFreePrize ? null : current.promoCodesFile,
+                            promoCodes: isPromoCodeFreePrize ? [] : current.promoCodes,
+                            promoCodeValue: isPromoCodeFreePrize ? "" : current.promoCodeValue,
+                            codeReleaseStart: isPromoCodeFreePrize ? "" : current.codeReleaseStart,
+                            codeReleaseEnd: isPromoCodeFreePrize ? "" : current.codeReleaseEnd,
+                          }));
+                        }}
                       >
                         <option value="">Без категории</option>
                         {PRIZE_CATEGORY_OPTIONS.map((category) => (
@@ -1655,7 +1669,7 @@ export default function PromoCodesPage() {
                       <FormErrorMessage>{formValidation.fields.category}</FormErrorMessage>
                     </FormControl>
 
-                    <FormControl>
+                    {!PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? <FormControl>
                       <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                         Тип промокода
                       </FormLabel>
@@ -1671,7 +1685,7 @@ export default function PromoCodesPage() {
                           </option>
                         ))}
                       </Select>
-                    </FormControl>
+                    </FormControl> : null}
                   </SimpleGrid>
                 </Stack>
               </FormSection>
@@ -1682,7 +1696,7 @@ export default function PromoCodesPage() {
                 isInvalid={Boolean(formValidation.sections.limits)}
               >
                 <Stack spacing="16px">
-                  <FormControl>
+                  {!PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? <FormControl>
                     <FormLabel color={textColor} fontSize="sm" fontWeight="700">
                       Есть ли ограничение призов
                     </FormLabel>
@@ -1694,7 +1708,11 @@ export default function PromoCodesPage() {
                         totalCount: nextValue ? current.totalCount : "",
                       }))}
                     />
-                  </FormControl>
+                  </FormControl> : (
+                    <Text color={textColorSecondary} fontSize="sm">
+                      Для этой категории выдача всегда ограничена указанным количеством подарков.
+                    </Text>
+                  )}
 
                   {form.hasPrizeLimit && PROMO_CODE_FREE_PRIZE_CATEGORIES.has(form.category) ? (
                     <FormControl isInvalid={Boolean(formValidation.fields.totalCount)}>
