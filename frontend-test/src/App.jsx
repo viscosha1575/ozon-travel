@@ -14,9 +14,6 @@ const SUBSCRIPTION_CHANNEL_URL = String(
 ).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1077004356.html?v=20260630-11"
-const MAX_SUBSCRIPTION_RETRY_DELAY_MS = 3000
-const MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS = 5
-const MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS = 6
 const INITIAL_INTRO_VISIBILITY_FALLBACK_MS = 1200
 const EMBEDDED_PAGE_CLOSE_EVENT = "ozon-travel-embedded-page-close"
 let embeddedPageModulePromise = null
@@ -199,7 +196,7 @@ function App() {
 
   const pollSubscriptionStatus = useCallback(async ({
     attempts,
-    delayMs = MAX_SUBSCRIPTION_RETRY_DELAY_MS,
+    delayMs = 0,
     onProgress,
   }) => {
     const totalAttempts = Math.max(1, Number(attempts) || 1)
@@ -220,7 +217,9 @@ function App() {
         }
       }
 
-      await wait(delayMs)
+      if (delayMs > 0) {
+        await wait(delayMs)
+      }
     }
 
     return {
@@ -262,28 +261,6 @@ function App() {
           return
         }
 
-        try {
-          const { subscriptionStatus } = await pollSubscriptionStatus({
-            attempts: isMaxHost ? MAX_INITIAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
-            reason: "initial",
-          })
-
-          if (isCancelled) {
-            return
-          }
-
-          if (isMaxHost) {
-            setMaxLaunchError(
-              getMaxLaunchErrorMessage(subscriptionStatus?.user?.errorCode, miniAppPlatform),
-            )
-          }
-
-          setIsUserSubscribed(Boolean(subscriptionStatus?.user?.subscribedToChannel))
-        } catch (error) {
-          if (!isCancelled) {
-            logDevWarn("Initial subscription status refresh failed", error)
-          }
-        }
       } catch (error) {
         if (isCancelled) {
           return
@@ -555,7 +532,7 @@ function App() {
 
     try {
       const { isSubscribed, subscriptionStatus } = await pollSubscriptionStatus({
-        attempts: isMaxHost ? MAX_MANUAL_SUBSCRIPTION_RETRY_ATTEMPTS : 1,
+        attempts: 1,
         reason: "manual",
       })
 
@@ -1140,7 +1117,9 @@ function App() {
                         onClick={handlePrimaryAction}
                         disabled={screen.id === "intro" && isSubscriptionCheckPending}
                       >
-                        {screen.actionLabel}
+                        {screen.id === "intro" && isSubscriptionCheckPending
+                          ? "Проверяем..."
+                          : screen.actionLabel}
                       </button>
                     </>
                   )}
