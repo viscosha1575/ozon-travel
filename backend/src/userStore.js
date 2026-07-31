@@ -20,6 +20,7 @@ const ALLOW_LOCAL_DEMO_USER = (
   : String(process.env.ALLOW_LOCAL_DEMO_USER).trim().toLowerCase() === "true";
 const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
+const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const OZON_BANK_SUBSCRIPTION_BONUS_REASON = "ozon_bank_subscription_bonus";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.mp4"];
@@ -490,7 +491,7 @@ async function grantInitialAttemptsInternal(executor, userId) {
     `,
     [
       userId,
-      OZON_BANK_SUBSCRIPTION_BONUS_REASON,
+      INITIAL_ATTEMPT_REASON,
       JSON.stringify({
         source: "user_created",
       }),
@@ -644,6 +645,7 @@ export async function grantUserAttempts(userId, count = 10, client = null) {
 export async function grantOzonBankSubscriptionBonus(payload = {}, client = null) {
   const platform = normalizePlatform(payload.platform);
   const platformUserId = String(payload.platformUserId || "").trim();
+  const markClaimedOnly = payload.markClaimedOnly === true;
 
   if (!platformUserId) {
     const error = new Error("platformUserId is required");
@@ -656,14 +658,18 @@ export async function grantOzonBankSubscriptionBonus(payload = {}, client = null
     const grantResult = await executor.query(
       `
         INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
-        VALUES ($1, 3, $2, $3::jsonb)
+        VALUES ($1, $2, $3, $4::jsonb)
         ON CONFLICT DO NOTHING
         RETURNING id
       `,
       [
         Number(user.id),
+        markClaimedOnly ? 0 : 3,
         OZON_BANK_SUBSCRIPTION_BONUS_REASON,
-        JSON.stringify({ source: "max_bot_subscription" }),
+        JSON.stringify({
+          source: "max_bot_subscription",
+          markClaimedOnly,
+        }),
       ],
     );
 

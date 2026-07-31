@@ -379,6 +379,13 @@ async function sendStartStep(ctx) {
   let flow = isNewUser ? 'new' : 'bank';
 
   try {
+    if (isNewUser) {
+      await grantOzonBankSubscriptionBonus({
+        maxUserId: userId,
+        markClaimedOnly: true,
+      });
+    }
+
     const subscriptionResult = await checkSubscriptionWithRetry(userId, {
       source: 'start',
       attempts: 1,

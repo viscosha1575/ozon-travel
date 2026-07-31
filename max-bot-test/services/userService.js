@@ -71,10 +71,11 @@ async function setSubscriptionStatus({ maxUserId, isSubscribed }) {
   return res.data;
 }
 
-async function grantOzonBankSubscriptionBonus({ maxUserId }) {
+async function grantOzonBankSubscriptionBonus({ maxUserId, markClaimedOnly = false }) {
   const res = await post('/api/users/grant-ozon-bank-bonus', {
     platform: 'max',
     platformUserId: String(maxUserId),
+    markClaimedOnly: Boolean(markClaimedOnly),
   });
 
   return res.data;
