@@ -988,7 +988,7 @@ function App() {
             aria-hidden="true"
           >
         <img
-          src="/intro/subscribe.webp"
+          src="/intro/subscribe-2.webp"
           alt=""
           className="content-subscribe-image"
         />
