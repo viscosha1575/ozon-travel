@@ -1046,6 +1046,10 @@ export default function GameScreen({
   }, [])
 
   const scheduleIdleSpinRetry = () => {
+    if (isIdleSpinActiveRef.current) {
+      return
+    }
+
     cancelAnimationFrame(idleStartRetryFrameRef.current)
     idleStartRetryFrameRef.current = requestAnimationFrame(() => {
       idleStartRetryFrameRef.current = 0
@@ -1059,7 +1063,7 @@ export default function GameScreen({
   }
 
   const startIdleSpin = () => {
-    if (isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
+    if (isIdleSpinActiveRef.current || isSpinActiveRef.current || isSpinResultPendingRef.current || resultBag || !activeRouletteItems.length) {
       return
     }
 
@@ -1985,6 +1989,11 @@ export default function GameScreen({
 
       if (step > SLOT_GAP) {
         stepRef.current = roundToDevicePixel(step)
+
+        if (isIdleSpinActiveRef.current) {
+          return
+        }
+
         const baseTranslate = roundToDevicePixel(-TRACK_VISIBLE_START_OFFSET * stepRef.current)
         setTrackTranslate(baseTranslate)
         virtualTranslateRef.current = baseTranslate
