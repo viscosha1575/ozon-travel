@@ -298,38 +298,29 @@ function App() {
     const startPreload = window.setTimeout(() => {
       const preloadGameScene = async () => {
         setIsGameBootstrapPreloading(true)
+        let bootstrapResponse = prefetchedGameBootstrap
+        let assetVersion = prefetchedGameAssetVersion
 
-        void (async () => {
-          let bootstrapResponse = prefetchedGameBootstrap
-          let assetVersion = prefetchedGameAssetVersion
-
-          if (canPreloadRemoteBootstrap && !bootstrapResponse) {
-            try {
-              bootstrapResponse = await fetchGameBootstrap()
-              assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
-
-              void warmImageCache(
-                collectBootstrapCarouselImageUrls(bootstrapResponse, assetVersion),
-              ).catch((error) => {
-                logDevWarn("Carousel image warmup failed", error)
-              })
-            } catch (error) {
-              logDevWarn("Intro bootstrap preload failed", error)
-            }
+        if (canPreloadRemoteBootstrap && !bootstrapResponse) {
+          try {
+            bootstrapResponse = await fetchGameBootstrap()
+            assetVersion = getBootstrapAssetVersion(bootstrapResponse?.assetVersion)
+            await warmImageCache(
+              collectBootstrapCarouselImageUrls(bootstrapResponse, assetVersion),
+            )
+          } catch (error) {
+            logDevWarn("Intro bootstrap preload failed", error)
           }
-
-          if (isCancelled) {
-            return
-          }
-
-          setPrefetchedGameBootstrap(bootstrapResponse)
-          setPrefetchedGameAssetVersion(assetVersion)
-          setIsGameBootstrapPreloading(false)
-        })()
-
-        if (!isCancelled) {
-          setIsGameSceneReady(true)
         }
+
+        if (isCancelled) {
+          return
+        }
+
+        setPrefetchedGameBootstrap(bootstrapResponse)
+        setPrefetchedGameAssetVersion(assetVersion)
+        setIsGameBootstrapPreloading(false)
+        setIsGameSceneReady(true)
       }
 
       void preloadGameScene()
@@ -438,6 +429,7 @@ function App() {
     startTransition(() => {
       setIsGameActive(true)
     })
+    setIsSubscriptionCheckPending(false)
   }, [canOpenGame, isGameLaunchPending, isGameSceneReady])
 
   useEffect(() => {
@@ -466,13 +458,6 @@ function App() {
       screenId: currentScreen.id,
     })
     setIsGameLaunchPending(true)
-
-    if (isMiniAppHost) {
-      startTransition(() => {
-        setIsGameActive(true)
-      })
-      return
-    }
 
     if (!isGameSceneReady) {
       return
@@ -1115,9 +1100,9 @@ function App() {
                         type="button"
                         className="content-action"
                         onClick={handlePrimaryAction}
-                        disabled={screen.id === "intro" && isSubscriptionCheckPending}
+                        disabled={screen.id === "intro" && (isSubscriptionCheckPending || isGameLaunchPending)}
                       >
-                        {screen.id === "intro" && isSubscriptionCheckPending
+                        {screen.id === "intro" && (isSubscriptionCheckPending || isGameLaunchPending)
                           ? "Проверяем..."
                           : screen.actionLabel}
                       </button>
