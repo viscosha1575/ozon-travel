@@ -454,6 +454,10 @@ function App() {
     if (!skipSubscriptionGate && !canOpenGame) {
       setIsGameLaunchPending(false)
       setIsGameActive(false)
+      if (isMaxHost) {
+        openExternalLink(SUBSCRIPTION_RETURN_BOT_URL)
+        return
+      }
       setActiveScreen(1)
       return
     }
@@ -527,9 +531,7 @@ function App() {
           return
         }
 
-        startTransition(() => {
-          setActiveScreen(1)
-        })
+        openExternalLink(SUBSCRIPTION_RETURN_BOT_URL)
         return
       }
 
