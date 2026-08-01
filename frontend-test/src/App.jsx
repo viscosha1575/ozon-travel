@@ -12,9 +12,6 @@ const APP_OPEN_STORAGE_KEY = "ozon-travel-app-open-tracked"
 const SUBSCRIPTION_CHANNEL_URL = String(
   import.meta.env.VITE_MAX_CHANNEL_URL || "https://max.ru/ozontravel_official",
 ).trim()
-const SUBSCRIPTION_RETURN_BOT_URL = String(
-  import.meta.env.VITE_MAX_BOT_RETURN_URL || "https://max.ru/ozontraveltest_lenta_bot?start=subscription_return",
-).trim()
 const SUPPORT_CONTACT = String(import.meta.env.VITE_SUPPORT_CONTACT || "@ozon_travel_support_bot").trim()
 const IMPORTANT_INFO_URL = "https://cdn1.ozone.ru/s3/promo-sync-api/1155183942.html?__rr=1"
 const INITIAL_INTRO_VISIBILITY_FALLBACK_MS = 1200
@@ -455,6 +452,9 @@ function App() {
       setIsGameLaunchPending(false)
       setIsGameActive(false)
       if (isMaxHost) {
+        startTransition(() => {
+          setActiveScreen(1)
+        })
         void postJson("/game/subscription-prompt")
           .catch((error) => logDevWarn("Subscription prompt failed", error))
         return
@@ -504,7 +504,16 @@ function App() {
   }
 
   const handleSubscriptionReturn = () => {
-    openExternalLink(SUBSCRIPTION_RETURN_BOT_URL)
+    const miniApp = getMiniApp()
+
+    if (typeof miniApp?.close === "function") {
+      miniApp.close()
+      return
+    }
+
+    if (typeof window !== "undefined") {
+      window.close()
+    }
   }
 
   const handleSubscriptionCheck = async () => {
@@ -532,6 +541,9 @@ function App() {
           return
         }
 
+        startTransition(() => {
+          setActiveScreen(1)
+        })
         await postJson("/game/subscription-prompt")
         return
       }
