@@ -354,10 +354,12 @@ async function registerUser(ctx, { logEntry = true } = {}) {
 
 async function sendStartStep(ctx) {
   const { userId } = extractUser(ctx);
+  const rawStartParam = getRawStartParam(ctx);
+  const isSubscriptionReturn = rawStartParam === 'subscription_return';
   const now = Date.now();
   const lastStartAt = recentStartByUserId.get(userId) || 0;
 
-  if (userId && now - lastStartAt < START_DEDUP_WINDOW_MS) {
+  if (userId && !isSubscriptionReturn && now - lastStartAt < START_DEDUP_WINDOW_MS) {
     logger.info('Skipping duplicate MAX start event', { userId });
     return;
   }
