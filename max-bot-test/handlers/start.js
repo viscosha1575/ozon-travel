@@ -14,7 +14,10 @@ import {
   GAME_WEBAPP_URL,
   SUPPORT_CONTACT,
 } from '../config.js';
-import { refreshSubscriptionStatus } from '../services/subscriptionService.js';
+import {
+  checkChannelSubscriptions,
+  refreshSubscriptionStatus,
+} from '../services/subscriptionService.js';
 import { isChatDeniedError } from '../utils/maxErrors.js';
 import logger from '../utils/logger.js';
 import { parseStartParam } from '../utils/startParam.js';
@@ -440,11 +443,11 @@ export async function sendSubscriptionPromptToUser(userId) {
     throw new Error('userId is required');
   }
 
-  const subscriptionResult = await checkSubscriptionWithRetry(normalizedUserId, {
-    source: 'miniapp_start_background',
-    attempts: 1,
-    requiredChannels: ['travel', 'bank'],
-  });
+  const subscriptions = await checkChannelSubscriptions(normalizedUserId, ['travel', 'bank']);
+  const subscriptionResult = {
+    subscriptions,
+    isSubscribed: subscriptions.travel && subscriptions.bank,
+  };
 
   if (subscriptionResult.isSubscribed) {
     pendingSubscriptionFlowByUserId.delete(normalizedUserId);

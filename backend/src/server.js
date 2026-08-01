@@ -357,14 +357,11 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
 app.post("/api/game/subscription-prompt", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    const { userInfo, subscribedToChannel, isResolved } = await resolveSubscriptionContext(req);
+    const userInfo = resolveMiniAppUser(req);
+    const isResolved = userInfo?.isResolved !== false;
 
     if (!isResolved || userInfo.platform !== "max" || !userInfo.platformUserId) {
       throw buildMaxUserRequiredError();
-    }
-
-    if (subscribedToChannel) {
-      return res.json({ ok: true, prompted: false, subscribed: true });
     }
 
     const requestHostname = String(req.hostname || "").trim().toLowerCase();
