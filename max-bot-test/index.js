@@ -1,6 +1,6 @@
 import axios from 'axios';
 import express from 'express';
-import './handlers/start.js';
+import { sendSubscriptionPromptToUser } from './handlers/start.js';
 import { startBot, processWebhookUpdate } from './maxInstance.js';
 import { MAX_BOT_TOKEN } from './config.js';
 import { checkChannelSubscription } from './services/subscriptionService.js';
@@ -307,6 +307,31 @@ app.post('/internal/subscription/check', async (req, res) => {
       error: error?.response?.data || error?.message || String(error),
     });
     return res.status(500).json({ message: error?.message || 'Failed to check subscription' });
+  }
+});
+
+app.post('/internal/subscription/prompt', async (req, res) => {
+  try {
+    if (!INTERNAL_BROADCAST_TOKEN) {
+      return res.status(500).json({ message: 'Internal token is not configured' });
+    }
+
+    if (req.get('x-broadcast-token') !== INTERNAL_BROADCAST_TOKEN) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const userId = String(req.body?.userId || req.body?.platformUserId || '').trim();
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    return res.json({ ok: true, ...await sendSubscriptionPromptToUser(userId) });
+  } catch (error) {
+    logger.error('Subscription prompt failed', {
+      error: error?.response?.data || error?.message || String(error),
+    });
+    return res.status(500).json({ message: error?.message || 'Failed to send subscription prompt' });
   }
 });
 

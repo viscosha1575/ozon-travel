@@ -455,7 +455,8 @@ function App() {
       setIsGameLaunchPending(false)
       setIsGameActive(false)
       if (isMaxHost) {
-        openExternalLink(SUBSCRIPTION_RETURN_BOT_URL)
+        void postJson("/game/subscription-prompt")
+          .catch((error) => logDevWarn("Subscription prompt failed", error))
         return
       }
       setActiveScreen(1)
@@ -531,7 +532,7 @@ function App() {
           return
         }
 
-        openExternalLink(SUBSCRIPTION_RETURN_BOT_URL)
+        await postJson("/game/subscription-prompt")
         return
       }
 

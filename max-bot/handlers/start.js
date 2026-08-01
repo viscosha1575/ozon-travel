@@ -432,6 +432,54 @@ async function sendStartStep(ctx) {
   );
 }
 
+export async function sendSubscriptionPromptToUser(userId) {
+  const normalizedUserId = Number(userId);
+
+  if (!Number.isFinite(normalizedUserId)) {
+    throw new Error('userId is required');
+  }
+
+  const subscriptionResult = await checkSubscriptionWithRetry(normalizedUserId, {
+    source: 'miniapp_start_background',
+    attempts: 1,
+    requiredChannels: ['travel', 'bank'],
+  });
+
+  if (subscriptionResult.isSubscribed) {
+    pendingSubscriptionFlowByUserId.delete(normalizedUserId);
+    return { prompted: false, subscribed: true };
+  }
+
+  const flow = subscriptionResult.subscriptions.travel
+    ? 'bank'
+    : subscriptionResult.subscriptions.bank
+      ? 'travel'
+      : 'new';
+  const message = flow === 'new'
+    ? welcomeMessage
+    : flow === 'travel'
+      ? travelSubscriptionMessage
+      : bankSubscriptionMessage;
+  const keyboard = flow === 'new'
+    ? newUserSubscriptionKeyboard
+    : flow === 'travel'
+      ? travelSubscriptionKeyboard
+      : bankSubscriptionKeyboard;
+
+  pendingSubscriptionFlowByUserId.set(normalizedUserId, flow);
+  await bot.api.sendMessageToUser(normalizedUserId, message, {
+    attachments: [keyboard],
+  });
+
+  return {
+    prompted: true,
+    subscribed: false,
+    missingChannels: Object.entries(subscriptionResult.subscriptions)
+      .filter(([, subscribed]) => !subscribed)
+      .map(([channel]) => channel),
+  };
+}
+
 async function sendSubscriptionStep(ctx) {
   await safeReply(ctx, subscriptionMessage, {
     attachments: [newUserSubscriptionKeyboard],

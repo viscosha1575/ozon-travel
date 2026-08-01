@@ -11,7 +11,10 @@ import { getProjectState, toggleProjectFinished } from "./appStateStore.js";
 import { decodeRequestBody } from "./adminCipher.js";
 import { initDatabase } from "./db.js";
 import { getUploadsDir, initImageStorage } from "./imageStorage.js";
-import { refreshMiniAppSubscriptionStatus } from "./maxSubscriptionService.js";
+import {
+  refreshMiniAppSubscriptionStatus,
+  sendMiniAppSubscriptionPrompt,
+} from "./maxSubscriptionService.js";
 import { syncAnalyticsAggregates, trackSubscriptionRequiredAnalytics } from "./analyticsAggregateStore.js";
 import {
   deletePlayerAnalytics,
@@ -285,6 +288,7 @@ const adminRateLimit = createRateLimitMiddleware({
 
 app.use("/api/game/bootstrap", publicGameReadRateLimit);
 app.use("/api/game/subscription-status", publicGameReadRateLimit);
+app.use("/api/game/subscription-prompt", publicGameReadRateLimit);
 app.use("/api/game/open", publicGameReadRateLimit);
 app.use("/api/game/spin/result", publicGameReadRateLimit);
 app.use("/api/game/spin", (req, res, next) => {
@@ -345,6 +349,30 @@ app.get("/api/game/subscription-status", async (req, res, next) => {
         userInfo,
       }),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/game/subscription-prompt", async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const { userInfo, subscribedToChannel, isResolved } = await resolveSubscriptionContext(req);
+
+    if (!isResolved || userInfo.platform !== "max" || !userInfo.platformUserId) {
+      throw buildMaxUserRequiredError();
+    }
+
+    if (subscribedToChannel) {
+      return res.json({ ok: true, prompted: false, subscribed: true });
+    }
+
+    const requestHostname = String(req.hostname || "").trim().toLowerCase();
+    const result = await sendMiniAppSubscriptionPrompt(userInfo.platformUserId, {
+      useTestBot: requestHostname === "test.ozon-travel-max.ru",
+    });
+
+    return res.json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }
