@@ -121,10 +121,11 @@ export async function refreshSubscriptionStatus(userId, {
 
   const subscriptions = await checkChannelSubscriptions(userId, requiredChannels);
 
-  if (Object.hasOwn(subscriptions, 'travel')) {
+  if (Object.hasOwn(subscriptions, 'travel') && Object.hasOwn(subscriptions, 'bank')) {
     await setSubscriptionStatus({
       maxUserId: userId,
-      isSubscribed: subscriptions.travel,
+      isSubscribed: subscriptions.travel && subscriptions.bank,
+      subscriptions,
     });
   }
 

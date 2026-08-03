@@ -3,7 +3,7 @@ import express from 'express';
 import { sendSubscriptionPromptToUser } from './handlers/start.js';
 import { startBot, processWebhookUpdate } from './maxInstance.js';
 import { MAX_BOT_TOKEN } from './config.js';
-import { checkChannelSubscription } from './services/subscriptionService.js';
+import { checkChannelSubscriptions } from './services/subscriptionService.js';
 import logger from './utils/logger.js';
 import { sendBroadcast, deleteBroadcastMessage } from './services/broadcastService.js';
 
@@ -296,11 +296,13 @@ app.post('/internal/subscription/check', async (req, res) => {
       return res.status(400).json({ message: 'userId is required' });
     }
 
-    const subscribed = await checkChannelSubscription(userId);
+    const subscriptions = await checkChannelSubscriptions(userId);
+    const subscribed = subscriptions.travel && subscriptions.bank;
 
     return res.json({
       ok: true,
       subscribed,
+      subscriptions,
     });
   } catch (error) {
     logger.error('Subscription check failed', {

@@ -22,6 +22,7 @@ const MSK_TIMEZONE = "Europe/Moscow";
 const DAILY_ATTEMPT_REASON = "daily_login_attempt";
 const INITIAL_ATTEMPT_REASON = "initial_attempt";
 const OZON_BANK_SUBSCRIPTION_BONUS_REASON = "ozon_bank_subscription_bonus";
+const OZON_BANK_SUBSCRIPTION_BONUS_ELIGIBLE_REASON = "ozon_bank_subscription_bonus_eligible";
 const REFERRAL_BONUS_NOTIFICATION_TEXT = "+1 попытка ваша!\n\nСпасибо, что пригласили друга! Скорее ловите новый подарок на Ленте призов.";
 const REFERRAL_BONUS_NOTIFICATION_MEDIA_URLS = ["/banner.mp4"];
 const REFERRAL_BONUS_NOTIFICATION_BUTTON = buildOpenAppNotificationButton("Крутить Ленту");
@@ -522,6 +523,37 @@ async function insertOzonBankSubscriptionBonusInternal(executor, userId, {
   );
 }
 
+async function markOzonBankSubscriptionBonusEligibleInternal(executor, userId) {
+  return executor.query(
+    `
+      INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
+      VALUES ($1, 0, $2, $3::jsonb)
+      ON CONFLICT DO NOTHING
+      RETURNING id
+    `,
+    [
+      Number(userId),
+      OZON_BANK_SUBSCRIPTION_BONUS_ELIGIBLE_REASON,
+      JSON.stringify({ source: "ozon_bank_subscription_missing" }),
+    ],
+  );
+}
+
+async function isOzonBankSubscriptionBonusEligibleInternal(executor, userId) {
+  const result = await executor.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM user_attempt_transactions
+        WHERE user_id = $1 AND reason = $2
+      ) AS eligible
+    `,
+    [Number(userId), OZON_BANK_SUBSCRIPTION_BONUS_ELIGIBLE_REASON],
+  );
+
+  return Boolean(result.rows[0]?.eligible);
+}
+
 async function runGetOrCreate(executor, userInfo = {}) {
   const upsertedUser = await upsertUser(executor, userInfo);
   const linkedUser = await attachReferrer(executor, upsertedUser);
@@ -852,17 +884,38 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
   const updatedUser = result.rows[0];
   let referralBonus = null;
   let ozonBankBonusGranted = false;
+  const bankSubscribed = typeof payload?.subscriptions?.bank === "boolean"
+    ? payload.subscriptions.bank
+    : null;
+  const travelSubscribed = typeof payload?.subscriptions?.travel === "boolean"
+    ? payload.subscriptions.travel
+    : null;
 
-  if (
-    String(updatedUser?.platform || platform).trim().toLowerCase() === "max"
-    && Boolean(updatedUser?.subscribed_to_channel)
-  ) {
-    const bankBonusResult = await insertOzonBankSubscriptionBonusInternal(
-      executor,
-      Number(updatedUser.id),
-      { source: "subscription_status" },
-    );
-    ozonBankBonusGranted = bankBonusResult.rowCount > 0;
+  if (String(updatedUser?.platform || platform).trim().toLowerCase() === "max") {
+    if (bankSubscribed === false) {
+      await markOzonBankSubscriptionBonusEligibleInternal(executor, Number(updatedUser.id));
+    } else if (bankSubscribed === true) {
+      const isEligible = await isOzonBankSubscriptionBonusEligibleInternal(
+        executor,
+        Number(updatedUser.id),
+      );
+
+      if (travelSubscribed === true) {
+        const bankBonusResult = await insertOzonBankSubscriptionBonusInternal(
+          executor,
+          Number(updatedUser.id),
+          isEligible
+            ? { source: "ozon_bank_subscription_transition" }
+            : { markClaimedOnly: true, source: "ozon_bank_already_subscribed" },
+        );
+        ozonBankBonusGranted = isEligible && bankBonusResult.rowCount > 0;
+      } else if (!isEligible) {
+        await insertOzonBankSubscriptionBonusInternal(executor, Number(updatedUser.id), {
+          markClaimedOnly: true,
+          source: "ozon_bank_already_subscribed",
+        });
+      }
+    }
   }
 
   if (!wasSubscribed && Boolean(updatedUser?.subscribed_to_channel)) {

@@ -461,6 +461,12 @@ async function ensureSchema() {
   `);
 
   await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS user_attempt_transactions_ozon_bank_eligibility_unique_idx
+    ON user_attempt_transactions (user_id, reason)
+    WHERE reason = 'ozon_bank_subscription_bonus_eligible'
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS notification_deliveries (
       id BIGSERIAL PRIMARY KEY,
       notification_key TEXT NOT NULL,

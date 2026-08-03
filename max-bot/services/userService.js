@@ -61,11 +61,14 @@ async function addUser({
   }
 }
 
-async function setSubscriptionStatus({ maxUserId, isSubscribed }) {
+async function setSubscriptionStatus({ maxUserId, isSubscribed, subscriptions }) {
   const res = await post('/api/users/set-subscription-status', {
     platform: 'max',
     platformUserId: String(maxUserId),
     isSubscribed: Boolean(isSubscribed),
+    subscriptions: subscriptions && typeof subscriptions === 'object'
+      ? subscriptions
+      : undefined,
   });
 
   return res.data;

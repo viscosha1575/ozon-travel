@@ -593,7 +593,6 @@ bot.action('check_subscription', async (ctx) => {
     });
 
     if (subscriptionResult.isSubscribed) {
-      const bonusResult = await grantOzonBankSubscriptionBonus({ maxUserId: userId });
       pendingSubscriptionFlowByUserId.delete(userId);
       await createMaxLog({
         maxUserId: userId,
@@ -602,7 +601,7 @@ bot.action('check_subscription', async (ctx) => {
       });
       logger.info('MAX Ozon Bank subscription bonus processed', {
         userId,
-        granted: Boolean(bonusResult?.granted),
+        source: 'subscription_status',
         flow,
       });
       await sendGameMenu(ctx);

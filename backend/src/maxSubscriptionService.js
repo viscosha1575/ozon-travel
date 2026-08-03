@@ -38,7 +38,10 @@ async function parseJsonSafely(response) {
 
 async function checkMaxChannelSubscription(platformUserId, checkUrl = MAX_INTERNAL_SUBSCRIPTION_CHECK_URL) {
   if (MAX_SUBSCRIPTION_CHECK_MODE === "mock") {
-    return true;
+    return {
+      subscribed: true,
+      subscriptions: { travel: true, bank: true },
+    };
   }
 
   if (!checkUrl) {
@@ -77,7 +80,13 @@ async function checkMaxChannelSubscription(platformUserId, checkUrl = MAX_INTERN
     return null;
   }
 
-  return data.subscribed;
+  return {
+    subscribed: data.subscribed,
+    subscriptions: {
+      travel: data?.subscriptions?.travel === true,
+      bank: data?.subscriptions?.bank === true,
+    },
+  };
 }
 
 export async function sendMiniAppSubscriptionPrompt(platformUserId, {
@@ -143,9 +152,9 @@ export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackVa
     const checkUrl = useTestSubscriptionCheck
       ? MAX_INTERNAL_TEST_SUBSCRIPTION_CHECK_URL
       : MAX_INTERNAL_SUBSCRIPTION_CHECK_URL;
-    const isSubscribed = await checkMaxChannelSubscription(platformUserId, checkUrl);
+    const subscriptionResult = await checkMaxChannelSubscription(platformUserId, checkUrl);
 
-    if (typeof isSubscribed !== "boolean") {
+    if (!subscriptionResult || typeof subscriptionResult.subscribed !== "boolean") {
       return Boolean(fallbackValue);
     }
 
@@ -156,10 +165,11 @@ export async function refreshMiniAppSubscriptionStatus(userInfo = {}, fallbackVa
       firstName: String(userInfo?.firstName || "").trim(),
       lastName: String(userInfo?.lastName || "").trim(),
       languageCode: String(userInfo?.languageCode || "").trim(),
-      isSubscribed,
+      isSubscribed: subscriptionResult.subscribed,
+      subscriptions: subscriptionResult.subscriptions,
     });
 
-    return isSubscribed;
+    return subscriptionResult.subscribed;
   } catch (error) {
     console.warn("MAX subscription refresh failed", {
       platformUserId,
