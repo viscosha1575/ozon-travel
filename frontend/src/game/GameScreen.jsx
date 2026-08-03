@@ -1925,8 +1925,8 @@ export default function GameScreen({
       const nextSeedKey = `${bootstrapAssetVersion}:${Array.isArray(bootstrapSeed?.rouletteItems) ? bootstrapSeed.rouletteItems.length : 0}:${Array.isArray(bootstrapSeed?.myPrizes) ? bootstrapSeed.myPrizes.length : 0}`
 
       if (appliedBootstrapSeedRef.current !== nextSeedKey) {
-        appliedBootstrapSeedRef.current = nextSeedKey
         frameId = requestAnimationFrame(() => {
+          appliedBootstrapSeedRef.current = nextSeedKey
           applyBootstrapResponse(bootstrapSeed, bootstrapAssetVersion, "intro_preload")
         })
       }
