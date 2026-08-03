@@ -499,12 +499,43 @@ async function grantInitialAttemptsInternal(executor, userId) {
   );
 }
 
+async function insertOzonBankSubscriptionBonusInternal(executor, userId, {
+  markClaimedOnly = false,
+  source = "subscription_status",
+} = {}) {
+  return executor.query(
+    `
+      INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
+      VALUES ($1, $2, $3, $4::jsonb)
+      ON CONFLICT DO NOTHING
+      RETURNING id
+    `,
+    [
+      Number(userId),
+      markClaimedOnly ? 0 : 3,
+      OZON_BANK_SUBSCRIPTION_BONUS_REASON,
+      JSON.stringify({
+        source,
+        markClaimedOnly,
+      }),
+    ],
+  );
+}
+
 async function runGetOrCreate(executor, userInfo = {}) {
   const upsertedUser = await upsertUser(executor, userInfo);
   const linkedUser = await attachReferrer(executor, upsertedUser);
 
   if (upsertedUser.was_inserted) {
     await grantInitialAttemptsInternal(executor, Number(linkedUser.id));
+
+    if (String(linkedUser.platform || "").trim().toLowerCase() === "max") {
+      await insertOzonBankSubscriptionBonusInternal(executor, Number(linkedUser.id), {
+        markClaimedOnly: true,
+        source: "new_user_initial_attempts",
+      });
+    }
+
     await trackNewUserAnalytics(executor, linkedUser, "system");
   }
 
@@ -678,23 +709,10 @@ export async function grantOzonBankSubscriptionBonus(payload = {}, client = null
 
   const runGrant = async (executor) => {
     const user = await getOrCreateUser({ platform, platformUserId }, executor);
-    const grantResult = await executor.query(
-      `
-        INSERT INTO user_attempt_transactions (user_id, delta, reason, details)
-        VALUES ($1, $2, $3, $4::jsonb)
-        ON CONFLICT DO NOTHING
-        RETURNING id
-      `,
-      [
-        Number(user.id),
-        markClaimedOnly ? 0 : 3,
-        OZON_BANK_SUBSCRIPTION_BONUS_REASON,
-        JSON.stringify({
-          source: "max_bot_subscription",
-          markClaimedOnly,
-        }),
-      ],
-    );
+    const grantResult = await insertOzonBankSubscriptionBonusInternal(executor, Number(user.id), {
+      markClaimedOnly,
+      source: "max_bot_subscription",
+    });
 
     return {
       ok: true,
@@ -833,6 +851,19 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
   );
   const updatedUser = result.rows[0];
   let referralBonus = null;
+  let ozonBankBonusGranted = false;
+
+  if (
+    String(updatedUser?.platform || platform).trim().toLowerCase() === "max"
+    && Boolean(updatedUser?.subscribed_to_channel)
+  ) {
+    const bankBonusResult = await insertOzonBankSubscriptionBonusInternal(
+      executor,
+      Number(updatedUser.id),
+      { source: "subscription_status" },
+    );
+    ozonBankBonusGranted = bankBonusResult.rowCount > 0;
+  }
 
   if (!wasSubscribed && Boolean(updatedUser?.subscribed_to_channel)) {
     await trackSubscriptionConfirmedAnalytics(
@@ -856,6 +887,7 @@ async function runSetUserSubscriptionStatus(executor, payload = {}) {
       platformUserId: String(updatedUser.platform_user_id || platformUserId).trim(),
       externalId: updatedUser.external_id,
       subscribedToChannel: Boolean(updatedUser.subscribed_to_channel),
+      ozonBankBonusGranted,
     },
     referralBonusNotification: referralBonus?.notification || null,
   };
